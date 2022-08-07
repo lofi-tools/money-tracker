@@ -1,0 +1,13 @@
+[package]
+name = "cryptotracker"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+tokio = { version="1.20.1", features=["full"] }
+reqwest = { version="0.11.11", features=["json"] }
+dotenv = "0.15"
+
+# serde, crypto
+hmac-sha256="1.1.4"

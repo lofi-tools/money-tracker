@@ -1,3 +1,4 @@
+use derive_more::Display;
 use hmac_sha256::HMAC;
 use reqwest::{Request, RequestBuilder, Url};
 use serde::de::DeserializeOwned;
@@ -12,8 +13,6 @@ const API_BASE: Lazy<Url> = Lazy::new(|| Url::parse("https://api.binance.com").u
 const API_KEY: Lazy<String> = Lazy::new(|| std::env::var("BINANCE_API_KEY").unwrap());
 const API_SECRET: Lazy<String> = Lazy::new(|| std::env::var("BINANCE_SECRET_KEY").unwrap());
 // const API_BASE: &'static str = "https://api.binance.com";
-// const API_KEY: &'static str = "BINANCE_API_KEY";
-// const API_SECRET: &'static str = "BINANCE_SECRET_KEY";
 
 #[derive(Deserialize, Debug)]
 pub struct StakingProduct {
@@ -94,18 +93,46 @@ impl BinanceClient {
         todo!()
     }
 
-    pub async fn list_user_products(&self) -> Result<(), anyhow::Error> {
-        let req = self.get("/sapi/v1/staking/position")?.sign()?;
+    pub async fn list_staking_positions(&self) -> Result<(), anyhow::Error> {
+        let req = self
+            .get("/sapi/v1/staking/position")?
+            .query(&[("product", "STAKING")])
+            .sign()?;
         let resp: Vec<StakingPosition> = self.get_resp(req).await?;
+
+        dbg!(resp.get(0));
 
         todo!()
     }
-    pub async fn get_resp<D: DeserializeOwned>(&self, req: Request) -> Result<D, anyhow::Error> {
-        Ok(self.httpc.execute(req).await?.json().await?)
-        // TODO deserialize into BinanceErr if err status, return typed err if fails
+    pub async fn get_resp<D: DeserializeOwned>(&self, req: Request) -> Result<D, BinanceErr> {
+        let resp = self
+            .httpc
+            .execute(req)
+            .await
+            .map_err(BinanceErr::ReqwestErr)?;
+
+        match resp.status() {
+            s if s.is_success() => {
+                // let txt = resp.text().await.unwrap();
+                // dbg!(txt);
+                // todo!()
+                let resp_parsed: D = resp.json().await.map_err(BinanceErr::DeserResp)?;
+                Ok(resp_parsed)
+            }
+            status_err => {
+                let err_parsed: BinanceApiErr = resp.json().await.map_err(BinanceErr::DeserResp)?;
+                Err(BinanceErr::ApiErrResp(err_parsed))
+            }
+        }
+
+        // let resp_parsed = resp.json().await.map_err(BinanceErr::DeserResp)?;
+
+        // Ok(self.httpc.execute(req).await?.json().await?)
     }
 }
 
+#[derive(Debug, Display, Deserialize)]
+#[display(fmt = "msg: {msg}")]
 struct BinanceApiErr {
     code: i32,
     msg: String,
@@ -134,33 +161,33 @@ mod staking {
     use serde::Deserialize;
 
     #[allow(non_snake_case)]
-    #[derive(Deserialize)]
+    #[derive(Deserialize, Debug)]
     pub struct StakingPosition {
-        pub positionId: String,
-        pub projectId: String,
+        pub positionId: u64,
+        pub productId: String,
         pub asset: String,
         pub amount: String,
-        pub purchaseTime: String,
-        pub duration: String,
-        pub accrualDays: String,
-        pub rewardAsset: String,
-        pub APY: String,
-        pub rewardAmt: String,
-        pub extraRewardAsset: String,
-        pub extraRewardAPY: String,
-        pub estExtraRewardAmt: String,
-        pub nextInterestPay: String,
-        pub nextInterestPayDate: String,
-        pub payInterestPeriod: String,
-        pub redeemAmountEarly: String,
-        pub interestEndDate: String,
-        pub deliverDate: String,
-        pub redeemPeriod: String,
-        pub redeemingAmt: String,
-        pub canRedeemEarly: bool,
-        pub renewable: bool,
-        pub partialAmtDeliverDate: String,
-        pub status: String,
+        // pub purchaseTime: String,
+        pub duration: u64,
+        // pub accrualDays: String,
+        // pub rewardAsset: String,
+        // pub APY: String,
+        // pub rewardAmt: String,
+        // pub extraRewardAsset: String,
+        // pub extraRewardAPY: String,
+        // pub estExtraRewardAmt: String,
+        // pub nextInterestPay: String,
+        // pub nextInterestPayDate: String,
+        // pub payInterestPeriod: String,
+        // pub redeemAmountEarly: String,
+        // pub interestEndDate: String,
+        // pub deliverDate: String,
+        // pub redeemPeriod: String,
+        // pub redeemingAmt: String,
+        // pub canRedeemEarly: bool,
+        // pub renewable: bool,
+        // pub partialAmtDeliverDate: String,
+        // pub status: String,
     }
 }
 
@@ -281,4 +308,14 @@ impl RequestBuilderExt for RequestBuilder {
 
         Ok(req)
     }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum BinanceErr {
+    #[error("failed deserializing resp body: {0}")]
+    DeserResp(reqwest::Error),
+    #[error("API error response: {0}")]
+    ApiErrResp(BinanceApiErr),
+    #[error("reqwest err: {0}")]
+    ReqwestErr(reqwest::Error),
 }

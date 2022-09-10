@@ -7,9 +7,10 @@ mod utils;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv()?;
+    std::env::set_var("RUST_BACKTRACE", "1");
 
     let bc = BinanceClient::new();
-    bc.list_all_products().await?;
+    bc.list_staking_positions().await?;
     // TODO update Products, UserProducts with binance data
 
     Ok(())

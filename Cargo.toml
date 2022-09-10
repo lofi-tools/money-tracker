@@ -5,9 +5,16 @@ edition = "2021"
 
 
 [dependencies]
+# async, web, db
 tokio = { version="1.20.1", features=["full"] }
 reqwest = { version="0.11.11", features=["json"] }
-dotenv = "0.15"
 
-# serde, crypto
-hmac-sha256="1.1.4"
+# serde, crypto, codecs
+serde = { version="1.0.142", features=["derive"] }
+serde_json = "1.0"
+hmac-sha256 = "1.1.4"
+
+# errors, logs, env, config
+lazy_static = "1.4.0"
+dotenv = "0.15"
+anyhow = "1.0.64"

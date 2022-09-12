@@ -7,6 +7,7 @@ use std::lazy::Lazy;
 use std::time::SystemTime;
 
 use crate::binance::staking::StakingPosition;
+use crate::models::{ExternalId, ProductId};
 use crate::utils::hex;
 
 const API_BASE: Lazy<Url> = Lazy::new(|| Url::parse("https://api.binance.com").unwrap());
@@ -41,68 +42,28 @@ impl BinanceClient {
             httpc: reqwest::Client::new(),
         };
     }
-    pub fn get(&self, path: &str) -> Result<RequestBuilder, anyhow::Error> {
-        Ok(self.httpc.get(API_BASE.join(path)?))
-    }
-    #[deprecated]
-    fn signed(req_bld: RequestBuilder) -> Result<Request, anyhow::Error> {
-        let mut req = req_bld.header("X-MBX-APIKEY", &*API_KEY).build()?;
-        let url = req.url_mut();
-
-        // append timestamp
-        {
-            let timestamp = SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)?
-                .as_millis();
-            let mut query_pairs = url.query_pairs_mut();
-            query_pairs.append_pair("timestamp", &timestamp.to_string());
-        }
-
-        // then hmac query
-        let query_str = url.query().unwrap(); // TODO err
-        let signature = HMAC::mac(query_str, &*API_SECRET);
-        let sig_hex = hex(signature)?;
-
-        // then append hmac signature
-        {
-            let mut query_pairs = url.query_pairs_mut();
-            query_pairs.append_pair("signature", &sig_hex);
-        }
-
-        Ok(req)
-    }
 
     // ROUTE METHODS
-    pub async fn list_all_products(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let url = API_BASE.join("/sapi/v1/staking/productList")?;
-        let req_bld = self.httpc.get(url).query(&[("product", "STAKING")]);
-        let req = Self::signed(req_bld)?;
-
-        let resp = self.httpc.execute(req).await?;
-        let resp_deser: Vec<StakingProduct> = resp.json().await?;
-
-        // match resp_deser {
-        //     serde_json::Value::Array(arr) => {
-        //         dbg!(arr.get(0));
-        //     }
-        //     _ => todo!(),
-        // }
-
-        dbg!(resp_deser.get(0));
-
-        todo!()
+    pub async fn list_all_products(&self) -> Result<Vec<StakingProduct>, anyhow::Error> {
+        let req = self
+            .get("/sapi/v1/staking/productList")?
+            .query(&[("product", "STAKING")])
+            .sign()?;
+        let resp: Vec<StakingProduct> = self.get_resp(req).await?;
+        Ok(resp)
     }
-
-    pub async fn list_staking_positions(&self) -> Result<(), anyhow::Error> {
+    pub async fn list_staking_positions(&self) -> Result<Vec<StakingPosition>, anyhow::Error> {
         let req = self
             .get("/sapi/v1/staking/position")?
             .query(&[("product", "STAKING")])
             .sign()?;
         let resp: Vec<StakingPosition> = self.get_resp(req).await?;
+        Ok(resp)
+    }
 
-        dbg!(resp.get(0));
-
-        todo!()
+    // UTILS
+    pub fn get(&self, path: &str) -> Result<RequestBuilder, anyhow::Error> {
+        Ok(self.httpc.get(API_BASE.join(path)?))
     }
     pub async fn get_resp<D: DeserializeOwned>(&self, req: Request) -> Result<D, BinanceErr> {
         let resp = self
@@ -131,47 +92,40 @@ impl BinanceClient {
     }
 }
 
-#[derive(Debug, Display, Deserialize)]
-#[display(fmt = "msg: {msg}")]
-struct BinanceApiErr {
-    code: i32,
-    msg: String,
+pub struct Binance;
+impl Binance {
+    fn product_id(id: &str) -> ProductId {
+        ProductId(ExternalId::new("binance", id.to_string()))
+    }
 }
 
-#[cfg(test)]
-mod tests {
-    use hmac_sha256::HMAC;
-
-    use crate::utils::hex;
-
-    #[test]
-    fn test_hmac() -> Result<(), Box<dyn std::error::Error>> {
-        let data = b"symbol=LTCBTC&side=BUY&type=LIMIT&timeInForce=GTC&quantity=1&price=0.1&recvWindow=5000&timestamp=1499827319559";
-        let key = b"NhqPtmdSJYdKjVHjA7PZj4Mge3R5YNiP1e3UZjInClVN65XAbvqqM6A7H5fATj0j";
-        let signature = HMAC::mac(data, key);
-        let hex = hex(signature)?;
-
-        let expected = "c8db56825ae71d6d79447849e617115f4a920fa2acdcab2b053c4b2838bd6b71";
-        assert_eq!(hex, expected);
-        Ok(())
-    }
+#[derive(Debug, Display, Deserialize)]
+#[display(fmt = "msg: {msg}")]
+pub struct BinanceApiErr {
+    code: i32,
+    msg: String,
 }
 
 mod staking {
     use serde::Deserialize;
 
+    use crate::models;
+
+    use super::Binance;
+
     #[allow(non_snake_case)]
     #[derive(Deserialize, Debug)]
     pub struct StakingPosition {
+        #[serde(rename = "positionId")]
         pub positionId: u64,
         pub productId: String,
         pub asset: String,
         pub amount: String,
-        // pub purchaseTime: String,
+        pub purchaseTime: u64,
         pub duration: u64,
         // pub accrualDays: String,
-        // pub rewardAsset: String,
-        // pub APY: String,
+        pub rewardAsset: String,
+        pub apy: String,
         // pub rewardAmt: String,
         // pub extraRewardAsset: String,
         // pub extraRewardAPY: String,
@@ -180,7 +134,7 @@ mod staking {
         // pub nextInterestPayDate: String,
         // pub payInterestPeriod: String,
         // pub redeemAmountEarly: String,
-        // pub interestEndDate: String,
+        pub interestEndDate: u64,
         // pub deliverDate: String,
         // pub redeemPeriod: String,
         // pub redeemingAmt: String,
@@ -188,6 +142,49 @@ mod staking {
         // pub renewable: bool,
         // pub partialAmtDeliverDate: String,
         // pub status: String,
+    }
+    impl StakingPosition {
+        // TODO fetch product if not exists in memDB
+        pub async fn product(&self) {
+            let product_id = Binance::product_id(&self.productId);
+            // TODO use tokio message passing to get/update state
+            // let found_product = PRODUCTS.
+        }
+    }
+    // impl Into<models::Position> for StakingPosition {
+    //     fn into(self) -> models::Position {
+    //         todo!()
+    //     }
+    // }
+    // impl Into<models::Product> for StakingPosition {
+
+    // }
+}
+
+mod transform {
+    use crate::binance;
+    use crate::models::{AssetId, ExternalId, Product, ProductId};
+
+    // impl From<binance::StakingPosition> for Position {
+    //     fn from(pos: binance::StakingPosition) -> Self {
+    //         Position {
+    //             id: pos.positionId,
+    //             product_id: (),
+    //             amount: (),
+    //             start_date: (),
+    //             end_date: (),
+    //             external_id: pos.positionId,
+    //         }
+    //     }
+    // }
+    impl From<&binance::StakingPosition> for Product {
+        fn from(pos: &binance::StakingPosition) -> Self {
+            Product {
+                id: ProductId(ExternalId::new("binance", pos.productId.clone())),
+                asset_id: AssetId(pos.asset.clone()),
+                apy: (pos.apy.parse()).unwrap(),
+            }
+        }
     }
 }
 
@@ -207,73 +204,6 @@ mod deprecated {
         // // let resp_text = resp.text().await?;
 
         // // println!("{:#?}", resp_text);
-        todo!()
-    }
-    // #[deprecated]
-    // async fn req_signed(url: Url) -> Result<(), Box<dyn std::error::Error>> {
-    //     // let client = reqwest::Client::new();
-    //     // // TODO mv staking out
-    //     // let mut req = client
-    //     //     .get(url)
-    //     //     .header("X-MBX-APIKEY", &*API_KEY)
-    //     //     .query(&[("product", "STAKING")])
-    //     //     .build()?;
-
-    //     // let mut url = req.url_mut();
-
-    //     // // append timestamp
-    //     // {
-    //     //     let timestamp = SystemTime::now()
-    //     //         .duration_since(SystemTime::UNIX_EPOCH)?
-    //     //         .as_millis();
-    //     //     dbg!(timestamp);
-    //     //     let mut query_pairs = url.query_pairs_mut();
-    //     //     query_pairs.append_pair("timestamp", &timestamp.to_string());
-    //     // }
-
-    //     // // then hmac query
-    //     // let query_str = url.query().unwrap(); // TODO err
-    //     // let signature = HMAC::mac(query_str, &*API_SECRET);
-    //     // let sig_hex = hex(signature)?;
-
-    //     // // then append hmac signature
-    //     // {
-    //     //     let mut query_pairs = url.query_pairs_mut();
-    //     //     query_pairs.append_pair("signature", &sig_hex);
-    //     // }
-
-    //     // let resp = client.execute(req).await?;
-    //     // let resp_text = resp.text().await?;
-    //     // // TODO NEXT TIME deser into struct
-    //     // // .json::<HashMap<String, String>>()
-
-    //     // println!("{:#?}", resp_text);
-
-    //     todo!()
-    // }
-    #[deprecated]
-    async fn list_swap_pools() {
-        // let url = format!("{API_BASE}/sapi/v1/bswap/pools");
-    }
-
-    #[deprecated]
-    fn hmac() -> Result<(), Box<dyn std::error::Error>> {
-        // let mut url = Url::parse("https://example.net")?;
-        // let mut query_pairs = url.query_pairs_mut();
-        // // for pair in query.iter() {
-        // //     dbg!(pair);
-        // // }
-
-        // let timestamp = SystemTime::now()
-        //     .duration_since(SystemTime::UNIX_EPOCH)?
-        //     .as_secs();
-        // query_pairs.append_pair("timestamp", &timestamp.to_string());
-        // let query_str = query_pairs.finish().query().unwrap();
-        // dbg!(query_str);
-
-        // // Calculate the signature from the data and key
-        // let signature = HMAC::mac(query_str, &*API_SECRET);
-        // dbg!(hex(signature)?);
         todo!()
     }
 }
@@ -318,4 +248,23 @@ pub enum BinanceErr {
     ApiErrResp(BinanceApiErr),
     #[error("reqwest err: {0}")]
     ReqwestErr(reqwest::Error),
+}
+
+#[cfg(test)]
+mod tests {
+    use hmac_sha256::HMAC;
+
+    use crate::utils::hex;
+
+    #[test]
+    fn test_hmac() -> Result<(), Box<dyn std::error::Error>> {
+        let data = b"symbol=LTCBTC&side=BUY&type=LIMIT&timeInForce=GTC&quantity=1&price=0.1&recvWindow=5000&timestamp=1499827319559";
+        let key = b"NhqPtmdSJYdKjVHjA7PZj4Mge3R5YNiP1e3UZjInClVN65XAbvqqM6A7H5fATj0j";
+        let signature = HMAC::mac(data, key);
+        let hex = hex(signature)?;
+
+        let expected = "c8db56825ae71d6d79447849e617115f4a920fa2acdcab2b053c4b2838bd6b71";
+        assert_eq!(hex, expected);
+        Ok(())
+    }
 }

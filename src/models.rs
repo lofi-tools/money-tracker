@@ -2,11 +2,11 @@ use crate::data::{ASSETS, POSITIONS, PRODUCTS};
 use derive_more::From;
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Asset {
-    pub id: String,
+    pub id: AssetId,
 }
-#[derive(PartialEq, Eq, Hash, Debug)]
+#[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct AssetId(pub String);
 pub struct ListAssets {
     by_id: HashMap<AssetId, Asset>,
@@ -23,7 +23,7 @@ impl ListAssets {
         self.by_id.insert(
             AssetId(asset_id.to_string()),
             Asset {
-                id: asset_id.to_string(),
+                id: AssetId(asset_id.to_string()),
             },
         );
         // TODO insert external, match to internal
@@ -33,7 +33,7 @@ impl ListAssets {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Product {
     pub id: ProductId,
     pub asset_id: AssetId,
@@ -61,12 +61,12 @@ impl ListProducts {
     pub fn insert(&mut self, product: Product) {
         self.map.insert(product.id.clone(), product);
     }
-    pub fn get<'a>(&'a self, id: &ProductId) -> Option<&'a Product> {
+    pub fn get(&self, id: &ProductId) -> Option<&Product> {
         self.map.get(id)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Position {
     pub id: PositionId,
     // pub product: &'a Product<'a>,

@@ -80,15 +80,11 @@ impl BinanceClient {
                 let resp_parsed: D = resp.json().await.map_err(BinanceErr::DeserResp)?;
                 Ok(resp_parsed)
             }
-            status_err => {
+            _status_err => {
                 let err_parsed: BinanceApiErr = resp.json().await.map_err(BinanceErr::DeserResp)?;
                 Err(BinanceErr::ApiErrResp(err_parsed))
             }
         }
-
-        // let resp_parsed = resp.json().await.map_err(BinanceErr::DeserResp)?;
-
-        // Ok(self.httpc.execute(req).await?.json().await?)
     }
 }
 
@@ -107,11 +103,8 @@ pub struct BinanceApiErr {
 }
 
 mod staking {
-    use serde::Deserialize;
-
-    use crate::models;
-
     use super::Binance;
+    use serde::Deserialize;
 
     #[allow(non_snake_case)]
     #[derive(Deserialize, Debug)]
@@ -188,26 +181,6 @@ mod transform {
     }
 }
 
-mod deprecated {
-    #[deprecated]
-    pub async fn list_products() -> Result<(), Box<dyn std::error::Error>> {
-        // // let client = reqwest::Client::new();
-        // // let url = Url::parse(&format!("{API_BASE}/sapi/v1/staking/productList"))?;
-        // let url = API_BASE.join("/sapi/v1/staking/productList")?;
-
-        // req_signed(url).await?;
-        // // let resp = client
-        // //     .get(url)
-        // //     .header("X-MBX-APIKEY", &*API_KEY)
-        // //     .send()
-        // //     .await?;
-        // // let resp_text = resp.text().await?;
-
-        // // println!("{:#?}", resp_text);
-        todo!()
-    }
-}
-
 pub trait RequestBuilderExt {
     fn sign(self) -> Result<Request, anyhow::Error>;
 }
@@ -267,4 +240,24 @@ mod tests {
         assert_eq!(hex, expected);
         Ok(())
     }
+}
+
+mod deprecated {
+    // #[deprecated]
+    // pub async fn list_products() -> Result<(), Box<dyn std::error::Error>> {
+    //     // // let client = reqwest::Client::new();
+    //     // // let url = Url::parse(&format!("{API_BASE}/sapi/v1/staking/productList"))?;
+    //     // let url = API_BASE.join("/sapi/v1/staking/productList")?;
+
+    //     // req_signed(url).await?;
+    //     // // let resp = client
+    //     // //     .get(url)
+    //     // //     .header("X-MBX-APIKEY", &*API_KEY)
+    //     // //     .send()
+    //     // //     .await?;
+    //     // // let resp_text = resp.text().await?;
+
+    //     // // println!("{:#?}", resp_text);
+    //     todo!()
+    // }
 }

@@ -25,7 +25,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     data::fetch_positions().await;
     // TODO update Products, UserProducts with binance data
 
-    dbg!(MUT_PRODUCTS.read().unwrap());
+    // for product in MUT_PRODUCTS.read().unwrap(). {}
+    for product in MUT_PRODUCTS.read().unwrap().map.iter() {
+        println!("{}", product.1);
+    }
+
+    // dbg!(MUT_PRODUCTS.read().unwrap());
 
     Ok(())
 }

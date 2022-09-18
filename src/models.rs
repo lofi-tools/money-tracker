@@ -1,6 +1,14 @@
 use crate::data::{ASSETS, POSITIONS, PRODUCTS};
+use derive_more::Display;
 use derive_more::From;
 use std::collections::HashMap;
+
+// TODO NEXT TIME
+// - link to currencies
+// - load positions
+// - load currencies
+// - find position rollups
+//      - by currency
 
 #[derive(Debug, Clone)]
 pub struct Asset {
@@ -33,7 +41,10 @@ impl ListAssets {
     }
 }
 
-#[derive(Debug, Clone)]
+//
+
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "{id}")]
 pub struct Product {
     pub id: ProductId,
     pub asset_id: AssetId,
@@ -45,12 +56,14 @@ impl Product {
         asset
     }
 }
-#[derive(PartialEq, Eq, Hash, Debug, Clone)]
+
+#[derive(PartialEq, Eq, Hash, Debug, Clone, Display)]
+#[display(fmt = "{}", self.0)]
 pub struct ProductId(pub ExternalId);
 
 #[derive(Debug)]
 pub struct ListProducts {
-    map: HashMap<ProductId, Product>,
+    pub map: HashMap<ProductId, Product>,
 }
 impl ListProducts {
     pub fn new() -> Self {
@@ -65,6 +78,8 @@ impl ListProducts {
         self.map.get(id)
     }
 }
+
+//
 
 #[derive(Debug, Clone)]
 pub struct Position {
@@ -101,7 +116,10 @@ impl ListPositions {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Debug, Clone)]
+//
+
+#[derive(PartialEq, Eq, Hash, Debug, Clone, Display)]
+#[display(fmt = "{provider_id}:{val}")]
 pub struct ExternalId {
     pub provider_id: ProviderId,
     pub val: ExternalIdVal,
@@ -114,28 +132,21 @@ impl ExternalId {
         }
     }
 }
-#[derive(PartialEq, Eq, Hash, Debug, Clone, From)]
+#[derive(PartialEq, Eq, Hash, Debug, Clone, From, Display)]
+#[display(fmt = "{}", self.0)]
 pub enum ExternalIdVal {
     U64(u64),
     String(String),
 }
-#[derive(PartialEq, Eq, Hash, Debug, Clone)]
+
+//
+
+#[derive(PartialEq, Eq, Hash, Debug, Clone, Display)]
+#[display(fmt = "{}", self.0)]
 pub struct ProviderId(pub String);
 impl<T: AsRef<str>> From<T> for ProviderId {
     fn from(t: T) -> Self {
         ProviderId(t.as_ref().to_string())
     }
 }
-// pub struct ExternalIds {
-//     by_provider: HashMap<ProviderId, ExternalId>,
-// }
-// impl ExternalIds {
-//     pub fn new() -> Self {
-//         ExternalIds {
-//             by_provider: HashMap::new(),
-//         }
-//     }
-//     pub fn insert(&mut self, ext_id: ExternalId) {
-//         self.by_provider.insert(ext_id.provider_id, ext_id);
-//     }
-// }
+// TODO provider

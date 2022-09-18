@@ -1,13 +1,25 @@
 #![feature(once_cell)]
 // mod actor_db;
-pub mod binance;
-pub mod models;
+mod binance;
+mod data;
+mod models;
 mod utils;
 
 use binance::BinanceClient;
-use data::MUT_PRODUCTS;
+use data::{POSITIONS, PRODUCTS};
 
-// use crate::actor_db::DB;
+// TODO - estimate value, epy
+// TODO - binance: other assets
+// TODO - AAX ??
+// TODO - NEXO ??
+// TODO -
+
+// GOALS - total value estimate
+// GOALS - earn per year estimate (per asset breakdown of epy)
+// GOALS - idle assets
+// GOALS - movable assets (how much or when ??)
+// GOALS -
+// GOALS -
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -22,17 +34,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bc = BinanceClient::new();
     // bc.list_staking_positions().await?;
     data::fetch_assets();
-    data::fetch_positions().await;
-    // TODO update Products, UserProducts with binance data
+    data::fetch_binance().await;
 
-    // for product in MUT_PRODUCTS.read().unwrap(). {}
-    for product in MUT_PRODUCTS.read().unwrap().map.iter() {
-        println!("{}", product.1);
+    println!("PRODUCTS:");
+    for product in PRODUCTS.read().unwrap().map.iter() {
+        // println!("{}", product.1);
+    }
+    println!("POSITIONS:");
+    for pos in POSITIONS.read().unwrap().by_id.iter() {
+        // println!("{}", pos.1);
     }
 
-    // dbg!(MUT_PRODUCTS.read().unwrap());
+    data::positions_groupby_currency();
+
+    coingecko::fetch_prices().await?;
 
     Ok(())
 }
 
-mod data;
+mod coingecko;

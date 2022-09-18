@@ -19,4 +19,8 @@ lazy_static = "1.4.0"
 dotenv = "0.15"
 anyhow = "1.0.64"
 thiserror = "1.0.34"
+
+# utils
 derive_more = "0.99.17"
+itertools = "0.10.4"
+async-trait = "0.1.57"

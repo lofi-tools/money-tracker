@@ -1,5 +1,10 @@
 use crate::binance::BinanceClient;
-use crate::models::{ListAssets, ListPositions, ListProducts, Position, Product};
+use crate::coingecko::COINGECKO;
+use crate::models::{
+    Asset, ExternalId, ListAssets, ListPositions, ListProducts, Position, Product,
+};
+use itertools::Itertools;
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 lazy_static::lazy_static! {
@@ -17,12 +22,12 @@ lazy_static::lazy_static! {
 
 pub fn fetch_assets() -> ListAssets {
     let mut assets = ListAssets::new();
-    assets.insert("ETH");
-    assets.insert("DOT");
-    assets.insert("NEAR");
-    assets.insert("CRO");
-    assets.insert("BNB");
-    assets.insert("SOL");
+    assets.insert(Asset::new("ETH").with_ext_id(ExternalId::new(COINGECKO, "ethereum")));
+    assets.insert(Asset::new("DOT")); // TODO NEXT TIME coingecko asset ids, then fetch prices for each
+    assets.insert(Asset::new("NEAR"));
+    assets.insert(Asset::new("CRO"));
+    assets.insert(Asset::new("BNB"));
+    assets.insert(Asset::new("SOL"));
     assets
 }
 
@@ -38,20 +43,36 @@ pub fn fetch_products() -> ListProducts {
     products
 }
 
-pub async fn fetch_binance() -> ListPositions {
-    let mut all_positions = ListPositions::new();
-    // TODO fetch from Binance, transform into positions + products
+pub async fn fetch_binance() {
+    // fetch from Binance, transform into positions + products
     let bc = BinanceClient::new();
     let got_positions = bc.list_staking_positions().await.unwrap();
+
     let mut mut_products = PRODUCTS.write().unwrap();
     let mut mut_positions = POSITIONS.write().unwrap();
     for binance_pos in got_positions.iter() {
-        // dbg!(binance_pos);
         mut_products.insert(Product::from(binance_pos));
         mut_positions.insert(Position::from(binance_pos));
-        // TODO insert position: grab ref to ListPosition and insert
     }
-    // dbg!(&*PRODUCTS);
+}
 
-    all_positions
+pub fn positions_groupby_currency() {
+    let positions = POSITIONS.read().unwrap();
+    // TODO NEXT TIME
+    // let by_currency = pos_iter.fold(HashMap::new(), |mut map, (k, v)| {
+    //     dbg!(k, v);
+    //     todo!()
+    // });
+    let by_asset = positions
+        .by_id
+        .iter()
+        .into_grouping_map_by(|(pos_k, pos)| pos.product().unwrap().asset().id.clone());
+    // let sum = by_asset.aggregate(|sum,asset,(pos_id,pos)|{
+    //     dbg!(pos.amount)
+    // });
+    let asset_sums = by_asset.fold(0_f64, |sum, asset, (_, pos)| sum + pos.amount);
+
+    for (asset_id, sum) in asset_sums {
+        println!("{asset_id}: {sum}");
+    }
 }

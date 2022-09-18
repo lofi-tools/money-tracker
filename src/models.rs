@@ -1,21 +1,32 @@
-use crate::data::{ASSETS, POSITIONS, PRODUCTS};
-use derive_more::Display;
-use derive_more::From;
+use crate::data::{ASSETS, PRODUCTS};
+use derive_more::{Display, From};
 use std::collections::HashMap;
-
-// TODO NEXT TIME
-// - link to currencies
-// - load positions
-// - load currencies
-// - find position rollups
-//      - by currency
 
 #[derive(Debug, Clone)]
 pub struct Asset {
     pub id: AssetId,
+    pub external_ids: HashMap<ProviderId, ExternalId>,
 }
-#[derive(PartialEq, Eq, Hash, Debug, Clone)]
+impl Asset {
+    pub fn new(id: &str) -> Self {
+        Asset {
+            id: AssetId::from(id),
+            external_ids: HashMap::new(),
+        }
+    }
+    pub fn with_ext_id(mut self, ext_id: ExternalId) -> Self {
+        self.external_ids.insert(ext_id.provider_id.clone(), ext_id);
+        self
+    }
+}
+
+#[derive(PartialEq, Eq, Hash, Debug, Clone, Display)]
 pub struct AssetId(pub String);
+impl From<&str> for AssetId {
+    fn from(s: &str) -> Self {
+        AssetId(s.to_string())
+    }
+}
 pub struct ListAssets {
     by_id: HashMap<AssetId, Asset>,
     by_external_id: HashMap<ExternalId, Asset>,
@@ -27,14 +38,23 @@ impl ListAssets {
             by_external_id: HashMap::new(),
         }
     }
-    pub fn insert(&mut self, asset_id: &str) {
+    #[deprecated] // use insert instead
+    pub fn insert_id(&mut self, asset_id: &str) {
         self.by_id.insert(
             AssetId(asset_id.to_string()),
             Asset {
                 id: AssetId(asset_id.to_string()),
+                external_ids: HashMap::new(),
             },
         );
         // TODO insert external, match to internal
+    }
+    pub fn insert(&mut self, asset: Asset) {
+        // TODO NEXT TIME inset assets with external IDs
+        self.by_id.insert(asset.id.clone(), asset.clone());
+        for (_provider_id, ext_id) in asset.external_ids.iter() {
+            self.by_external_id.insert(ext_id.clone(), asset.clone());
+        }
     }
     pub fn get(&'static self, id: &AssetId) -> Option<&'static Asset> {
         self.by_id.get(id)
@@ -81,7 +101,8 @@ impl ListProducts {
 
 //
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "{}", id)]
 pub struct Position {
     pub id: PositionId,
     // pub product: &'a Product<'a>,
@@ -89,18 +110,20 @@ pub struct Position {
     pub amount: f64,
     pub start_date: u64, // UTC timestamp
     pub end_date: u64,   // UTC timestamp
-    pub external_id: ExternalId,
 }
 impl Position {
-    pub fn product(&self) -> Option<&'static Product> {
-        let p = PRODUCTS.get(&self.product_id);
-        p
+    pub fn product(&self) -> Option<Product> {
+        let lock = PRODUCTS.read().unwrap();
+        let p = lock.get(&self.product_id);
+        p.cloned()
     }
 }
-#[derive(PartialEq, Eq, Hash, Debug, Clone)]
+#[derive(PartialEq, Eq, Hash, Debug, Clone, Display)]
+#[display(fmt = "{}", self.0)]
 pub struct PositionId(pub ExternalId);
+
 pub struct ListPositions {
-    by_id: HashMap<PositionId, Position>,
+    pub by_id: HashMap<PositionId, Position>,
 }
 impl ListPositions {
     pub fn new() -> Self {
@@ -132,11 +155,26 @@ impl ExternalId {
         }
     }
 }
-#[derive(PartialEq, Eq, Hash, Debug, Clone, From, Display)]
+#[derive(PartialEq, Eq, Hash, Debug, Clone, Display)]
 #[display(fmt = "{}", self.0)]
 pub enum ExternalIdVal {
     U64(u64),
     String(String),
+}
+impl From<&String> for ExternalIdVal {
+    fn from(t: &String) -> Self {
+        ExternalIdVal::String(t.to_string())
+    }
+}
+impl From<&str> for ExternalIdVal {
+    fn from(t: &str) -> Self {
+        ExternalIdVal::String(t.to_string())
+    }
+}
+impl From<u64> for ExternalIdVal {
+    fn from(u: u64) -> Self {
+        ExternalIdVal::U64(u)
+    }
 }
 
 //

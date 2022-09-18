@@ -1,3 +1,6 @@
+use crate::binance::staking::StakingPosition;
+use crate::models::{ExternalId, ProductId};
+use crate::utils::hex;
 use derive_more::Display;
 use hmac_sha256::HMAC;
 use reqwest::{Request, RequestBuilder, Url};
@@ -6,14 +9,11 @@ use serde::Deserialize;
 use std::lazy::Lazy;
 use std::time::SystemTime;
 
-use crate::binance::staking::StakingPosition;
-use crate::models::{ExternalId, ProductId};
-use crate::utils::hex;
-
 const API_BASE: Lazy<Url> = Lazy::new(|| Url::parse("https://api.binance.com").unwrap());
 const API_KEY: Lazy<String> = Lazy::new(|| std::env::var("BINANCE_API_KEY").unwrap());
 const API_SECRET: Lazy<String> = Lazy::new(|| std::env::var("BINANCE_SECRET_KEY").unwrap());
 // const API_BASE: &'static str = "https://api.binance.com";
+const PROVIDER_ID_BINANCE: &str = "binance";
 
 #[derive(Deserialize, Debug)]
 pub struct StakingProduct {
@@ -91,7 +91,7 @@ impl BinanceClient {
 pub struct Binance;
 impl Binance {
     fn product_id(id: &str) -> ProductId {
-        ProductId(ExternalId::new("binance", id.to_string()))
+        ProductId(ExternalId::new(PROVIDER_ID_BINANCE, id))
     }
 }
 
@@ -155,26 +155,41 @@ mod staking {
 }
 
 mod transform {
-    use crate::binance;
-    use crate::models::{AssetId, ExternalId, Product, ProductId};
+    use crate::binance::{self, PROVIDER_ID_BINANCE};
+    use crate::data::ASSETS;
+    use crate::models::{
+        AssetId, ExternalId, ExternalIdVal, Position, PositionId, Product, ProductId,
+    };
 
-    // impl From<binance::StakingPosition> for Position {
-    //     fn from(pos: binance::StakingPosition) -> Self {
-    //         Position {
-    //             id: pos.positionId,
-    //             product_id: (),
-    //             amount: (),
-    //             start_date: (),
-    //             end_date: (),
-    //             external_id: pos.positionId,
-    //         }
-    //     }
-    // }
+    fn product_id(id: impl Into<ExternalIdVal>) -> ProductId {
+        ProductId(ExternalId::new(PROVIDER_ID_BINANCE, id)) // TODO parse resp to those types
+    }
+    fn position_id(id: impl Into<ExternalIdVal>) -> PositionId {
+        PositionId(ExternalId::new(PROVIDER_ID_BINANCE, id)) // TODO parse biannce resp to this type
+    }
+
+    impl From<&binance::StakingPosition> for Position {
+        fn from(pos: &binance::StakingPosition) -> Self {
+            // TODO match product
+            // let matched_product = MUT_PRODUCTS.read().
+            // let product = Product::from(pos);
+
+            Position {
+                id: position_id(pos.positionId),
+                product_id: Product::from(pos).id,
+                amount: pos.amount.parse::<f64>().unwrap(),
+                start_date: pos.purchaseTime,
+                end_date: pos.interestEndDate,
+            }
+        }
+    }
     impl From<&binance::StakingPosition> for Product {
         fn from(pos: &binance::StakingPosition) -> Self {
+            let matched_asset = ASSETS.get(&AssetId(pos.asset.clone())).unwrap(); // TODO report errors somewhere
+
             Product {
-                id: ProductId(ExternalId::new("binance", pos.productId.clone())),
-                asset_id: AssetId(pos.asset.clone()),
+                id: product_id(&pos.productId),
+                asset_id: matched_asset.id.clone(),
                 apy: (pos.apy.parse()).unwrap(),
             }
         }

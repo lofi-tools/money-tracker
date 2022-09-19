@@ -4,7 +4,6 @@ use crate::models::{
     Asset, ExternalId, ListAssets, ListPositions, ListProducts, Position, Product,
 };
 use itertools::Itertools;
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 lazy_static::lazy_static! {
@@ -22,12 +21,19 @@ lazy_static::lazy_static! {
 
 pub fn fetch_assets() -> ListAssets {
     let mut assets = ListAssets::new();
+    // TODO NEXT TIME fetch prices for each
     assets.insert(Asset::new("ETH").with_ext_id(ExternalId::new(COINGECKO, "ethereum")));
-    assets.insert(Asset::new("DOT")); // TODO NEXT TIME coingecko asset ids, then fetch prices for each
-    assets.insert(Asset::new("NEAR"));
-    assets.insert(Asset::new("CRO"));
-    assets.insert(Asset::new("BNB"));
-    assets.insert(Asset::new("SOL"));
+    assets.insert(Asset::new("DOT").with_ext_id(ExternalId::new(COINGECKO, "polkadot")));
+    assets.insert(Asset::new("NEAR").with_ext_id(ExternalId::new(COINGECKO, "near")));
+    assets.insert(Asset::new("CRO").with_ext_id(ExternalId::new(COINGECKO, "crypto-com-chain")));
+    assets.insert(Asset::new("BNB").with_ext_id(ExternalId::new(COINGECKO, "binancecoin")));
+    assets.insert(Asset::new("SOL").with_ext_id(ExternalId::new(COINGECKO, "solana")));
+    assets.insert(Asset::new("ADA").with_ext_id(ExternalId::new(COINGECKO, "cardano")));
+    assets.insert(Asset::new("MATIC").with_ext_id(ExternalId::new(COINGECKO, "matic-network")));
+    assets.insert(Asset::new("AVAX").with_ext_id(ExternalId::new(COINGECKO, "avalanche-2")));
+    assets.insert(Asset::new("ATOM").with_ext_id(ExternalId::new(COINGECKO, "cosmos")));
+    assets.insert(Asset::new("UNI").with_ext_id(ExternalId::new(COINGECKO, "uniswap")));
+    assets.insert(Asset::new("EGLD").with_ext_id(ExternalId::new(COINGECKO, "elrond-erd-2")));
     assets
 }
 

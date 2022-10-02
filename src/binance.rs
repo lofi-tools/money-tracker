@@ -256,23 +256,3 @@ mod tests {
         Ok(())
     }
 }
-
-mod deprecated {
-    // #[deprecated]
-    // pub async fn list_products() -> Result<(), Box<dyn std::error::Error>> {
-    //     // // let client = reqwest::Client::new();
-    //     // // let url = Url::parse(&format!("{API_BASE}/sapi/v1/staking/productList"))?;
-    //     // let url = API_BASE.join("/sapi/v1/staking/productList")?;
-
-    //     // req_signed(url).await?;
-    //     // // let resp = client
-    //     // //     .get(url)
-    //     // //     .header("X-MBX-APIKEY", &*API_KEY)
-    //     // //     .send()
-    //     // //     .await?;
-    //     // // let resp_text = resp.text().await?;
-
-    //     // // println!("{:#?}", resp_text);
-    //     todo!()
-    // }
-}

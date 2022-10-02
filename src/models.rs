@@ -1,5 +1,6 @@
 use crate::data::{ASSETS, PRODUCTS};
-use derive_more::{Display, From};
+use anyhow::bail;
+use derive_more::Display;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -28,7 +29,7 @@ impl From<&str> for AssetId {
     }
 }
 pub struct ListAssets {
-    by_id: HashMap<AssetId, Asset>,
+    pub by_id: HashMap<AssetId, Asset>,
     by_external_id: HashMap<ExternalId, Asset>,
 }
 impl ListAssets {
@@ -38,19 +39,18 @@ impl ListAssets {
             by_external_id: HashMap::new(),
         }
     }
-    #[deprecated] // use insert instead
-    pub fn insert_id(&mut self, asset_id: &str) {
-        self.by_id.insert(
-            AssetId(asset_id.to_string()),
-            Asset {
-                id: AssetId(asset_id.to_string()),
-                external_ids: HashMap::new(),
-            },
-        );
-        // TODO insert external, match to internal
-    }
+    // #[deprecated] // use insert instead
+    // pub fn insert_id(&mut self, asset_id: &str) {
+    //     self.by_id.insert(
+    //         AssetId(asset_id.to_string()),
+    //         Asset {
+    //             id: AssetId(asset_id.to_string()),
+    //             external_ids: HashMap::new(),
+    //         },
+    //     );
+    //     // TODO insert external, match to internal
+    // }
     pub fn insert(&mut self, asset: Asset) {
-        // TODO NEXT TIME inset assets with external IDs
         self.by_id.insert(asset.id.clone(), asset.clone());
         for (_provider_id, ext_id) in asset.external_ids.iter() {
             self.by_external_id.insert(ext_id.clone(), asset.clone());
@@ -154,6 +154,9 @@ impl ExternalId {
             val: id.into(),
         }
     }
+    pub fn to_string(&self) -> String {
+        self.val.to_string()
+    }
 }
 #[derive(PartialEq, Eq, Hash, Debug, Clone, Display)]
 #[display(fmt = "{}", self.0)]
@@ -187,4 +190,90 @@ impl<T: AsRef<str>> From<T> for ProviderId {
         ProviderId(t.as_ref().to_string())
     }
 }
-// TODO provider
+impl std::ops::Deref for ProviderId {
+    type Target = String;
+    fn deref(&self) -> &String {
+        &self.0
+    }
+}
+
+// #[derive(Debug)]
+// pub struct AllAssetPrices {
+//     pub by_asset: HashMap<AssetId, PricesForAsset>,
+// }
+// impl AllAssetPrices {
+//     fn insert_price_usd(&mut self, asset_id: AssetId, price_usd: f64) {
+//         // let prices_for_asset = self.0.get_or_insert();
+//         // self.0.insert(asset_id);
+//         match self.by_asset.get_mut(&asset_id) {
+//             Some(prices_for_asset) => {
+//                 // TODO add new price
+//                 todo!()
+//             }
+//             None => {
+//                 // TODO add usd and new price
+//                 todo!()
+//             }
+//         }
+//     }
+// }
+// #[derive(Debug)]
+// pub struct PricesForAsset {
+//     pub by_vs_currency: HashMap<AssetId, AssetPrice>,
+// }
+// impl PricesForAsset {
+//     pub fn insert_vs_usd(&mut self, price_usd: f64) {
+//         self.by_vs_currency
+//             .insert(AssetId::from("usd"), AssetPrice::usd(price_usd));
+//     }
+// }
+// #[derive(Debug)]
+// pub struct AssetPrice {
+//     price: f64,
+//     vs_asset: AssetId,
+// }
+// impl AssetPrice {
+//     fn usd(price: f64) -> Self {
+//         AssetPrice {
+//             price,
+//             vs_asset: AssetId::from("usd"),
+//         }
+//     }
+// }
+
+#[derive(Debug)]
+pub struct AllAssetPrices(HashMap<(AssetId, AssetId), f64>);
+impl AllAssetPrices {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+    pub fn insert_vs_usd<'a>(
+        &'a mut self,
+        asset_id: &AssetId,
+        price: f64,
+    ) -> Result<(), anyhow::Error> {
+        match self
+            .0
+            .try_insert((asset_id.clone(), AssetId::from("usd")), price)
+        {
+            Ok(_) => Ok(()),
+            Err(_) => Err(anyhow::anyhow!("already present")),
+        }
+    }
+    pub fn get_vs_usd(&mut self, asset_id: &AssetId) -> Result<AssetPrice, anyhow::Error> {
+        self.0
+            .get(&(asset_id.clone(), AssetId::from("usd")))
+            .map(|p| AssetPrice {
+                asset_id: asset_id.clone(),
+                vs_asset: AssetId::from("usd"),
+                price: *p,
+            })
+            .ok_or(anyhow::anyhow!("asset price not found"))
+    }
+}
+#[derive(Debug)]
+pub struct AssetPrice {
+    asset_id: AssetId,
+    vs_asset: AssetId,
+    price: f64,
+}

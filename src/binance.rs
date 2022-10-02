@@ -12,7 +12,6 @@ use std::time::SystemTime;
 const API_BASE: Lazy<Url> = Lazy::new(|| Url::parse("https://api.binance.com").unwrap());
 const API_KEY: Lazy<String> = Lazy::new(|| std::env::var("BINANCE_API_KEY").unwrap());
 const API_SECRET: Lazy<String> = Lazy::new(|| std::env::var("BINANCE_SECRET_KEY").unwrap());
-// const API_BASE: &'static str = "https://api.binance.com";
 const PROVIDER_ID_BINANCE: &str = "binance";
 
 #[derive(Deserialize, Debug)]

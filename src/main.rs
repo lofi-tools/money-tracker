@@ -1,12 +1,14 @@
 #![feature(once_cell)]
-// mod actor_db;
+#![feature(map_try_insert)] // for try_insert in models::AssetPrice
 mod binance;
 mod data;
 mod models;
 mod utils;
+// mod actor_db;
 
 use binance::BinanceClient;
 use data::{POSITIONS, PRODUCTS};
+mod coingecko;
 
 // TODO - estimate value, epy
 // TODO - binance: other assets
@@ -47,9 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     data::positions_groupby_currency();
 
-    coingecko::fetch_prices().await?;
+    coingecko::CurrentPriceReq::fetch_prices().await?;
 
     Ok(())
 }
-
-mod coingecko;

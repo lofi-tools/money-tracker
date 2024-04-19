@@ -1,4 +1,29 @@
-Cargo.lock
+# RUST
+**/debug/
 **/target/
+**/*.rs.bk
+tarpaulin-report.html
+Cargo.lock
+*.pdb
 
-.env
+# JAVASCRIPT
+**/node_modules/
+**/coverage/
+**/pnpm-lock.yaml
+
+# LOCAL TOOLS: SYSTEM, GIT, NIX, EDITORS
+**/*.~undo-tree~
+.vscode/
+.DS_Store
+.direnv/
+
+# CUSTOM
+**/.cache/
+**/local/
+
+# APPLICATION
+**/**.env
+**/**.env.**
+**/dist/
+
+    

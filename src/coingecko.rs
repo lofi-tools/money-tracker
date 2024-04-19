@@ -42,16 +42,25 @@ impl CurrentPriceReq {
             .get_json::<CurrentPriceResp>()
             .await
     }
-    pub async fn fetch_prices() -> Result<(), anyhow::Error> {
+    pub async fn fetch_prices() -> Result<CurrentPriceResp, anyhow::Error> {
         let resp = CurrentPriceReq::new().send().await?;
-        dbg!(resp);
-        // TODO store prices
-
-        todo!()
+        Ok(resp)
     }
 }
 #[derive(Deserialize, Debug)]
-pub struct CurrentPriceResp(HashMap<String, HashMap<String, f64>>);
+pub struct CurrentPriceResp(pub HashMap<String, HashMap<String, f64>>);
+
+pub mod transform {
+    use crate::coingecko::CurrentPriceResp;
+    use crate::models::AllAssetPrices;
+
+    impl CurrentPriceResp {
+        pub fn to_models(&self) -> AllAssetPrices {
+            // TODO NEXT TIME
+            todo!()
+        }
+    }
+}
 
 // pub async fn fetch_prices() -> Result<(), anyhow::Error> {
 //     // TODO ids from ASSETS

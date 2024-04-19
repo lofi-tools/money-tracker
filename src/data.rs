@@ -1,5 +1,5 @@
 use crate::binance::BinanceClient;
-use crate::coingecko::COINGECKO;
+use crate::coingecko::{self, COINGECKO};
 use crate::models::{
     AllAssetPrices, Asset, ExternalId, ListAssets, ListPositions, ListProducts, Position, Product,
 };
@@ -36,6 +36,19 @@ pub fn fetch_assets() -> ListAssets {
     assets.insert(Asset::new("UNI").with_ext_id(ExternalId::new(&**COINGECKO, "uniswap")));
     assets.insert(Asset::new("EGLD").with_ext_id(ExternalId::new(&**COINGECKO, "elrond-erd-2")));
     assets
+}
+pub async fn fetch_asset_prices() {
+    // use coingecko
+    let cg_prices = coingecko::CurrentPriceReq::fetch_prices().await.unwrap();
+    // TODO store prices
+
+    let mut mut_asset_prices = ASSET_PRICES.write().unwrap();
+    // TODO mv to coingecko::transform
+    // for each cg_price
+    for (cg_asset_id, by_vs_asset) in cg_prices.0 {
+        // find asset_id by external_id
+        // insert into ASSET_PRICES
+    }
 }
 
 #[deprecated]

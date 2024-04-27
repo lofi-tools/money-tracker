@@ -23,7 +23,7 @@
         let
           pkgs = import nixpkgs {
             inherit system;
-            overlays = [              (import rust-overlay)            ];
+            overlays = [ (import rust-overlay) ];
           };
           customRust = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override {
             extensions = [ "rust-src" "rust-analyzer" ];
@@ -46,20 +46,18 @@
           devDependencies = [
             pkgs.cargo-edit
             pkgs.watchexec
-            # pkgs.sqlx-cli -> moved to sqlx-cli 0.7 which is not available on nix
           ];
 
           env = rec {
             RUST_LOG = "debug";
             RUST_BACKTRACE = 1;
-            DATABASE_URL = "postgres://api:api@localhost:5454/api";
           };
 
           binaries = my-utils.binaries.${system};
           scripts = attrValues my-utils.packages.${system} ++ [
             (pkgs.writeScriptBin "back" ''cargo run'')
-            (pkgs.writeScriptBin "tests" ''cargo test --test integration -- --nocapture'')
-            (pkgs.writeScriptBin "utests" ''cargo test --lib -- --nocapture'')
+            (pkgs.writeScriptBin "itest" ''cargo test -p integration -- --nocapture'')
+            (pkgs.writeScriptBin "utest" ''cargo test --workspace --lib -- --nocapture'')
             (pkgs.writeScriptBin "front" ''cd frontend; pnpm install; pnpm dev'')
           ];
 

@@ -4,8 +4,10 @@ mod models;
 mod utils;
 // mod actor_db;
 
-use binance::BinanceClient;
+use binance_client::BinanceClient;
 use data::{POSITIONS, PRODUCTS};
+
+use crate::adapters::coingecko;
 pub mod adapters {
     pub mod binance;
     pub mod coingecko;
@@ -37,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _bc = BinanceClient::new();
     // bc.list_staking_positions().await?;
     data::fetch_assets();
-    data::fetch_binance().await;
+    data::fetch_binance().await?;
 
     println!("PRODUCTS:");
     for _product in PRODUCTS.read().unwrap().map.iter() {

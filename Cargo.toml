@@ -1,5 +1,5 @@
 [package]
-name = "cryptotracker"
+name = "crypto-tracker"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,34 +9,45 @@ members = [
 ]
 
 [workspace.dependencies]
-# own libs
-api-client-utils = { path="./libs/api_client_utils" }
 # async, web, db
-tokio = { version="^1.36", features=["full"] }
-reqwest = { version="^0.11", features=["json"] }
-# serde, crypto, codecs
+tokio = { version="^1.37", features=["full"] }
+reqwest = { version="^0.12", features=["json"] }
+# serde, formats, codecs
 serde = { version="^1.0", features=["derive"] }
 serde_json = "^1.0"
+csv = "^1.3"
+# crypto, randomness
+hmac-sha256 = "^1.1"
 # errors, logs, env, config
-anyhow = "^1.0" # TODO feature backtrace
+anyhow = { version="^1.0", features=["backtrace"] } 
 thiserror = "^1.0"
 lazy_static = "^1.4"
+# rust utils
+derive_more = "^0.99"
+# own libs, patches
+# api-client-utils = { git = "ssh://git@github.com/nmrshll/rust-libs.git" }
+# [patch.'ssh://git@github.com/nmrshll/rust-libs.git']
+api-client-utils = { path='../../weekend-projects/rust-libs/api-client-utils' }
+binance-client = { path="./libs/binance-client" }
+
+
 
 [dependencies]
 # own libs
 api-client-utils.workspace = true
+binance-client.workspace = true
 # async, web, db
 tokio.workspace = true
 reqwest.workspace = true
 # serde, crypto, codecs
 serde.workspace = true
 serde_json.workspace = true
-hmac-sha256 = "^1.1"
+hmac-sha256.workspace = true
 # errors, logs, env, config
 lazy_static.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 dotenvy = "^0.15"
-# utils
-derive_more = "^0.99"
+# rust utils
+derive_more.workspace = true
 itertools = "^0.10"

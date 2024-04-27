@@ -1,8 +1,8 @@
-use crate::binance::BinanceClient;
-use crate::coingecko::{self, COINGECKO};
+use crate::adapters::coingecko::{self, COINGECKO};
 use crate::models::{
     AllAssetPrices, Asset, ExternalId, ListAssets, ListPositions, ListProducts, Position, Product,
 };
+use binance_client::BinanceClient;
 use itertools::Itertools;
 use std::sync::{Arc, RwLock};
 
@@ -64,9 +64,9 @@ pub fn fetch_products() -> ListProducts {
     products
 }
 
-pub async fn fetch_binance() {
+pub async fn fetch_binance() -> anyhow::Result<()> {
     // fetch from Binance, transform into positions + products
-    let bc = BinanceClient::new();
+    let bc = BinanceClient::new()?;
     let got_positions = bc.list_staking_positions().await.unwrap();
 
     let mut mut_products = PRODUCTS.write().unwrap();
@@ -75,6 +75,8 @@ pub async fn fetch_binance() {
         mut_products.insert(Product::from(binance_pos));
         mut_positions.insert(Position::from(binance_pos));
     }
+
+    Ok(())
 }
 
 // TODO move to positions Struct

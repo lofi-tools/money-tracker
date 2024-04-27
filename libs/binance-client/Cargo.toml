@@ -1,0 +1,20 @@
+[package]
+name = "binance-client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# own libs
+api-client-utils.workspace = true
+# async, web, db
+reqwest.workspace = true
+# formats, codecs
+serde.workspace = true
+serde_json.workspace = true
+# errors, logs, env, config
+anyhow.workspace = true
+thiserror.workspace = true
+# crypto, randomness
+hmac-sha256.workspace = true
+# rust utils
+derive_more.workspace = true

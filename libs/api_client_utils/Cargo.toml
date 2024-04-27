@@ -1,0 +1,17 @@
+[package]
+name = "api-client-utils"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# async, web
+# axum.workspace = true
+reqwest.workspace = true
+tokio.workspace = true
+# serde, codecs, crypto
+serde.workspace = true
+serde_json.workspace = true
+# config, errors, logs
+thiserror.workspace = true
+anyhow.workspace = true
+serde-xml-rs = "0.6.0"

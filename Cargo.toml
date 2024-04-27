@@ -3,24 +3,40 @@ name = "cryptotracker"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+members = [
+    "libs/*"
+]
+
+[workspace.dependencies]
+# own libs
+api-client-utils = { path="./libs/api_client_utils" }
+# async, web, db
+tokio = { version="^1.36", features=["full"] }
+reqwest = { version="^0.11", features=["json"] }
+# serde, crypto, codecs
+serde = { version="^1.0", features=["derive"] }
+serde_json = "^1.0"
+# errors, logs, env, config
+anyhow = "^1.0" # TODO feature backtrace
+thiserror = "^1.0"
+lazy_static = "^1.4"
 
 [dependencies]
+# own libs
+api-client-utils.workspace = true
 # async, web, db
-tokio = { version="1.20.1", features=["full"] }
-reqwest = { version="0.11.11", features=["json"] }
-
+tokio.workspace = true
+reqwest.workspace = true
 # serde, crypto, codecs
-serde = { version="1.0.142", features=["derive"] }
-serde_json = "1.0"
-hmac-sha256 = "1.1.4"
-
+serde.workspace = true
+serde_json.workspace = true
+hmac-sha256 = "^1.1"
 # errors, logs, env, config
-lazy_static = "1.4.0"
-dotenv = "0.15"
-anyhow = "1.0.64"
-thiserror = "1.0.34"
-
+lazy_static.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+dotenvy = "^0.15"
 # utils
-derive_more = "0.99.17"
-itertools = "0.10.4"
-async-trait = "0.1.57"
+derive_more = "^0.99"
+itertools = "^0.10"

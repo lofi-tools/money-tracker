@@ -1,17 +1,23 @@
-use crate::binance::staking::StakingPosition;
+use self::staking::StakingPosition;
 use crate::models::{ExternalId, ProductId};
 use crate::utils::hex;
+use api_client_utils::{ApiClient, JsonApiClient};
 use derive_more::Display;
 use hmac_sha256::HMAC;
 use reqwest::{Request, RequestBuilder, Url};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
-use std::lazy::Lazy;
+// use std::cell::OnceCell;
 use std::time::SystemTime;
 
-const API_BASE: Lazy<Url> = Lazy::new(|| Url::parse("https://api.binance.com").unwrap());
-const API_KEY: Lazy<String> = Lazy::new(|| std::env::var("BINANCE_API_KEY").unwrap());
-const API_SECRET: Lazy<String> = Lazy::new(|| std::env::var("BINANCE_SECRET_KEY").unwrap());
+// lazy_static::lazy_static!(
+//     pub static ref API_BASE_URL: &Url = Url::parse("https://api.binance.com").unwrap();
+//     pub static ref API
+// )
+
+// const API_BASE: OnceCell<Url> = OnceCell::new(|| Url::parse("https://api.binance.com").unwrap());
+// const API_KEY: OnceCell<String> = OnceCell::new(|| std::env::var("BINANCE_API_KEY").unwrap());
+// const API_SECRET: OnceCell<String> = OnceCell::new(|| std::env::var("BINANCE_SECRET_KEY").unwrap());
 const PROVIDER_ID_BINANCE: &str = "binance";
 
 #[derive(Deserialize, Debug)]
@@ -33,58 +39,71 @@ pub struct StakingProductDetail {
 }
 
 pub struct BinanceClient {
-    httpc: reqwest::Client,
+    http_client: reqwest::Client,
+    base_url: String,
+    api_key: String,
+    api_secret: String,
+}
+impl JsonApiClient for BinanceClient {
+    fn base_url(&self) -> &str {
+        &self.base_url
+    }
+    fn http_client(&self) -> &reqwest::Client {
+        &self.http_client
+    }
 }
 impl BinanceClient {
-    pub fn new() -> Self {
-        return BinanceClient {
-            httpc: reqwest::Client::new(),
-        };
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(BinanceClient {
+            http_client: reqwest::Client::new(),
+            base_url: "https://api.binance.com".to_string(),
+            api_key: std::env::var("BINANCE_API_KEY")?,
+            api_secret: std::env::var("BINANCE_SECRET_KEY")?,
+        })
     }
 
-    // ROUTE METHODS
     pub async fn list_all_products(&self) -> Result<Vec<StakingProduct>, anyhow::Error> {
         let req = self
-            .get("/sapi/v1/staking/productList")?
+            .get("/sapi/v1/staking/productList")
             .query(&[("product", "STAKING")])
             .sign()?;
-        let resp: Vec<StakingProduct> = self.get_resp(req).await?;
+        let resp: Vec<StakingProduct> = req.expect_ok().await?;
         Ok(resp)
     }
     pub async fn list_staking_positions(&self) -> Result<Vec<StakingPosition>, anyhow::Error> {
         let req = self
-            .get("/sapi/v1/staking/position")?
+            .get("/sapi/v1/staking/position")
             .query(&[("product", "STAKING")])
             .sign()?;
-        let resp: Vec<StakingPosition> = self.get_resp(req).await?;
+        let resp: Vec<StakingPosition> = req.expect_ok().await?;
         Ok(resp)
     }
 
     // UTILS
-    pub fn get(&self, path: &str) -> Result<RequestBuilder, anyhow::Error> {
-        Ok(self.httpc.get(API_BASE.join(path)?))
-    }
-    pub async fn get_resp<D: DeserializeOwned>(&self, req: Request) -> Result<D, BinanceErr> {
-        let resp = self
-            .httpc
-            .execute(req)
-            .await
-            .map_err(BinanceErr::ReqwestErr)?;
+    // pub fn get(&self, path: &str) -> Result<RequestBuilder, anyhow::Error> {
+    //     Ok(self.http_client.get(API_BASE.join(path)?))
+    // }
+    // pub async fn get_resp<D: DeserializeOwned>(&self, req: Request) -> Result<D, BinanceErr> {
+    //     let resp = self
+    //         .http_client
+    //         .execute(req)
+    //         .await
+    //         .map_err(BinanceErr::ReqwestErr)?;
 
-        match resp.status() {
-            s if s.is_success() => {
-                // let txt = resp.text().await.unwrap();
-                // dbg!(txt);
-                // todo!()
-                let resp_parsed: D = resp.json().await.map_err(BinanceErr::DeserResp)?;
-                Ok(resp_parsed)
-            }
-            _status_err => {
-                let err_parsed: BinanceApiErr = resp.json().await.map_err(BinanceErr::DeserResp)?;
-                Err(BinanceErr::ApiErrResp(err_parsed))
-            }
-        }
-    }
+    //     match resp.status() {
+    //         s if s.is_success() => {
+    //             // let txt = resp.text().await.unwrap();
+    //             // dbg!(txt);
+    //             // todo!()
+    //             let resp_parsed: D = resp.json().await.map_err(BinanceErr::DeserResp)?;
+    //             Ok(resp_parsed)
+    //         }
+    //         _status_err => {
+    //             let err_parsed: BinanceApiErr = resp.json().await.map_err(BinanceErr::DeserResp)?;
+    //             Err(BinanceErr::ApiErrResp(err_parsed))
+    //         }
+    //     }
+    // }
 }
 
 pub struct Binance;
@@ -138,7 +157,7 @@ mod staking {
     impl StakingPosition {
         // TODO fetch product if not exists in memDB
         pub async fn product(&self) {
-            let product_id = Binance::product_id(&self.productId);
+            let _product_id = Binance::product_id(&self.productId);
             // TODO use tokio message passing to get/update state
             // let found_product = PRODUCTS.
         }

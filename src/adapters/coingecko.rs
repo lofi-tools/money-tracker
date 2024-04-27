@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::data::ASSETS;
 use crate::models::ProviderId;
 use anyhow::anyhow;
+use api_client_utils::JsonApiClient;
 use reqwest::header::ACCEPT;
 use reqwest::{RequestBuilder, Url};
 use serde::de::DeserializeOwned;
@@ -11,6 +12,29 @@ use serde::{Deserialize, Serialize};
 lazy_static::lazy_static! {
     pub static ref COINGECKO: ProviderId = ProviderId("coingecko".to_string());
     pub static ref API_BASE: Url = Url::parse("https://api.coingecko.com/api/v3/").unwrap();
+}
+
+pub struct CoingeckoClient {
+    pub base_url: String,
+    pub http_client: reqwest::Client,
+}
+impl JsonApiClient for CoingeckoClient {
+    fn base_url(&self) -> &str {
+        &self.base_url
+    }
+    fn http_client(&self) -> &reqwest::Client {
+        &self.http_client
+    }
+}
+impl CoingeckoClient {
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(CoingeckoClient {
+            base_url: "https://api.coingecko.com/api/v3/".to_string(),
+            http_client: reqwest::Client::new(),
+        })
+    }
+
+    // TODO move methods to here
 }
 
 #[derive(Debug, Serialize)]
@@ -24,7 +48,7 @@ impl CurrentPriceReq {
             ids: ASSETS
                 .by_id
                 .iter()
-                .fold(Vec::new(), |mut acc, (a_id, a)| {
+                .fold(Vec::new(), |mut acc, (_a_id, a)| {
                     if let Some(cg_id) = a.external_ids.get(&COINGECKO) {
                         acc.push(cg_id.to_string());
                     }
@@ -107,11 +131,9 @@ pub mod transform {
 //     todo!()
 // }
 
-#[async_trait::async_trait]
 pub trait RequestBuilderExt {
     async fn get_json<T: DeserializeOwned>(self) -> Result<T, anyhow::Error>;
 }
-#[async_trait::async_trait]
 impl RequestBuilderExt for RequestBuilder {
     async fn get_json<T: DeserializeOwned>(self) -> Result<T, anyhow::Error> {
         let resp = self.header(ACCEPT, "application/json").send().await?;

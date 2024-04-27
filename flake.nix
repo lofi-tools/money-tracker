@@ -25,10 +25,10 @@
             inherit system;
             overlays = [              (import rust-overlay)            ];
           };
-          customRust = pkgs.rust-bin.stable."1.76.0".default.override {
+          customRust = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override {
             extensions = [ "rust-src" "rust-analyzer" ];
             targets = [ ];
-          };
+          });
 
           buildDependencies = with pkgs; [
             customRust

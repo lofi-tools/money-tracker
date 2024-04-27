@@ -42,10 +42,10 @@ pub async fn fetch_asset_prices() {
     let cg_prices = coingecko::CurrentPriceReq::fetch_prices().await.unwrap();
     // TODO store prices
 
-    let mut mut_asset_prices = ASSET_PRICES.write().unwrap();
+    let _mut_asset_prices = ASSET_PRICES.write().unwrap();
     // TODO mv to coingecko::transform
     // for each cg_price
-    for (cg_asset_id, by_vs_asset) in cg_prices.0 {
+    for (_cg_asset_id, _by_vs_asset) in cg_prices.0 {
         // find asset_id by external_id
         // insert into ASSET_PRICES
     }
@@ -53,7 +53,7 @@ pub async fn fetch_asset_prices() {
 
 #[deprecated]
 pub fn fetch_products() -> ListProducts {
-    let mut products = ListProducts::new();
+    let products = ListProducts::new();
     // TODO fetch from Binance, populate products
 
     // let product: Product<'static> = Product {
@@ -88,11 +88,11 @@ pub fn positions_groupby_currency() {
     let by_asset = positions
         .by_id
         .iter()
-        .into_grouping_map_by(|(pos_k, pos)| pos.product().unwrap().asset().id.clone());
+        .into_grouping_map_by(|(_pos_k, pos)| pos.product().unwrap().asset().id.clone());
     // let sum = by_asset.aggregate(|sum,asset,(pos_id,pos)|{
     //     dbg!(pos.amount)
     // });
-    let asset_sums = by_asset.fold(0_f64, |sum, asset, (_, pos)| sum + pos.amount);
+    let asset_sums = by_asset.fold(0_f64, |sum, _asset, (_, pos)| sum + pos.amount);
 
     for (asset_id, sum) in asset_sums {
         println!("{asset_id}: {sum}");

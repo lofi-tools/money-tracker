@@ -1,17 +1,15 @@
 #![feature(map_try_insert)] // for try_insert in models::AssetPrice
-mod data;
-mod models;
-mod utils;
-// mod actor_db;
-
+use crate::adapters::coingecko;
 use binance_client::BinanceClient;
 use data::{POSITIONS, PRODUCTS};
 
-use crate::adapters::coingecko;
 pub mod adapters {
     pub mod binance;
+    pub mod binance2;
     pub mod coingecko;
 }
+mod data;
+mod models;
 
 // TODO - estimate value, epy
 // TODO - binance: other assets

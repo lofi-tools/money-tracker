@@ -8,9 +8,11 @@ edition = "2021"
 api-client-utils.workspace = true
 # async, web, db
 reqwest.workspace = true
+tokio.workspace = true
 # formats, codecs
 serde.workspace = true
 serde_json.workspace = true
+chrono.workspace = true
 # errors, logs, env, config
 anyhow.workspace = true
 thiserror.workspace = true

@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-
+#![allow(async_fn_in_trait)]
 use crate::data::ASSETS;
 use crate::models::ProviderId;
 use anyhow::anyhow;
@@ -8,6 +7,7 @@ use reqwest::header::ACCEPT;
 use reqwest::{RequestBuilder, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 lazy_static::lazy_static! {
     pub static ref COINGECKO: ProviderId = ProviderId("coingecko".to_string());

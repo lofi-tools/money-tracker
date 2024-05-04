@@ -16,6 +16,7 @@ reqwest = { version="^0.12", features=["json"] }
 serde = { version="^1.0", features=["derive"] }
 serde_json = "^1.0"
 csv = "^1.3"
+chrono = "^0.4"
 # crypto, randomness
 hmac-sha256 = "^1.1"
 # errors, logs, env, config
@@ -25,17 +26,15 @@ lazy_static = "^1.4"
 # rust utils
 derive_more = "^0.99"
 # own libs, patches
+binance-client = { path="./libs/binance-client" }
 # api-client-utils = { git = "ssh://git@github.com/nmrshll/rust-libs.git" }
 # [patch.'ssh://git@github.com/nmrshll/rust-libs.git']
 api-client-utils = { path='../../weekend-projects/rust-libs/api-client-utils' }
-binance-client = { path="./libs/binance-client" }
+typed-ids = { path='../../weekend-projects/rust-libs/typed-ids' }
 
 
 
 [dependencies]
-# own libs
-api-client-utils.workspace = true
-binance-client.workspace = true
 # async, web, db
 tokio.workspace = true
 reqwest.workspace = true
@@ -43,6 +42,7 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 hmac-sha256.workspace = true
+chrono.workspace = true
 # errors, logs, env, config
 lazy_static.workspace = true
 anyhow.workspace = true
@@ -51,3 +51,8 @@ dotenvy = "^0.15"
 # rust utils
 derive_more.workspace = true
 itertools = "^0.10"
+# own libs
+api-client-utils.workspace = true
+binance-client.workspace = true
+typed-ids.workspace = true
+

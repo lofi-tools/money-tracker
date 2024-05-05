@@ -1,6 +1,6 @@
 use crate::payloads::{ListResp, StakingPositionResp};
 use api_client_utils::prelude::*;
-use payloads::{LockedEarnPos, StakingProduct};
+use payloads::{FlexEarnPos, LockedEarnPos, StakingProduct};
 use serde::Deserialize;
 use signing::RequestBuilderExt;
 
@@ -58,12 +58,15 @@ impl BinanceClient {
             .recv_json::<ListResp<LockedEarnPos>, BinanceApiErrResp>()
             .await?;
 
-        // TODO parse timestamps into
-
-        todo!()
+        Ok(resp.rows)
     }
-    pub async fn list_flexible_earn_pos(&self) -> anyhow::Result<Vec<()>> {
-        todo!()
+    pub async fn list_flexible_earn_pos(&self) -> anyhow::Result<Vec<FlexEarnPos>> {
+        let req = self.get("/simple-earn/flexible/position").sign(self)?;
+        let resp = req
+            .recv_json::<ListResp<FlexEarnPos>, BinanceApiErrResp>()
+            .await?;
+
+        Ok(resp.rows)
     }
 }
 
@@ -75,7 +78,7 @@ pub struct BinanceApiErrResp {
 }
 
 pub mod payloads {
-    use crate::utils::{de_from_str, de_str_to_datetime};
+    use crate::utils::{de_from_str, de_str_to_datetime, de_u_to_datetime};
     use chrono::{DateTime, Utc};
     use serde::{Deserialize, Serialize};
     use std::ops::Deref;
@@ -92,15 +95,18 @@ pub mod payloads {
         pub position_id: PositionId,
         #[serde(rename = "productId")]
         pub product_id: String,
-        pub asset: String,
-        pub amount: String,
-        #[serde(rename = "purchaseTime")]
-        pub purchase_time: u64,
-        pub duration: u64,
+        #[serde(rename = "asset")]
+        pub asset_id: String,
+        #[serde(deserialize_with = "de_from_str")]
+        pub amount: f64,
+        #[serde(rename = "purchaseTime", deserialize_with = "de_u_to_datetime")]
+        pub purchase_time: DateTime<Utc>,
+        pub duration: u64, // TODO deserialize to duration
         // pub accrualDays: String,
         #[serde(rename = "rewardAsset")]
-        pub reward_asset: String,
-        pub apy: String,
+        pub reward_asset_id: String,
+        #[serde(deserialize_with = "de_from_str")]
+        pub apy: f64,
         // pub rewardAmt: String,
         // pub extraRewardAsset: String,
         // pub extraRewardAPY: String,
@@ -109,8 +115,8 @@ pub mod payloads {
         // pub nextInterestPayDate: String,
         // pub payInterestPeriod: String,
         // pub redeemAmountEarly: String,
-        #[serde(rename = "interestEndDate")]
-        pub interest_end_date: u64,
+        #[serde(rename = "interestEndDate", deserialize_with = "de_u_to_datetime")]
+        pub interest_end_date: DateTime<Utc>,
         // pub deliverDate: String,
         // pub redeemPeriod: String,
         // pub redeemingAmt: String,
@@ -122,8 +128,8 @@ pub mod payloads {
 
     #[derive(Deserialize, Debug)]
     pub struct LockedEarnPos {
-        #[serde(rename = "positionId")]
-        pub position_id: String,
+        #[serde(rename = "positionId", deserialize_with = "de_from_str")]
+        pub position_id: u64,
         #[serde(rename = "projectId")]
         pub project_id: String,
         #[serde(rename = "asset")]
@@ -148,11 +154,49 @@ pub mod payloads {
         pub redeem_date: DateTime<Utc>,
     }
 
+    #[derive(Deserialize, Debug)]
+    pub struct FlexEarnPos {
+        #[serde(rename = "totalAmount", deserialize_with = "de_from_str")]
+        pub total_amount: f64,
+        #[serde(rename = "tierAnnualPercentageRate")]
+        pub tier_annual_percentage_rate: serde_json::Value,
+        #[serde(
+            rename = "latestAnnualPercentageRate",
+            deserialize_with = "de_from_str"
+        )]
+        pub latest_annual_percentage_rate: f64,
+        #[serde(
+            rename = "yesterdayAirdropPercentageRate",
+            deserialize_with = "de_from_str"
+        )]
+        pub yesterday_airdrop_percentage_rate: f64,
+        #[serde(rename = "asset")]
+        pub asset_id: String,
+        #[serde(rename = "airDropAsset")]
+        pub air_drop_asset_id: String,
+        #[serde(rename = "canRedeem")]
+        pub can_redeem: bool,
+        #[serde(rename = "collateralAmount", deserialize_with = "de_from_str")]
+        pub collateral_amount: f64,
+        #[serde(rename = "productId")]
+        pub product_id: String,
+        #[serde(rename = "yesterdayRealTimeRewards", deserialize_with = "de_from_str")]
+        pub yesterday_real_time_rewards: f64,
+        #[serde(rename = "cumulativeBonusRewards", deserialize_with = "de_from_str")]
+        pub cumulative_bonus_rewards: f64,
+        #[serde(rename = "cumulativeRealTimeRewards", deserialize_with = "de_from_str")]
+        pub cumulative_real_time_rewards: f64,
+        #[serde(rename = "cumulativeTotalRewards", deserialize_with = "de_from_str")]
+        pub cumulative_total_rewards: f64,
+        #[serde(rename = "autoSubscribe")]
+        pub auto_subscribe: bool,
+    }
+
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
     #[repr(transparent)]
+    #[serde(transparent)]
     pub struct PositionId {
-        id: u64,
-        _type: std::marker::PhantomData<StakingPositionResp>,
+        pub id: u64,
     }
     impl Deref for PositionId {
         type Target = u64;
@@ -177,12 +221,6 @@ pub mod payloads {
         pub renewable: bool, // Project supports renewal
         #[serde(deserialize_with = "crate::utils::de_from_str")]
         pub apy: f64, // APY in multiple_per_year,
-    }
-}
-
-pub mod models {
-    pub struct StakingPosition {
-        // TODO
     }
 }
 
@@ -254,6 +292,16 @@ pub mod utils {
         Ok(datetime)
     }
 
+    pub fn de_u_to_datetime<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let timestamp = i64::deserialize(deserializer)?;
+        let datetime = DateTime::from_timestamp_millis(timestamp)
+            .ok_or(de::Error::custom("out of range number of milliseconds"))?;
+        Ok(datetime)
+    }
+
     pub fn hex(_in: impl AsRef<[u8]>) -> Result<String, std::fmt::Error> {
         let mut s = String::new();
         for byte in _in.as_ref() {
@@ -284,6 +332,7 @@ pub mod utils {
 
 #[cfg(test)]
 pub mod tests {
+    use self::payloads::PositionId;
     use super::*;
     use crate::payloads::LockedEarnPos;
 
@@ -298,9 +347,16 @@ pub mod tests {
 
     #[test]
     fn test_serde_responses() -> anyhow::Result<()> {
-        let resp_list_earn_flexible = r#"{"positionId": "123123","projectId": "Axs*90","asset": "AXS","amount": "122.09202928","purchaseTime": "1646182276000","duration": "60","accrualDays": "4","rewardAsset": "AXS","APY": "0.23","isRenewable": true,"isAutoRenew": true,"redeemDate": "1732182276000"}"#;
-        let deser = serde_json::from_str::<LockedEarnPos>(&resp_list_earn_flexible)?;
-        dbg!(deser);
+        let resp_list_earn_locked = r#"{"positionId": "123123","projectId": "Axs*90","asset": "AXS","amount": "122.09202928","purchaseTime": "1646182276000","duration": "60","accrualDays": "4","rewardAsset": "AXS","APY": "0.23","isRenewable": true,"isAutoRenew": true,"redeemDate": "1732182276000"}"#;
+        let _deser = serde_json::from_str::<LockedEarnPos>(&resp_list_earn_locked)?;
+
+        let resp_list_earn_flex = r#"{"totalAmount": "75.46000000","tierAnnualPercentageRate": {  "0-5BTC": 0.05,  "5-10BTC": 0.03},"latestAnnualPercentageRate": "0.02599895","yesterdayAirdropPercentageRate": "0.02599895","asset": "USDT","airDropAsset": "BETH","canRedeem": true,"collateralAmount": "232.23123213","productId": "USDT001","yesterdayRealTimeRewards": "0.10293829","cumulativeBonusRewards": "0.22759183","cumulativeRealTimeRewards": "0.22759183","cumulativeTotalRewards": "0.45459183","autoSubscribe": true}"#;
+        let _deser = serde_json::from_str::<FlexEarnPos>(&resp_list_earn_flex)?;
+
+        let position_id = PositionId { id: 123456 };
+        let ser = serde_json::to_string(&position_id)?;
+        assert_eq!(ser, r#"123456"#);
+
         Ok(())
     }
 }

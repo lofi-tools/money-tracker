@@ -55,10 +55,10 @@
 
           binaries = my-utils.binaries.${system};
           scripts = attrValues my-utils.packages.${system} ++ [
-            (pkgs.writeScriptBin "back" ''cargo run'')
+            (pkgs.writeScriptBin "run" ''cargo run'')
             (pkgs.writeScriptBin "itest" ''cargo test -p integration -- --nocapture'')
             (pkgs.writeScriptBin "utest" ''cargo test --workspace --lib -- --nocapture'')
-            (pkgs.writeScriptBin "front" ''cd frontend; pnpm install; pnpm dev'')
+            # (pkgs.writeScriptBin "front" ''cd frontend; pnpm install; pnpm dev'')
           ];
 
         in

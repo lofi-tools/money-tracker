@@ -12,6 +12,7 @@ members = [
 # async, web, db
 tokio = { version="^1.37", features=["full"] }
 reqwest = { version="^0.12", features=["json"] }
+async-trait = "^0.1"
 # serde, formats, codecs
 serde = { version="^1.0", features=["derive"] }
 serde_json = "^1.0"
@@ -38,6 +39,7 @@ typed-ids = { path='../../weekend-projects/rust-libs/typed-ids' }
 # async, web, db
 tokio.workspace = true
 reqwest.workspace = true
+async-trait.workspace = true
 # serde, crypto, codecs
 serde.workspace = true
 serde_json.workspace = true

@@ -276,3 +276,22 @@ pub struct AssetPrice {
     vs_asset: AssetId,
     price: f64,
 }
+
+pub struct Db {
+    pub assets: HashMap<AssetId, Asset>,
+    pub positions: HashMap<PositionId, Position>,
+    pub products: HashMap<ProductId, Product>,
+}
+impl Db {
+    pub fn new() -> Self {
+        Db {
+            assets: HashMap::new(),
+            positions: HashMap::new(),
+            products: HashMap::new(),
+        }
+    }
+    fn upsert_position(&mut self, position: &Position) {
+        // TODO match and upsert asset
+        self.positions.insert(position.id.clone(), position.clone());
+    }
+}

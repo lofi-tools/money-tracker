@@ -67,14 +67,14 @@ pub fn fetch_products() -> ListProducts {
 pub async fn fetch_binance() -> anyhow::Result<()> {
     // fetch from Binance, transform into positions + products
     let bc = BinanceClient::new()?;
-    let got_positions = bc.list_staking_positions().await.unwrap();
+    let _got_positions = bc.list_staking_positions().await.unwrap();
 
-    let mut mut_products = PRODUCTS.write().unwrap();
-    let mut mut_positions = POSITIONS.write().unwrap();
-    for binance_pos in got_positions.iter() {
-        mut_products.insert(Product::from(binance_pos));
-        mut_positions.insert(Position::from(binance_pos));
-    }
+    let mut _mut_products = PRODUCTS.write().unwrap();
+    let mut _mut_positions = POSITIONS.write().unwrap();
+    // for binance_pos in got_positions.iter() {
+    //     mut_products.insert(Product::from(binance_pos));
+    //     mut_positions.insert(Position::from(binance_pos));
+    // }
 
     Ok(())
 }

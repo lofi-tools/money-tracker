@@ -1,6 +1,8 @@
 #![feature(map_try_insert)] // for try_insert in models::AssetPrice
+#![feature(impl_trait_in_assoc_type)] //
+use crate::adapters::binance2::{traits::IsProvider, BinanceSvc};
 use crate::adapters::coingecko;
-use binance_client::BinanceClient;
+use crate::models::Db;
 use data::{POSITIONS, PRODUCTS};
 
 pub mod adapters {
@@ -26,27 +28,31 @@ mod models;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenvy::dotenv()?;
+    dotenvy::dotenv_override().ok();
     std::env::set_var("RUST_BACKTRACE", "1");
 
-    // // actor_db stuff
-    // {
-    //     let db = DB::spawn();
-    // }
+    let mut db = Db::new();
 
-    let _bc = BinanceClient::new();
+    let providers: Vec<Box<dyn IsProvider>> = vec![Box::new(BinanceSvc::new()?)];
+    for provider in providers {
+        let positions = provider.fetch_positions().await?;
+        for position in positions {
+            dbg!(position);
+        }
+    }
+
     // bc.list_staking_positions().await?;
-    data::fetch_assets();
-    data::fetch_binance().await?;
+    // data::fetch_assets();
+    // data::fetch_binance().await?;
 
-    println!("PRODUCTS:");
-    for _product in PRODUCTS.read().unwrap().map.iter() {
-        // println!("{}", product.1);
-    }
-    println!("POSITIONS:");
-    for _pos in POSITIONS.read().unwrap().by_id.iter() {
-        // println!("{}", pos.1);
-    }
+    // println!("PRODUCTS:");
+    // for _product in PRODUCTS.read().unwrap().map.iter() {
+    //     // println!("{}", product.1);
+    // }
+    // println!("POSITIONS:");
+    // for _pos in POSITIONS.read().unwrap().by_id.iter() {
+    //     // println!("{}", pos.1);
+    // }
 
     data::positions_groupby_currency();
 

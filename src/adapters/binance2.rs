@@ -1,9 +1,7 @@
-use self::models2::{Asset, AssetId, ExternalAssetId, Position, PositionId, Product};
-use self::traits::Issuer3;
+use self::models2::{Asset, AssetId, ExternalAssetId, Position, PositionId, Product, ProviderId};
+use self::traits::{IsProvider, Issuer3};
 use crate::adapters::binance2::models2::ProductId;
-use anyhow::anyhow;
 use binance_client::BinanceClient;
-use chrono::DateTime;
 use typed_ids::Issuer;
 
 const PROVIDER_ID_BINANCE: &str = "binance";
@@ -43,32 +41,41 @@ impl BinanceSvc {
 
     pub async fn fetch_positions(&self) -> anyhow::Result<Vec<Position>> {
         let binance_positions = self.client.list_staking_positions().await?;
+        // TODO also simple flex and simple lock positions
+
         let positions = binance_positions
             .into_iter()
+            // TODO impl TryFrom<BinanceModel> for each model
             .map(|sp| {
                 Ok(Position {
                     id: PositionId::from(&(*sp.position_id).to_string()),
                     product_id: ProductId::from(&sp.product_id),
-                    amount: sp.amount.parse::<f64>()?,
-                    start_date: DateTime::from_timestamp(sp.purchase_time as i64, 0)
-                        .ok_or(anyhow!("out of range seconds or invalid nanoseconds"))?,
-
-                    end_date: DateTime::from_timestamp(sp.interest_end_date as i64, 0)
-                        .ok_or(anyhow!("out of range seconds or invalid nanoseconds"))?,
+                    amount: sp.amount,
+                    start_date: sp.purchase_time,
+                    end_date: sp.interest_end_date,
                 })
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
         Ok(positions)
     }
 }
+#[async_trait::async_trait]
+impl IsProvider for BinanceSvc {
+    fn provider_id(&self) -> models2::ProviderId {
+        ProviderId::from(PROVIDER_ID_BINANCE)
+    }
+    async fn fetch_positions(&self) -> anyhow::Result<Vec<Position>> {
+        self.fetch_positions().await
+    }
+}
 impl Issuer for BinanceSvc {
     fn issuer_id() -> &'static str {
-        "binance"
+        PROVIDER_ID_BINANCE
     }
 }
 impl Issuer3 for BinanceSvc {
     fn name() -> &'static str {
-        "binance"
+        PROVIDER_ID_BINANCE
     }
 }
 
@@ -78,20 +85,15 @@ pub mod models2 {
     use super::traits::Issuer3;
     use chrono::{DateTime, Utc};
     use std::collections::HashMap;
-    use typed_ids::Id;
-
-    pub struct Provider;
 
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     pub struct ProviderId {
         id: String,
-        _type: std::marker::PhantomData<Provider>,
     }
     impl From<&str> for ProviderId {
         fn from(name: &str) -> Self {
             ProviderId {
                 id: name.to_string(),
-                _type: std::marker::PhantomData,
             }
         }
     }
@@ -99,13 +101,11 @@ pub mod models2 {
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     pub struct PositionId {
         id: String,
-        _type: std::marker::PhantomData<Position>,
     }
     impl<S: AsRef<str>> From<S> for PositionId {
         fn from(name: S) -> Self {
             PositionId {
                 id: name.as_ref().to_string(),
-                _type: std::marker::PhantomData,
             }
         }
     }
@@ -117,13 +117,11 @@ pub mod models2 {
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     pub struct AssetId {
         id: String,
-        _type: std::marker::PhantomData<Position>,
     }
     impl<S: AsRef<str>> From<S> for AssetId {
         fn from(name: S) -> Self {
             AssetId {
                 id: name.as_ref().to_string(),
-                _type: std::marker::PhantomData,
             }
         }
     }
@@ -289,24 +287,26 @@ pub mod models2 {
 }
 
 pub mod traits {
-    use super::models2::ProviderId;
-    use typed_ids::Issuer;
+    use std::future::Future;
+
+    use super::models2::{Position, ProviderId};
 
     pub trait Issuer2: std::fmt::Debug {
         fn name(&self) -> &'static str;
     }
 
+    // not object-safe
     pub trait Issuer3 {
         fn name() -> &'static str;
     }
 
-    pub trait IsProvider: Issuer {
+    #[async_trait::async_trait] // makes async trait also object-safe
+    pub trait IsProvider {
         // TODO load assets, attach external_ids
 
-        fn id(&self) -> ProviderId {
-            ProviderId::from(Self::issuer_id())
-        }
+        fn provider_id(&self) -> ProviderId;
+
         // fn list_products(&self) -> anyhow::Result<AllProducts>;
-        // fn list_positions(&self) -> anyhow::Result<AllPositions>;
+        async fn fetch_positions(&self) -> anyhow::Result<Vec<Position>>;
     }
 }

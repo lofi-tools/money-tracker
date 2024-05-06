@@ -1,16 +1,16 @@
-#![feature(map_try_insert)] // for try_insert in models::AssetPrice
-#![feature(impl_trait_in_assoc_type)] //
-use crate::adapters::binance2::{traits::IsProvider, BinanceSvc};
+#![feature(map_try_insert)]
+use models::traits::IsProvider;
+
+// for try_insert in models::AssetPrice
+use crate::adapters::binance2::BinanceSvc;
 use crate::adapters::coingecko;
 use crate::models::Db;
-use data::{POSITIONS, PRODUCTS};
 
 pub mod adapters {
     pub mod binance;
     pub mod binance2;
     pub mod coingecko;
 }
-mod data;
 mod models;
 
 // TODO - estimate value, epy
@@ -54,9 +54,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     // println!("{}", pos.1);
     // }
 
-    data::positions_groupby_currency();
+    // data::positions_groupby_currency();
 
-    coingecko::CurrentPriceReq::fetch_prices().await?;
+    // coingecko::CurrentPriceReq::fetch_prices().await?;
 
     Ok(())
 }

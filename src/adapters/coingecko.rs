@@ -1,118 +1,58 @@
-#![allow(async_fn_in_trait)]
-use anyhow::anyhow;
-use api_client_utils::prelude::*;
-use reqwest::header::ACCEPT;
-use reqwest::RequestBuilder;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use coingecko_client::{payloads::CurrentPriceReq, CoingeckoClient};
+use serde::Serialize;
 
-use self::payloads::{CurrentPriceReq, CurrentPriceResp};
+use crate::models::{history::AssetPricePoint, AssetId};
 
-// lazy_static::lazy_static! {
-//     pub static ref COINGECKO: ProviderId = ProviderId("coingecko".to_string());
-//     pub static ref API_BASE: Url = Url::parse("https://api.coingecko.com/api/v3/").unwrap();
-// }
+pub const PROVIDER_ID_COINGECKO: &str = "coingecko";
 
-const PROVIDER_ID_COINGECKO: &str = "coingecko";
-
-// TODO move to own lib
-pub struct CoingeckoClient {
-    pub base_url: String,
-    pub http_client: reqwest::Client,
+pub struct CoinGeckoSvc {
+    pub api_client: CoingeckoClient,
 }
-impl JsonApiClient for CoingeckoClient {
-    fn base_url(&self) -> &str {
-        &self.base_url
+impl CoinGeckoSvc {
+    pub fn service_id() -> &'static str {
+        PROVIDER_ID_COINGECKO
     }
-    fn http_client(&self) -> &reqwest::Client {
-        &self.http_client
-    }
-}
-impl CoingeckoClient {
     pub fn new() -> anyhow::Result<Self> {
-        Ok(CoingeckoClient {
-            base_url: "https://api.coingecko.com/api/v3/".to_string(),
-            http_client: reqwest::Client::new(),
+        Ok(CoinGeckoSvc {
+            api_client: CoingeckoClient::new()?,
         })
     }
 
-    // TODO move methods to here
-    pub async fn fetch_current_prices(
-        &self,
-        args: CurrentPriceReq,
-    ) -> anyhow::Result<CurrentPriceResp> {
-        let req = self.get("/simple/price").query(&args);
-        let resp = req
-            .recv_json::<CurrentPriceResp, CoingeckoErrResp>()
+    pub async fn fetch_current_prices(&self) -> anyhow::Result<Vec<AssetPricePoint>> {
+        let resp = self
+            .api_client
+            .fetch_current_prices(CurrentPriceReq::default())
             .await?;
-        Ok(resp)
+
+        let prices = resp
+            .into_iter()
+            .map(|p| AssetPricePoint {
+                asset_id: AssetId::from_coingecko(&p.asset_id),
+                vs_asset_id: AssetId::from_coingecko(&p.vs_asset_id),
+                price: p.price,
+                datetime: p.time,
+            })
+            .collect::<Vec<AssetPricePoint>>();
+
+        Ok(prices)
     }
 }
 
-#[derive(Deserialize, thiserror::Error, Debug)]
-#[error("Coingecko api error response: {0:?}")]
-#[serde(transparent)]
-pub struct CoingeckoErrResp(serde_json::Value);
-
-pub mod payloads {
-    use self::utils::Or;
-    use super::utils::ser_joined_str;
-    use super::*;
-
-    #[derive(Debug, Serialize)]
-    pub struct CurrentPriceReq {
-        #[serde(serialize_with = "ser_joined_str")]
-        ids: Vec<String>,
-        #[serde(serialize_with = "ser_joined_str")]
-        vs_assets: Vec<String>,
-    }
-    impl Default for CurrentPriceReq {
-        fn default() -> Self {
-            CurrentPriceReq {
-                ids: vec!["ethereum".to_string()], // TODO all coingecko assets
-                vs_assets: vec!["usd".to_string()],
-            }
-        }
-    }
-    impl CurrentPriceReq {
-        pub fn or_default(self) -> Self {
-            Self {
-                ids: self.ids.or(Self::default().ids),
-                vs_assets: self.vs_assets.or(Self::default().vs_assets),
-            }
-        }
-    }
-
-    #[derive(Deserialize, Debug)]
-    pub struct CurrentPriceResp(pub HashMap<String, HashMap<String, f64>>);
-}
-
-pub mod utils {
-    use serde::Serializer;
-
-    pub fn ser_joined_str<S>(v: &[String], serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let joined_str = v.join(",");
-        serializer.serialize_str(&joined_str)
-    }
-
-    pub trait Or {
-        fn or(self, default: Self) -> Self;
-    }
-    impl<T> Or for Vec<T> {
-        fn or(self, default: Self) -> Self {
-            if self.is_empty() {
-                return default;
-            }
-            self
+impl AssetId {
+    fn from_coingecko(coingecko_asset: &str) -> Self {
+        match coingecko_asset {
+            "ETH" => AssetId::Eth,
+            _ => AssetId::unknown(coingecko_asset),
         }
     }
 }
 
 pub mod old {
+    // lazy_static::lazy_static! {
+    //     pub static ref COINGECKO: ProviderId = ProviderId("coingecko".to_string());
+    //     pub static ref API_BASE: Url = Url::parse("https://api.coingecko.com/api/v3/").unwrap();
+    // }
+
     use super::*;
 
     #[derive(Debug, Serialize)]
@@ -194,21 +134,4 @@ pub mod old {
 
     //     todo!()
     // }
-
-    pub trait RequestBuilderExt {
-        async fn get_json<T: DeserializeOwned>(self) -> Result<T, anyhow::Error>;
-    }
-    impl RequestBuilderExt for RequestBuilder {
-        async fn get_json<T: DeserializeOwned>(self) -> Result<T, anyhow::Error> {
-            let resp = self.header(ACCEPT, "application/json").send().await?;
-
-            if !resp.status().is_success() {
-                println!("ERR: {:?}", resp);
-                Err(anyhow!("{}", resp.text().await?.to_string()))
-            } else {
-                let parsed: T = resp.json().await?;
-                Ok(parsed)
-            }
-        }
-    }
 }

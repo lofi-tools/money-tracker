@@ -1,0 +1,13 @@
+[package]
+name = "nexo-csv"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# async, web
+# data, serde, formats
+serde.workspace = true
+csv = "^1.3"
+chrono.workspace = true
+# errors, logs
+anyhow.workspace = true

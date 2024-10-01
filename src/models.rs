@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub mod traits {
-    use super::{Position, ProviderId};
+    use super::{Position, ProviderId, Transaction};
 
     pub trait Issuer2: std::fmt::Debug {
         fn name(&self) -> &'static str;
@@ -22,13 +22,16 @@ pub mod traits {
         fn provider_id(&self) -> ProviderId;
         // fn list_products(&self) -> anyhow::Result<AllProducts>;
         async fn fetch_positions(&self) -> anyhow::Result<Vec<Position>>;
+
+        async fn fetch_transactions(&self) -> anyhow::Result<Vec<Transaction>>;
     }
 }
 
 pub struct Db {
-    pub assets: HashMap<AssetId, Asset>,
+    pub assets: HashMap<AssetId, AssetId>,
     pub positions: HashMap<PositionId, Position>,
     pub products: HashMap<ProductId, Product>,
+    pub transactions: HashMap<TransactionId, Transaction>,
     // TODO positionHistory
     // pub total_asset_hist: Vec<AssetOwnHistPoint>,
     // TODO AssetPriceHistory
@@ -40,6 +43,7 @@ impl Db {
             assets: HashMap::new(),
             positions: HashMap::new(),
             products: HashMap::new(),
+            transactions: HashMap::new(),
         }
     }
     fn upsert_position(&mut self, position: &Position) {
@@ -70,30 +74,27 @@ pub struct AllPositions {
     pub positions: HashMap<PositionId, Position>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct AssetId {
-    id: String,
-}
-impl<S: AsRef<str>> From<S> for AssetId {
-    fn from(name: S) -> Self {
-        AssetId {
-            id: name.as_ref().to_string(),
-        }
-    }
-}
+// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// pub struct AssetId(pub String);
+// impl<S: AsRef<str>> From<S> for AssetId {
+//     fn from(name: S) -> Self {
+//         AssetId(name.as_ref().to_string())
+//     }
+// }
 
 #[derive(Debug, Clone)]
 pub struct Asset {
     pub id: AssetId,
+    pub chain_id: String,
     pub external_ids: HashMap<ProviderId, ExternalAssetId>,
 }
 impl Asset {
-    pub fn new(id: &str) -> Self {
-        Asset {
-            id: AssetId::from(id),
-            external_ids: HashMap::new(),
-        }
-    }
+    // pub fn new(id: &str) -> Self {
+    //     Asset {
+    //         id: Asset::from(id),
+    //         external_ids: HashMap::new(),
+    //     }
+    // }
     pub fn with_ext_id(mut self, ext_id: ExternalAssetId) -> Self {
         self.external_ids.insert(ext_id.issuer_id(), ext_id);
         self
@@ -104,11 +105,30 @@ impl Asset {
     }
 }
 
+// TODO represent asset on different chains / providers
+#[derive(Debug, Clone)]
+pub enum AssetId {
+    Eth,
+    Unknown(String),
+}
+impl AssetId {
+    pub fn unknown(name: &str) -> Self {
+        println!("Unknown asset: {}", name);
+        AssetId::Unknown(name.to_string())
+    }
+    // pub fn id(&self) -> AssetId {
+    //     match self {
+    //         Asset::Eth => AssetId("eth".to_string()),
+    //         Asset::Unknown(name) => AssetId(format!("Unknown asset: {name}")),
+    //     }
+    // }
+}
+
 #[derive(Debug, Clone)]
 pub struct ExternalAssetId {
     pub id: String,
     pub issuer_name: String,
-    _asset: std::marker::PhantomData<Asset>,
+    _asset: std::marker::PhantomData<AssetId>,
 }
 impl ExternalAssetId {
     pub fn new<Issuer: Issuer3>(id: &str) -> Self {
@@ -135,30 +155,30 @@ impl std::hash::Hash for ExternalAssetId {
     }
 }
 
-pub struct AllAssets {
-    pub by_id: HashMap<AssetId, Asset>,
-    // by_external_id: HashMap<ExternalAssetId, Asset>, // TODO use sqlite indexes instead of re-creating a database
-}
-impl AllAssets {
-    pub fn new() -> Self {
-        AllAssets {
-            by_id: HashMap::new(),
-            // by_external_id: HashMap::new(),
-        }
-    }
-    pub fn upsert(&mut self, new: Asset) {
-        let merge_into_by_id = self
-            .by_id
-            .get_mut(&new.id)
-            .map(|existing| existing.merge(&new))
-            .cloned()
-            .unwrap_or(new.clone());
-        self.by_id.insert(new.id, merge_into_by_id);
-    }
-    pub fn get(&self, id: &AssetId) -> Option<&Asset> {
-        self.by_id.get(id)
-    }
-}
+// pub struct AllAssets {
+//     pub by_id: HashMap<AssetId, AssetId>,
+//     // by_external_id: HashMap<ExternalAssetId, Asset>, // TODO use sqlite indexes instead of re-creating a database
+// }
+// impl AllAssets {
+//     pub fn new() -> Self {
+//         AllAssets {
+//             by_id: HashMap::new(),
+//             // by_external_id: HashMap::new(),
+//         }
+//     }
+//     pub fn upsert(&mut self, new: AssetId) {
+//         let merge_into_by_id = self
+//             .by_id
+//             .get_mut(&new.id)
+//             .map(|existing| existing.merge(&new))
+//             .cloned()
+//             .unwrap_or(new.clone());
+//         self.by_id.insert(new.id, merge_into_by_id);
+//     }
+//     pub fn get(&self, id: &AssetId) -> Option<&AssetId> {
+//         self.by_id.get(id)
+//     }
+// }
 
 #[derive(Debug, Clone)]
 pub struct Product {
@@ -202,13 +222,54 @@ pub struct Position {
     pub end_date: DateTime<Utc>,
 }
 
-pub struct OwnedAssetHistPoint {}
+pub mod history {
+    use super::{AssetId, Position};
+    use chrono::{DateTime, Utc};
+
+    #[derive(Debug, Clone)]
+    pub struct AssetPricePoint {
+        pub datetime: DateTime<Utc>,
+        pub asset_id: AssetId,
+        pub vs_asset_id: AssetId,
+        pub price: f64,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct AssetPriceHistory {
+        pub points: Vec<AssetPricePoint>,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct PositionHistory {
+        pub points: Vec<Position>,
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[serde(transparent)]
+pub struct TransactionId(pub String);
+impl<S: AsRef<str>> From<S> for TransactionId {
+    fn from(name: S) -> Self {
+        TransactionId(name.as_ref().to_string())
+    }
+}
+pub struct Transaction {
+    pub id: TransactionId,
+    pub datetime: DateTime<Utc>,
+    pub inputs: Vec<TxInputOutput>,
+    pub outputs: Vec<TxInputOutput>,
+}
+
+pub struct TxInputOutput {
+    pub asset: AssetId,
+    pub amount: f64, // TODO use accountable type (e.g. Decimal)
+}
 
 #[cfg(test)]
 mod tests {
     use self::traits::Issuer3;
     use super::*;
-    use crate::adapters::binance2::BinanceSvc;
+    use crate::adapters::binance::BinanceSvc;
 
     pub struct Provider2 {}
     impl Issuer3 for Provider2 {
@@ -217,24 +278,24 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_upsert() -> anyhow::Result<()> {
-        let mut assets = AllAssets::new();
-        assets.upsert(
-            Asset::new("asset_1")
-                .with_ext_id(ExternalAssetId::new::<BinanceSvc>("binance:asset_1")),
-        );
-        assets.upsert(
-            Asset::new("asset_1").with_ext_id(ExternalAssetId::new::<Provider2>(
-                "some_other_name_for_same_asset",
-            )),
-        );
+    // #[test]
+    // fn test_upsert() -> anyhow::Result<()> {
+    //     let mut assets = AllAssets::new();
+    //     assets.upsert(
+    //         AssetId::new("asset_1")
+    //             .with_ext_id(ExternalAssetId::new::<BinanceSvc>("binance:asset_1")),
+    //     );
+    //     assets.upsert(
+    //         AssetId::new("asset_1").with_ext_id(ExternalAssetId::new::<Provider2>(
+    //             "some_other_name_for_same_asset",
+    //         )),
+    //     );
 
-        // TODO assert there's 1 asset with 2 ext ids
+    //     // TODO assert there's 1 asset with 2 ext ids
 
-        let asset = assets.get(&AssetId::from("asset_1")).unwrap();
-        assert_eq!(asset.external_ids.len(), 2);
+    //     let asset = assets.get(&AssetId::from("asset_1")).unwrap();
+    //     assert_eq!(asset.external_ids.len(), 2);
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 }

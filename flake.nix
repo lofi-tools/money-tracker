@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-23.11";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.05";
     utils.url = "github:numtide/flake-utils";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
@@ -11,7 +11,8 @@
     #   url = "github:ipetkov/crane";
     #   inputs.nixpkgs.follows = "nixpkgs";
     # };
-   my-utils={url = "github:nmrshll/nix-utils";      
+   my-utils={
+      url = "github:nmrshll/nix-utils";      
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.utils.follows = "utils";
       # inputs.rust-overlay.follows = "rust-overlay";
@@ -56,8 +57,8 @@
           binaries = my-utils.binaries.${system};
           scripts = attrValues my-utils.packages.${system} ++ [
             (pkgs.writeScriptBin "run" ''cargo run'')
-            (pkgs.writeScriptBin "itest" ''cargo test -p integration -- --nocapture'')
-            (pkgs.writeScriptBin "utest" ''cargo test --workspace --lib -- --nocapture'')
+            (pkgs.writeScriptBin "itest" ''cargo test -p integration -- $SINGLE_TEST --nocapture'')
+            (pkgs.writeScriptBin "utest" ''cargo test --workspace --lib -- $SINGLE_TEST --nocapture'')
             # (pkgs.writeScriptBin "front" ''cd frontend; pnpm install; pnpm dev'')
           ];
 

@@ -1,0 +1,20 @@
+[package]
+name = "coingecko-client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# async, web
+tokio.workspace = true
+reqwest.workspace = true
+# data, serde, formats
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+# crypto
+# errors, logs
+anyhow.workspace = true
+thiserror.workspace = true
+# rust utils
+# own libs
+api-client-utils.workspace = true

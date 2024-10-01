@@ -1,7 +1,17 @@
 # Crypto Tracker
 
+Track crypto across accounts, chains, apps, platforms.
+Estimate historical value and current revenue.
 
-TODO:
+
+## Developer quickstart
+
+Setup deps using `direnv allow` (needs Nix and nix-direnv), then:
+- Run unit tests: `utest`
+- Run program: `run`
+
+
+<!-- TODO:
  - estimate current value
     - replay transactions, sum amount
         - load transactions into polars
@@ -12,4 +22,4 @@ TODO:
 
 - load nexo transactions into polars
 
-- load asset price history (into polars)
+- load asset price history (into polars) -->

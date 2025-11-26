@@ -1,5 +1,5 @@
-use crate::models::traits::IsProvider;
-use crate::models::{AssetId, Position, ProviderId, Transaction, TransactionId, TxInputOutput};
+use lib_core::traits::IsProvider;
+use lib_core::{AssetId, Position, ProviderId, Transaction, TransactionId, TxInputOutput};
 use nexo_csv::{NexoCsv, NexoTx};
 
 pub struct NexoSvc {
@@ -41,72 +41,70 @@ impl IsProvider for NexoSvc {
 
         let transactions = nexo_transactions
             .into_iter()
-            .map(|ntx| Transaction::from(ntx))
+            .map(|ntx| transaction_from_nexo_tx(ntx))
             .collect();
 
         Ok(transactions)
     }
 }
 
-impl From<NexoTx> for Transaction {
-    fn from(nexo_tx: NexoTx) -> Self {
-        let inputs = match &nexo_tx.r#type {
-            // TODO make transactionInputOutput use ProductId not assetId
-            // TODO figure out content by logging
-            nexo_csv::TransactionType::ExchangeDepositedOn => vec![],
-            nexo_csv::TransactionType::DepositToExchange => vec![],
-            nexo_csv::TransactionType::WithdrawExchanged => vec![],
-            nexo_csv::TransactionType::ExchangeToWithdraw => vec![],
-            // should have no impact on total -> no inputs/outputs // TODO same inputs / outputs
-            nexo_csv::TransactionType::TransferFromProWallet => vec![],
-            nexo_csv::TransactionType::TransferToProWallet => vec![],
-            nexo_csv::TransactionType::LockTermDeposit => vec![], // TODO some(move between products)
-            nexo_csv::TransactionType::UnlockTermDeposit => vec![], // TODO Some(move between products)
-            // TODO inputs from other people / outside of Nexo
-            nexo_csv::TransactionType::TopUpCrypto => vec![],
-            nexo_csv::TransactionType::TermInterest => vec![],
-            nexo_csv::TransactionType::Interest => vec![],
-        };
-        let outputs = match &nexo_tx.r#type {
-            nexo_csv::TransactionType::Interest => vec![TxInputOutput {
-                asset: AssetId::from_nexo_asset(&nexo_tx.output_currency),
-                amount: nexo_tx.output_amount,
-            }],
-            nexo_csv::TransactionType::TopUpCrypto => vec![TxInputOutput {
-                asset: AssetId::from_nexo_asset(&nexo_tx.output_currency),
-                amount: nexo_tx.output_amount,
-            }],
-            nexo_csv::TransactionType::TermInterest => vec![TxInputOutput {
-                asset: AssetId::from_nexo_asset(&nexo_tx.output_currency),
-                amount: nexo_tx.output_amount,
-            }],
+/// Convert a Nexo transaction to a Transaction
+fn transaction_from_nexo_tx(nexo_tx: NexoTx) -> Transaction {
+    let inputs = match &nexo_tx.r#type {
+        // TODO make transactionInputOutput use ProductId not assetId
+        // TODO figure out content by logging
+        nexo_csv::TransactionType::ExchangeDepositedOn => vec![],
+        nexo_csv::TransactionType::DepositToExchange => vec![],
+        nexo_csv::TransactionType::WithdrawExchanged => vec![],
+        nexo_csv::TransactionType::ExchangeToWithdraw => vec![],
+        // should have no impact on total -> no inputs/outputs // TODO same inputs / outputs
+        nexo_csv::TransactionType::TransferFromProWallet => vec![],
+        nexo_csv::TransactionType::TransferToProWallet => vec![],
+        nexo_csv::TransactionType::LockTermDeposit => vec![], // TODO some(move between products)
+        nexo_csv::TransactionType::UnlockTermDeposit => vec![], // TODO Some(move between products)
+        // TODO inputs from other people / outside of Nexo
+        nexo_csv::TransactionType::TopUpCrypto => vec![],
+        nexo_csv::TransactionType::TermInterest => vec![],
+        nexo_csv::TransactionType::Interest => vec![],
+    };
+    let outputs = match &nexo_tx.r#type {
+        nexo_csv::TransactionType::Interest => vec![TxInputOutput {
+            asset: asset_id_from_nexo(&nexo_tx.output_currency),
+            amount: nexo_tx.output_amount,
+        }],
+        nexo_csv::TransactionType::TopUpCrypto => vec![TxInputOutput {
+            asset: asset_id_from_nexo(&nexo_tx.output_currency),
+            amount: nexo_tx.output_amount,
+        }],
+        nexo_csv::TransactionType::TermInterest => vec![TxInputOutput {
+            asset: asset_id_from_nexo(&nexo_tx.output_currency),
+            amount: nexo_tx.output_amount,
+        }],
 
-            // TODO figure out content by logging
-            nexo_csv::TransactionType::ExchangeDepositedOn => vec![],
-            nexo_csv::TransactionType::DepositToExchange => vec![],
-            nexo_csv::TransactionType::WithdrawExchanged => vec![],
-            nexo_csv::TransactionType::ExchangeToWithdraw => vec![],
-            // should have no impact on total -> no inputs/outputs // TODO same inputs / outputs
-            nexo_csv::TransactionType::TransferFromProWallet => vec![],
-            nexo_csv::TransactionType::TransferToProWallet => vec![],
-            nexo_csv::TransactionType::LockTermDeposit => vec![], // TODO some(move between products)
-            nexo_csv::TransactionType::UnlockTermDeposit => vec![], // TODO Some(move between products)
-        };
+        // TODO figure out content by logging
+        nexo_csv::TransactionType::ExchangeDepositedOn => vec![],
+        nexo_csv::TransactionType::DepositToExchange => vec![],
+        nexo_csv::TransactionType::WithdrawExchanged => vec![],
+        nexo_csv::TransactionType::ExchangeToWithdraw => vec![],
+        // should have no impact on total -> no inputs/outputs // TODO same inputs / outputs
+        nexo_csv::TransactionType::TransferFromProWallet => vec![],
+        nexo_csv::TransactionType::TransferToProWallet => vec![],
+        nexo_csv::TransactionType::LockTermDeposit => vec![], // TODO some(move between products)
+        nexo_csv::TransactionType::UnlockTermDeposit => vec![], // TODO Some(move between products)
+    };
 
-        Transaction {
-            id: TransactionId::from(""), // TODO
-            datetime: nexo_tx.date_time_utc,
-            inputs,
-            outputs,
-        }
+    Transaction {
+        id: TransactionId::from(""), // TODO
+        datetime: nexo_tx.date_time_utc,
+        inputs,
+        outputs,
     }
 }
 
-impl AssetId {
-    fn from_nexo_asset(nexo_asset: &str) -> Self {
-        match nexo_asset {
-            "ETH" => AssetId::Eth,
-            _ => AssetId::unknown(nexo_asset),
-        }
+/// Convert a Nexo asset identifier to an AssetId
+fn asset_id_from_nexo(nexo_asset: &str) -> AssetId {
+    match nexo_asset {
+        "ETH" => AssetId::Eth,
+        _ => AssetId::unknown(nexo_asset),
     }
 }

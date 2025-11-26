@@ -1,7 +1,7 @@
-use coingecko_client::{payloads::CurrentPriceReq, CoingeckoClient};
+use coingecko_client::{CoingeckoClient, payloads::CurrentPriceReq};
 use serde::Serialize;
 
-use crate::models::{history::AssetPricePoint, AssetId};
+use lib_core::{AssetId, history::AssetPricePoint};
 
 pub const PROVIDER_ID_COINGECKO: &str = "coingecko";
 
@@ -27,8 +27,8 @@ impl CoinGeckoSvc {
         let prices = resp
             .into_iter()
             .map(|p| AssetPricePoint {
-                asset_id: AssetId::from_coingecko(&p.asset_id),
-                vs_asset_id: AssetId::from_coingecko(&p.vs_asset_id),
+                asset_id: asset_id_from_coingecko(&p.asset_id),
+                vs_asset_id: asset_id_from_coingecko(&p.vs_asset_id),
                 price: p.price,
                 datetime: p.time,
             })
@@ -38,12 +38,11 @@ impl CoinGeckoSvc {
     }
 }
 
-impl AssetId {
-    fn from_coingecko(coingecko_asset: &str) -> Self {
-        match coingecko_asset {
-            "ETH" => AssetId::Eth,
-            _ => AssetId::unknown(coingecko_asset),
-        }
+/// Convert a CoinGecko asset identifier to an AssetId
+fn asset_id_from_coingecko(coingecko_asset: &str) -> AssetId {
+    match coingecko_asset {
+        "ETH" => AssetId::Eth,
+        _ => AssetId::unknown(coingecko_asset),
     }
 }
 

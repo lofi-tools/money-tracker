@@ -2,9 +2,9 @@
 // use crate::adapters::binance::BinanceSvc;
 // use crate::adapters::coingecko;
 use crate::adapters::nexo::NexoSvc;
-use crate::models::Db;
 use adapters::coingecko::CoinGeckoSvc;
-use models::traits::IsProvider;
+use lib_core::Db;
+use lib_core::traits::IsProvider;
 
 pub mod adapters {
     pub mod binance;

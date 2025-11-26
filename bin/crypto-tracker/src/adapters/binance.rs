@@ -1,8 +1,6 @@
-use crate::models::traits::{IsProvider, Issuer3};
-use crate::models::{
-    AssetId, ExternalAssetId, Position, PositionId, Product, ProductId, ProviderId, Transaction,
-};
 use binance_client::BinanceClient;
+use lib_core::traits::{IsProvider, Issuer3};
+use lib_core::{AssetId, Position, PositionId, Product, ProductId, ProviderId, Transaction};
 
 const PROVIDER_ID_BINANCE: &str = "binance";
 
@@ -33,7 +31,7 @@ impl BinanceSvc {
             .into_iter()
             .map(|sp| Product {
                 id: ProductId::from(&sp.project_id),
-                asset_id: AssetId::from_binance(&sp.detail.asset),
+                asset_id: asset_id_from_binance(&sp.detail.asset),
                 apy: sp.detail.apy,
             })
             .collect();
@@ -78,12 +76,11 @@ impl Issuer3 for BinanceSvc {
     }
 }
 
-impl AssetId {
-    fn from_binance(binance_asset: &str) -> Self {
-        match binance_asset {
-            "ethereum" => AssetId::Eth,
-            _ => AssetId::unknown(binance_asset),
-        }
+/// Convert a Binance asset identifier to an AssetId
+fn asset_id_from_binance(binance_asset: &str) -> AssetId {
+    match binance_asset {
+        "ethereum" => AssetId::Eth,
+        _ => AssetId::unknown(binance_asset),
     }
 }
 

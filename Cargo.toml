@@ -33,6 +33,7 @@ snafu = { version = "^0.8" }
 # rust utils
 derive_more = "^0.99"
 # own libs, patches
+lib-core = { path="./libs/lib-core" }
 binance-client = { path="./libs/binance-client" }
 coingecko-client = { path="./libs/coingecko-client" }
 nexo-csv = { path="./libs/nexo-csv" }

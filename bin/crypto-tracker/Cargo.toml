@@ -24,6 +24,7 @@ dotenvy = "^0.15"
 derive_more.workspace = true
 itertools = "^0.10"
 # own libs
+lib-core.workspace = true
 utils.workspace = true
 binance-client.workspace = true
 coingecko-client.workspace = true

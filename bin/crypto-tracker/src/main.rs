@@ -1,6 +1,6 @@
-#![feature(map_try_insert)] // for try_insert in models::AssetPrice
-use crate::adapters::binance::BinanceSvc;
-use crate::adapters::coingecko;
+// #![feature(map_try_insert)] // for try_insert in models::AssetPrice
+// use crate::adapters::binance::BinanceSvc;
+// use crate::adapters::coingecko;
 use crate::adapters::nexo::NexoSvc;
 use crate::models::Db;
 use adapters::coingecko::CoinGeckoSvc;
@@ -29,7 +29,7 @@ mod models;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv_override().ok();
-    std::env::set_var("RUST_BACKTRACE", "1");
+    // std::env::set_var("RUST_BACKTRACE", "1");
 
     let mut db = Db::new();
 

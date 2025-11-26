@@ -1,9 +1,11 @@
 [package]
 name = "coingecko-client"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
+# own libs
+utils.workspace = true
 # async, web
 tokio.workspace = true
 reqwest.workspace = true
@@ -16,5 +18,3 @@ chrono.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 # rust utils
-# own libs
-api-client-utils.workspace = true

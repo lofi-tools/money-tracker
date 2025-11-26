@@ -1,8 +1,8 @@
 use crate::payloads::{ListResp, StakingPositionResp};
-use api_client_utils::prelude::*;
 use payloads::{FlexEarnPos, LockedEarnPos, StakingProduct};
 use serde::Deserialize;
-use signing::RequestBuilderExt;
+use signing::RequestSigner;
+use utils::prelude::{RequestBuilderExt, *};
 
 // const API_BASE: OnceCell<Url> = OnceCell::new(|| Url::parse("https://api.binance.com").unwrap());
 // const API_KEY: OnceCell<String> = OnceCell::new(|| std::env::var("BINANCE_API_KEY").unwrap());
@@ -14,7 +14,7 @@ pub struct BinanceClient {
     api_key: String,
     api_secret: String,
 }
-impl JsonApiClient for BinanceClient {
+impl IsApiClient for BinanceClient {
     fn base_url(&self) -> &str {
         &self.base_url
     }
@@ -37,9 +37,7 @@ impl BinanceClient {
             .get("/staking/productList")
             .query(&[("product", "STAKING")])
             .sign(self)?;
-        let resp = req
-            .recv_json::<Vec<StakingProduct>, BinanceApiErrResp>()
-            .await?;
+        let resp = req.fetch_json::<Vec<StakingProduct>>().await?;
         Ok(resp)
     }
     pub async fn list_staking_positions(&self) -> anyhow::Result<Vec<StakingPositionResp>> {
@@ -47,24 +45,18 @@ impl BinanceClient {
             .get("/staking/position")
             .query(&[("product", "STAKING")])
             .sign(self)?;
-        let resp: Vec<StakingPositionResp> = req
-            .recv_json::<Vec<StakingPositionResp>, BinanceApiErrResp>()
-            .await?;
+        let resp: Vec<StakingPositionResp> = req.fetch_json::<Vec<StakingPositionResp>>().await?;
         Ok(resp)
     }
     pub async fn list_locked_earn_positions(&self) -> anyhow::Result<Vec<LockedEarnPos>> {
         let req = self.get("/simple-earn/locked/position").sign(self)?;
-        let resp = req
-            .recv_json::<ListResp<LockedEarnPos>, BinanceApiErrResp>()
-            .await?;
+        let resp = req.fetch_json::<ListResp<LockedEarnPos>>().await?;
 
         Ok(resp.rows)
     }
     pub async fn list_flexible_earn_pos(&self) -> anyhow::Result<Vec<FlexEarnPos>> {
         let req = self.get("/simple-earn/flexible/position").sign(self)?;
-        let resp = req
-            .recv_json::<ListResp<FlexEarnPos>, BinanceApiErrResp>()
-            .await?;
+        let resp = req.fetch_json::<ListResp<FlexEarnPos>>().await?;
 
         Ok(resp.rows)
     }
@@ -78,7 +70,7 @@ pub struct BinanceApiErrResp {
 }
 
 pub mod payloads {
-    use crate::utils::{de_from_str, de_str_to_datetime, de_u_to_datetime};
+    use crate::local_utils::{de_from_str, de_str_to_datetime, de_u_to_datetime};
     use chrono::{DateTime, Utc};
     use serde::{Deserialize, Serialize};
     use std::ops::Deref;
@@ -219,28 +211,31 @@ pub mod payloads {
         pub reward_asset: String, // Earn Asset
         pub duration: u32, // Lock period(days)
         pub renewable: bool, // Project supports renewal
-        #[serde(deserialize_with = "crate::utils::de_from_str")]
+        #[serde(deserialize_with = "crate::local_utils::de_from_str")]
         pub apy: f64, // APY in multiple_per_year,
     }
 }
 
 pub mod signing {
-    use crate::{utils::hex, BinanceClient};
-    use api_client_utils::RequestClient;
+    use crate::{BinanceClient, local_utils::hex};
     use hmac_sha256::HMAC;
-    use reqwest::RequestBuilder;
+    use reqwest::{Request, RequestBuilder};
     use std::time::SystemTime;
+    // use utils::api_client_utils;
 
-    pub trait RequestBuilderExt {
-        fn sign(self, client: &BinanceClient) -> Result<RequestClient, anyhow::Error>;
+    pub trait RequestSigner {
+        fn sign(self, client: &BinanceClient) -> Result<RequestBuilder, anyhow::Error>;
+        fn request(self) -> Result<Request, anyhow::Error>;
     }
-    impl RequestBuilderExt for RequestBuilder {
-        fn sign(self, client: &BinanceClient) -> Result<RequestClient, anyhow::Error> {
-            use api_client_utils::RequestBuilderExt;
-            let mut req = self
-                .header("X-MBX-APIKEY", &client.api_key)
-                .try_build_split()?;
-            let url = req.request.url_mut();
+    impl RequestSigner for RequestBuilder {
+        fn request(self) -> Result<Request, anyhow::Error> {
+            let (_client, request_result) = self.build_split();
+            let request = request_result?;
+            Ok(request)
+        }
+        fn sign(self, client: &BinanceClient) -> Result<RequestBuilder, anyhow::Error> {
+            let mut req = self.header("X-MBX-APIKEY", &client.api_key).request()?;
+            let url = req.url_mut();
 
             // append timestamp
             {
@@ -262,14 +257,16 @@ pub mod signing {
                 query_pairs.append_pair("signature", &sig_hex);
             }
 
-            Ok(req)
+            let rb = RequestBuilder::from_parts(client.http_client.clone(), req);
+
+            Ok(rb)
         }
     }
 }
 
-pub mod utils {
+pub mod local_utils {
     use chrono::{DateTime, Utc};
-    use serde::{de, Deserialize, Deserializer};
+    use serde::{Deserialize, Deserializer, de};
 
     pub fn de_from_str<'de, D, Out>(deserializer: D) -> Result<Out, D::Error>
     where
@@ -313,7 +310,7 @@ pub mod utils {
     }
     #[cfg(test)]
     mod tests {
-        use crate::utils::hex;
+        use super::*;
         use hmac_sha256::HMAC;
 
         #[test]

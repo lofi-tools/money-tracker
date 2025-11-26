@@ -1,11 +1,11 @@
 [package]
 name = "binance-client"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 # own libs
-api-client-utils.workspace = true
+utils.workspace = true
 # async, web, db
 reqwest.workspace = true
 tokio.workspace = true

@@ -1,11 +1,15 @@
-[package]
-name = "crypto-tracker"
+[workspace.package]
+description = ""
+authors = []
+license = ""
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [workspace]
+resolver = "3"
 members = [
-    "libs/*"
+    "libs/*",
+    "bin/*"
 ]
 
 [workspace.dependencies]
@@ -25,45 +29,18 @@ hmac-sha256 = "^1.1"
 anyhow = { version="^1.0", features=["backtrace"] } 
 thiserror = "^1.0"
 lazy_static = "^1.4"
+snafu = { version = "^0.8" }
 # rust utils
 derive_more = "^0.99"
 # own libs, patches
 binance-client = { path="./libs/binance-client" }
 coingecko-client = { path="./libs/coingecko-client" }
 nexo-csv = { path="./libs/nexo-csv" }
-api-client-utils = { path='../../weekend-projects/rust-libs/api-client-utils' }
+# api-client-utils = { path="./libs/api-client-utils" }
+utils = { path="./libs/utils" }
 typed-ids = { path='../../weekend-projects/rust-libs/typed-ids' }
 # api-client-utils = { git = "ssh://git@github.com/nmrshll/rust-libs.git" }
 # [patch.'ssh://git@github.com/nmrshll/rust-libs.git']
 
-
-
-[dependencies]
-# async, web
-tokio.workspace = true
-reqwest.workspace = true
-async-trait.workspace = true
-# data, serde, formats
-serde.workspace = true
-serde_json.workspace = true
-polars.workspace = true
-chrono.workspace = true
-# crypto
-hmac-sha256.workspace = true
-# errors, logs, env, config
-lazy_static.workspace = true
-anyhow.workspace = true
-thiserror.workspace = true
-dotenvy = "^0.15"
-# rust utils
-derive_more.workspace = true
-itertools = "^0.10"
-# own libs
-api-client-utils.workspace = true
-binance-client.workspace = true
-coingecko-client.workspace = true
-nexo-csv.workspace = true
-miette = "7.2.0"
-# typed-ids.workspace = true
 
 

@@ -1,14 +1,14 @@
-use api_client_utils::prelude::*;
 use chrono::Utc;
 use models::AssetPricePoint;
 use payloads::{CurrentPriceReq, CurrentPriceResp};
 use serde::Deserialize;
+use utils::prelude::*;
 
 pub struct CoingeckoClient {
     pub base_url: String,
     pub http_client: reqwest::Client,
 }
-impl JsonApiClient for CoingeckoClient {
+impl IsApiClient for CoingeckoClient {
     fn base_url(&self) -> &str {
         &self.base_url
     }
@@ -29,9 +29,7 @@ impl CoingeckoClient {
         args: CurrentPriceReq,
     ) -> anyhow::Result<Vec<AssetPricePoint>> {
         let req = self.get("/simple/price").query(&args);
-        let resp = req
-            .recv_json::<CurrentPriceResp, CoingeckoErrResp>()
-            .await?;
+        let resp = req.fetch_json::<CurrentPriceResp>().await?;
 
         let mut prices_out = Vec::new();
         for (asset_id, prices) in resp.0 {
@@ -55,8 +53,8 @@ impl CoingeckoClient {
 pub struct CoingeckoErrResp(serde_json::Value);
 
 pub mod payloads {
-    use self::utils::Or;
-    use super::utils::ser_joined_str;
+    use self::local_utils::Or;
+    use super::local_utils::ser_joined_str;
     use super::*;
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
@@ -100,7 +98,7 @@ pub mod models {
     }
 }
 
-pub mod utils {
+pub mod local_utils {
     use serde::Serializer;
 
     pub fn ser_joined_str<S>(v: &[String], serializer: S) -> Result<S::Ok, S::Error>

@@ -1,0 +1,32 @@
+[package]
+name = "crypto-tracker"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# async, web
+tokio.workspace = true
+reqwest.workspace = true
+async-trait.workspace = true
+# data, serde, formats
+serde.workspace = true
+serde_json.workspace = true
+polars.workspace = true
+chrono.workspace = true
+# crypto
+hmac-sha256.workspace = true
+# errors, logs, env, config
+lazy_static.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+dotenvy = "^0.15"
+# rust utils
+derive_more.workspace = true
+itertools = "^0.10"
+# own libs
+utils.workspace = true
+binance-client.workspace = true
+coingecko-client.workspace = true
+nexo-csv.workspace = true
+miette = "7.2.0"
+# typed-ids.workspace = true

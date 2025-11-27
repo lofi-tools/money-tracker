@@ -1,4 +1,4 @@
-# Crypto Tracker
+# Money Tracker
 
 Track crypto across accounts, chains, apps, platforms.
 Estimate historical value and current revenue.

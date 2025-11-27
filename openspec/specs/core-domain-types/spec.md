@@ -67,23 +67,23 @@ The core library SHALL define `Position`, `Product`, and related types to model 
 
 ### Requirement: Transaction Types
 
-The core library SHALL define transaction-related types (`Transaction`, `TransactionId`, `TxInputOutput`) to represent all financial movements and operations.
+The core library SHALL define transaction-related types (`Transaction`, `TransactionOutput`) to represent all financial movements using a double-entry accounting model.
 
-#### Scenario: Transaction captures inputs and outputs
+#### Scenario: Transaction consists of outputs (effects)
 
-- **GIVEN** a financial transaction occurs
-- **WHEN** the transaction is represented
-- **THEN** it SHALL have a unique TransactionId
-- **AND** it SHALL have a datetime timestamp
-- **AND** it SHALL have a list of inputs (TxInputOutput)
-- **AND** it SHALL have a list of outputs (TxInputOutput)
+- **GIVEN** a financial transaction
+- **WHEN** it is represented
+- **THEN** it SHALL have a `datetime` timestamp
+- **AND** it SHALL have a list of `outputs` (TransactionOutput)
+- **AND** it SHALL NOT have separate input/output lists
 
-#### Scenario: Transaction input/output specifies asset and amount
+#### Scenario: TransactionOutput represents account balance change
 
-- **GIVEN** a transaction input or output
-- **WHEN** it is created
-- **THEN** it SHALL specify an AssetId
-- **AND** it SHALL specify a numeric amount
+- **GIVEN** a transaction output (effect)
+- **WHEN** it is defined
+- **THEN** it SHALL have an `account_id`
+- **AND** it SHALL have an `amount` (Decimal) representing the change (negative for outflow, positive for inflow)
+- **AND** it SHALL have a `datetime` timestamp
 
 ### Requirement: Provider Traits
 

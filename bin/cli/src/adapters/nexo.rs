@@ -1,8 +1,6 @@
 use lib_core::traits::IsProvider;
 use lib_core::{AccountId, AssetId, Position, ProviderId, Transaction, TxEffect};
 use nexo_csv::{NexoCsv, NexoTx};
-use rust_decimal::Decimal;
-use rust_decimal::prelude::FromPrimitive;
 
 pub struct NexoSvc {
     // pub transactions_csv: NexoCsv,
@@ -50,6 +48,19 @@ impl IsProvider for NexoSvc {
     }
 }
 
+fn get_decimals(asset: &str) -> u8 {
+    match asset {
+        "ETH" => 18,
+        "BTC" => 8,
+        "USDT" => 6,
+        _ => 18, // Default
+    }
+}
+
+fn to_u64(amount: f64, decimals: u8) -> u64 {
+    (amount * 10f64.powi(decimals as i32)).round() as u64
+}
+
 /// Convert a Nexo transaction to a Transaction
 fn transaction_from_nexo_tx(nexo_tx: NexoTx) -> Transaction {
     let inputs = match &nexo_tx.kind {
@@ -72,19 +83,28 @@ fn transaction_from_nexo_tx(nexo_tx: NexoTx) -> Transaction {
     let outputs = match &nexo_tx.kind {
         nexo_csv::TransactionType::Interest => vec![TxEffect {
             // asset: asset_id_from_nexo(&nexo_tx.output_currency),
-            amount: Decimal::from_f64(nexo_tx.output_amount).unwrap(),
+            amount: to_u64(
+                nexo_tx.output_amount,
+                get_decimals(&nexo_tx.output_currency),
+            ),
             account_id: todo!(),
             datetime: todo!(),
         }],
         nexo_csv::TransactionType::TopUpCrypto => vec![TxEffect {
             // asset: asset_id_from_nexo(&nexo_tx.output_currency),
-            amount: Decimal::from_f64(nexo_tx.output_amount).unwrap(),
+            amount: to_u64(
+                nexo_tx.output_amount,
+                get_decimals(&nexo_tx.output_currency),
+            ),
             account_id: todo!(),
             datetime: todo!(),
         }],
         nexo_csv::TransactionType::TermInterest => vec![TxEffect {
             // asset: asset_id_from_nexo(&nexo_tx.output_currency),
-            amount: Decimal::from_f64(nexo_tx.output_amount).unwrap(),
+            amount: to_u64(
+                nexo_tx.output_amount,
+                get_decimals(&nexo_tx.output_currency),
+            ),
             account_id: todo!(),
             datetime: todo!(),
         }],

@@ -18,6 +18,20 @@ impl BinanceSvc {
     //         .with_ext_id(ExternalAssetId::new::<BinanceSvc>(binance_asset_id))
     // }
 }
+
+fn get_decimals(asset: &str) -> u8 {
+    match asset {
+        "ETH" | "ethereum" => 18,
+        "BTC" | "bitcoin" => 8,
+        "USDT" => 6,
+        _ => 18, // Default
+    }
+}
+
+fn to_u64(amount: f64, decimals: u8) -> u64 {
+    (amount * 10f64.powi(decimals as i32)).round() as u64
+}
+
 impl BinanceSvc {
     // TODO move this to Provider trait
 
@@ -49,7 +63,7 @@ impl BinanceSvc {
                 Ok(Position {
                     id: PositionId::from(&(*sp.position_id).to_string()),
                     product_id: ProductId::from(&sp.product_id),
-                    amount: sp.amount,
+                    amount: to_u64(sp.amount, get_decimals(&sp.asset_id)),
                     start_date: sp.purchase_time,
                     end_date: sp.interest_end_date,
                 })

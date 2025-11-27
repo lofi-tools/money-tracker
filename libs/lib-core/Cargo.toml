@@ -10,4 +10,4 @@ chrono.workspace = true
 async-trait.workspace = true
 derive_more.workspace = true
 anyhow.workspace = true
-rust_decimal = "1.39.0"
+

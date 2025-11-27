@@ -1,6 +1,6 @@
 use crate::traits::Issuer3;
 use chrono::{DateTime, Utc};
-use rust_decimal::Decimal;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -11,9 +11,13 @@ pub struct TxEffect {
     /// The change in balance. Positive for debit (increase?), Negative for credit (decrease?)
     /// OR: In accounting, Debit is usually positive (assets increase), Credit is negative (assets decrease).
     /// The design doc says: "Outflow: Negative amount", "Inflow: Positive amount".
-    pub amount: Decimal,
+    pub amount: u64,
     pub datetime: DateTime<Utc>,
 }
+
+// inside a transaction, inputs and outputs must be balanced (sum of inputs == sum of outputs)
+pub struct TxInput(pub TxEffect); // An input withdraws from an account
+pub struct TxOutput(pub TxEffect); // An output deposits into an account
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
@@ -115,6 +119,7 @@ impl std::hash::Hash for ExternalAssetId {
 pub struct Asset {
     pub id: AssetId,
     pub chain_id: String,
+    pub decimals: u8,
     pub external_ids: HashMap<ProviderId, ExternalAssetId>,
 }
 
@@ -159,7 +164,7 @@ impl<S: AsRef<str>> From<S> for PositionId {
 pub struct Position {
     pub id: PositionId,
     pub product_id: ProductId,
-    pub amount: f64,
+    pub amount: u64,
     pub start_date: DateTime<Utc>,
     pub end_date: DateTime<Utc>,
 }

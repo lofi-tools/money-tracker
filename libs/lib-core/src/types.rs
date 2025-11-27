@@ -1,9 +1,29 @@
-//! Core domain types for assets, positions, products, and transactions.
-
 use crate::traits::Issuer3;
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TxEffect {
+    /// The account affected by this effect (e.g. "Binance", "WalletA")
+    pub account_id: AccountId,
+    /// The change in balance. Positive for debit (increase?), Negative for credit (decrease?)
+    /// OR: In accounting, Debit is usually positive (assets increase), Credit is negative (assets decrease).
+    /// The design doc says: "Outflow: Negative amount", "Inflow: Positive amount".
+    pub amount: Decimal,
+    pub datetime: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Transaction {
+    /// List of effects that represent money leaving an account (debits/outflows).
+    pub inputs: Vec<TxEffect>,
+    /// List of effects that represent money entering an account (credits/inflows).
+    pub outputs: Vec<TxEffect>,
+    /// The time the transaction occurred.
+    pub datetime: DateTime<Utc>,
+}
 
 /// Database structure containing all domain entities
 pub struct Db {
@@ -40,7 +60,7 @@ impl From<&str> for ProviderId {
 }
 
 /// Asset identifier - represents known and unknown assets
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AssetId {
     Eth,
     Unknown(String),
@@ -107,6 +127,19 @@ impl Asset {
     pub fn merge(&mut self, other: &Self) -> &mut Self {
         self.external_ids.extend(other.external_ids.clone());
         self
+    }
+}
+
+/// Account identifier combining provider and asset
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct AccountId {
+    pub provider: ProviderId,
+    pub asset: AssetId,
+}
+
+impl AccountId {
+    pub fn new(provider: ProviderId, asset: AssetId) -> Self {
+        AccountId { provider, asset }
     }
 }
 
@@ -185,18 +218,4 @@ impl<S: AsRef<str>> From<S> for TransactionId {
     fn from(name: S) -> Self {
         TransactionId(name.as_ref().to_string())
     }
-}
-
-/// Financial transaction with inputs and outputs
-pub struct Transaction {
-    pub id: TransactionId,
-    pub datetime: DateTime<Utc>,
-    pub inputs: Vec<TxInputOutput>,
-    pub outputs: Vec<TxInputOutput>,
-}
-
-/// Transaction input or output
-pub struct TxInputOutput {
-    pub asset: AssetId,
-    pub amount: f64,
 }

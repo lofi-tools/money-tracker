@@ -29,7 +29,7 @@ pub struct NexoTx {
     #[serde(rename = "Transaction")]
     pub tx_id: String,
     #[serde(rename = "Type")]
-    pub r#type: TransactionType,
+    pub kind: TransactionType,
     #[serde(rename = "Input Currency")]
     pub input_currency: String,
     #[serde(rename = "Input Amount")]
@@ -86,7 +86,7 @@ pub mod tests {
 
 pub mod utils {
     use chrono::{DateTime, NaiveDateTime, Utc};
-    use serde::{de, Deserialize, Deserializer};
+    use serde::{Deserialize, Deserializer, de};
 
     const DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 

@@ -30,4 +30,5 @@ binance-client.workspace = true
 coingecko-client.workspace = true
 nexo-csv.workspace = true
 miette = "7.2.0"
+rust_decimal = "1.39.0"
 # typed-ids.workspace = true

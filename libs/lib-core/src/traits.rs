@@ -1,6 +1,9 @@
 //! Provider trait definitions for implementing external service adapters.
 
-use crate::types::{Position, ProviderId, Transaction};
+use crate::{
+    AccountId,
+    types::{Position, ProviderId, Transaction},
+};
 
 /// Provider trait with name method (object-safe)
 pub trait Issuer2: std::fmt::Debug {
@@ -23,4 +26,10 @@ pub trait IsProvider {
 
     /// Fetches all transactions from the provider
     async fn fetch_transactions(&self) -> anyhow::Result<Vec<Transaction>>;
+}
+
+/// For types that have an associated account ID
+pub trait HasAccountId {
+    /// Returns the account ID associated with this type
+    fn account_id(&self) -> AccountId;
 }

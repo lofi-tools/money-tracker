@@ -1,6 +1,8 @@
 use lib_core::traits::IsProvider;
-use lib_core::{AssetId, Position, ProviderId, Transaction, TransactionId, TxInputOutput};
+use lib_core::{AccountId, AssetId, Position, ProviderId, Transaction, TxEffect};
 use nexo_csv::{NexoCsv, NexoTx};
+use rust_decimal::Decimal;
+use rust_decimal::prelude::FromPrimitive;
 
 pub struct NexoSvc {
     // pub transactions_csv: NexoCsv,
@@ -50,7 +52,7 @@ impl IsProvider for NexoSvc {
 
 /// Convert a Nexo transaction to a Transaction
 fn transaction_from_nexo_tx(nexo_tx: NexoTx) -> Transaction {
-    let inputs = match &nexo_tx.r#type {
+    let inputs = match &nexo_tx.kind {
         // TODO make transactionInputOutput use ProductId not assetId
         // TODO figure out content by logging
         nexo_csv::TransactionType::ExchangeDepositedOn => vec![],
@@ -67,18 +69,24 @@ fn transaction_from_nexo_tx(nexo_tx: NexoTx) -> Transaction {
         nexo_csv::TransactionType::TermInterest => vec![],
         nexo_csv::TransactionType::Interest => vec![],
     };
-    let outputs = match &nexo_tx.r#type {
-        nexo_csv::TransactionType::Interest => vec![TxInputOutput {
-            asset: asset_id_from_nexo(&nexo_tx.output_currency),
-            amount: nexo_tx.output_amount,
+    let outputs = match &nexo_tx.kind {
+        nexo_csv::TransactionType::Interest => vec![TxEffect {
+            // asset: asset_id_from_nexo(&nexo_tx.output_currency),
+            amount: Decimal::from_f64(nexo_tx.output_amount).unwrap(),
+            account_id: todo!(),
+            datetime: todo!(),
         }],
-        nexo_csv::TransactionType::TopUpCrypto => vec![TxInputOutput {
-            asset: asset_id_from_nexo(&nexo_tx.output_currency),
-            amount: nexo_tx.output_amount,
+        nexo_csv::TransactionType::TopUpCrypto => vec![TxEffect {
+            // asset: asset_id_from_nexo(&nexo_tx.output_currency),
+            amount: Decimal::from_f64(nexo_tx.output_amount).unwrap(),
+            account_id: todo!(),
+            datetime: todo!(),
         }],
-        nexo_csv::TransactionType::TermInterest => vec![TxInputOutput {
-            asset: asset_id_from_nexo(&nexo_tx.output_currency),
-            amount: nexo_tx.output_amount,
+        nexo_csv::TransactionType::TermInterest => vec![TxEffect {
+            // asset: asset_id_from_nexo(&nexo_tx.output_currency),
+            amount: Decimal::from_f64(nexo_tx.output_amount).unwrap(),
+            account_id: todo!(),
+            datetime: todo!(),
         }],
 
         // TODO figure out content by logging
@@ -94,7 +102,7 @@ fn transaction_from_nexo_tx(nexo_tx: NexoTx) -> Transaction {
     };
 
     Transaction {
-        id: TransactionId::from(""), // TODO
+        // id: TransactionId::from(""), // TODO
         datetime: nexo_tx.date_time_utc,
         inputs,
         outputs,

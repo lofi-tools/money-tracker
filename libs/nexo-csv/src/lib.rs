@@ -3,8 +3,8 @@ use serde::Deserialize;
 
 pub struct NexoCsv {}
 impl NexoCsv {
-    pub fn read_all() -> anyhow::Result<Vec<NexoTx>> {
-        let mut rdr = csv::Reader::from_path("../../.cache/nexo_transactions.csv")?;
+    pub fn read_all(path: &str) -> anyhow::Result<Vec<NexoTx>> {
+        let mut rdr = csv::Reader::from_path(path)?;
 
         let headers = rdr.headers()?.clone();
 
@@ -77,7 +77,8 @@ pub mod tests {
 
     #[test]
     fn test_read() -> anyhow::Result<()> {
-        let nexo_txs = NexoCsv::read_all()?;
+        let path = "../../.cache/nexo_transactions.csv";
+        let nexo_txs = NexoCsv::read_all(path)?;
         dbg!(nexo_txs);
 
         Ok(())

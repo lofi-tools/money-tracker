@@ -1,6 +1,7 @@
+use chrono::Utc;
 use lib_core::traits::IsProvider;
 use lib_core::{AccountId, AssetId, Position, ProviderId, Transaction, TxEffect};
-use nexo_csv::{NexoCsv, NexoTx};
+use nexo_csv::{NexoCsv, NexoTx, TransactionType};
 
 pub struct NexoSvc {
     // pub transactions_csv: NexoCsv,
@@ -13,7 +14,7 @@ impl NexoSvc {
     }
 
     pub fn fetch_transactions(&self) -> anyhow::Result<Vec<()>> {
-        let mut transactions = NexoCsv::read_all()?;
+        let mut transactions = NexoCsv::read_all("nexo_transactions.csv")?;
         transactions.sort_by(|a, b| a.date_time_utc.cmp(&b.date_time_utc));
 
         dbg!(&transactions);
@@ -36,7 +37,7 @@ impl IsProvider for NexoSvc {
     }
 
     async fn fetch_transactions(&self) -> anyhow::Result<Vec<Transaction>> {
-        let mut nexo_transactions = NexoCsv::read_all()?;
+        let mut nexo_transactions = NexoCsv::read_all("nexo_transactions.csv")?;
         nexo_transactions.sort_by(|a, b| a.date_time_utc.cmp(&b.date_time_utc));
 
         let transactions = nexo_transactions
@@ -134,5 +135,27 @@ fn asset_id_from_nexo(nexo_asset: &str) -> AssetId {
     match nexo_asset {
         "ETH" => AssetId::Eth,
         _ => AssetId::unknown(nexo_asset),
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    #[test]
+    fn test_transaction_from_nexo_tx() -> anyhow::Result<()> {
+        let nexo_tx = NexoTx {
+            tx_id: "1".to_string(),
+            kind: TransactionType::Interest,
+            input_currency: "ETH".to_string(),
+            input_amount: 1.0,
+            output_currency: "ETH".to_string(),
+            output_amount: 1.0,
+            usd_equivalent: "1.0".to_string(),
+            details: "Interest".to_string(),
+            date_time_utc: Utc::now(),
+        };
+        let _transaction = transaction_from_nexo_tx(nexo_tx);
+        Ok(())
     }
 }

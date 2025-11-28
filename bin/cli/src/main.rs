@@ -1,8 +1,11 @@
 // #![feature(map_try_insert)] // for try_insert in models::AssetPrice
 // use crate::adapters::binance::BinanceSvc;
 // use crate::adapters::coingecko;
+// use crate::adapters::nexo::NexoSvc;
 use crate::adapters::nexo::NexoSvc;
 use adapters::coingecko::CoinGeckoSvc;
+use clap::Parser;
+use cli::Args;
 use lib_core::Db;
 use lib_core::traits::IsProvider;
 
@@ -11,7 +14,28 @@ pub mod adapters {
     pub mod coingecko;
     pub mod nexo;
 }
+mod cli;
 mod models;
+
+use std::cell::LazyCell;
+use std::path::PathBuf;
+
+const CACHE_DIR: LazyCell<PathBuf> = LazyCell::new(|| {
+    if let Ok(p) = std::env::var("CRYPTODASH_CACHE_DIR") {
+        return PathBuf::from(p);
+    }
+    dirs::cache_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("cryptodash")
+});
+
+const DATA_DIR: LazyCell<PathBuf> = LazyCell::new(|| {
+    if let Ok(p) = std::env::var("CRYPTODASH_DATA_DIR") {
+        return PathBuf::from(p);
+    }
+    // For now, use cache dir for data as requested
+    PathBuf::from(&*CACHE_DIR)
+});
 
 // TODO - estimate value, epy
 // TODO - binance: other assets
@@ -29,6 +53,10 @@ mod models;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv_override().ok();
+    let args = Args::parse();
+    dbg!(args);
+    std::process::exit(0);
+
     // std::env::set_var("RUST_BACKTRACE", "1");
 
     let mut db = Db::new();

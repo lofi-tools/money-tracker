@@ -1,9 +1,11 @@
+use std::path::Path;
+
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 pub struct NexoCsv {}
 impl NexoCsv {
-    pub fn read_all(path: &str) -> anyhow::Result<Vec<NexoTx>> {
+    pub fn read_all(path: impl AsRef<Path>) -> anyhow::Result<Vec<NexoTx>> {
         let mut rdr = csv::Reader::from_path(path)?;
 
         let headers = rdr.headers()?.clone();
@@ -74,12 +76,18 @@ pub enum TransactionType {
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use std::{path::PathBuf, sync::LazyLock};
+
+    static NEXO_CSV_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
+        let mut path = std::env::current_dir().unwrap();
+        path.push("../../.cache/nexo_transactions.csv");
+        path
+    });
 
     #[test]
     fn test_read() -> anyhow::Result<()> {
-        let path = "../../.cache/nexo_transactions.csv";
-        let nexo_txs = NexoCsv::read_all(path)?;
-        dbg!(nexo_txs);
+        let nexo_txs = NexoCsv::read_all(&*NEXO_CSV_PATH)?;
+        // dbg!(nexo_txs);
 
         Ok(())
     }

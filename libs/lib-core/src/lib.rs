@@ -4,6 +4,7 @@
 //! across all provider adapters and client libraries.
 
 pub mod history;
+pub mod storage;
 pub mod traits;
 pub mod types;
 

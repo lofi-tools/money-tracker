@@ -1,20 +1,26 @@
-use chrono::Utc;
+use crate::cli::Config;
 use lib_core::traits::IsProvider;
 use lib_core::{AccountId, AssetId, Position, ProviderId, Transaction, TxEffect};
-use nexo_csv::{NexoCsv, NexoTx, TransactionType};
+use nexo_csv::{NexoCsv, NexoTx};
+use std::path::PathBuf;
+use std::sync::LazyLock;
+
+const PROVIDER_ID: LazyLock<ProviderId> = LazyLock::new(|| ProviderId("NEXO".to_string()));
 
 pub struct NexoSvc {
     // pub transactions_csv: NexoCsv,
+    path_to_csv: PathBuf,
 }
 impl NexoSvc {
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new(config: &Config) -> anyhow::Result<Self> {
         Ok(NexoSvc {
             // transactions_csv: NexoCsv {},
+            path_to_csv: config.data_dir.join("nexo_transactions.csv"),
         })
     }
 
     pub fn fetch_transactions(&self) -> anyhow::Result<Vec<()>> {
-        let mut transactions = NexoCsv::read_all("nexo_transactions.csv")?;
+        let mut transactions = NexoCsv::read_all(&self.path_to_csv)?;
         transactions.sort_by(|a, b| a.date_time_utc.cmp(&b.date_time_utc));
 
         dbg!(&transactions);
@@ -28,8 +34,7 @@ impl NexoSvc {
 #[async_trait::async_trait]
 impl IsProvider for NexoSvc {
     fn provider_id(&self) -> ProviderId {
-        const PROVIDER_ID_NEXO: &str = "nexo";
-        ProviderId::from(PROVIDER_ID_NEXO)
+        PROVIDER_ID.clone()
     }
 
     async fn fetch_positions(&self) -> anyhow::Result<Vec<Position>> {
@@ -46,6 +51,48 @@ impl IsProvider for NexoSvc {
             .collect();
 
         Ok(transactions)
+    }
+}
+
+impl NexoTx {
+    /// If there's only one input account, this returns it
+    pub fn input_account(&self) -> AccountId {
+        match &self.kind {
+            nexo_csv::TransactionType::Interest => todo!(),
+            nexo_csv::TransactionType::LockTermDeposit => todo!(),
+            nexo_csv::TransactionType::UnlockTermDeposit => todo!(),
+            nexo_csv::TransactionType::TermInterest => todo!(),
+            nexo_csv::TransactionType::TransferFromProWallet => todo!(),
+            nexo_csv::TransactionType::TransferToProWallet => todo!(),
+            nexo_csv::TransactionType::ExchangeDepositedOn => todo!(),
+            nexo_csv::TransactionType::DepositToExchange => todo!(),
+            nexo_csv::TransactionType::WithdrawExchanged => todo!(),
+            nexo_csv::TransactionType::ExchangeToWithdraw => todo!(),
+            nexo_csv::TransactionType::TopUpCrypto => todo!(),
+        }
+    }
+    pub fn inputs(&self) -> Vec<TxEffect> {
+        match &self.kind {
+            nexo_csv::TransactionType::Interest => todo!(),
+            nexo_csv::TransactionType::LockTermDeposit => todo!(),
+            nexo_csv::TransactionType::UnlockTermDeposit => todo!(),
+            nexo_csv::TransactionType::TermInterest => todo!(),
+            nexo_csv::TransactionType::TransferFromProWallet => todo!(),
+            nexo_csv::TransactionType::TransferToProWallet => todo!(),
+            nexo_csv::TransactionType::ExchangeDepositedOn => todo!(),
+            nexo_csv::TransactionType::DepositToExchange => todo!(),
+            nexo_csv::TransactionType::WithdrawExchanged => todo!(),
+            nexo_csv::TransactionType::ExchangeToWithdraw => todo!(),
+            nexo_csv::TransactionType::TopUpCrypto => vec![TxEffect {
+                // asset: AssetId::from("ETH"),
+                amount: to_u64(self.output_amount, get_decimals(&self.output_currency)),
+                account_id: NexoSvc::mk_account_id(&format!("NEXO_TOPUP_{}", self.output_currency)),
+                // asset: AssetId::from(&self.output_currency),
+                // direction: TxDirection::Credit,
+                // tx_type: TxType::Deposit,
+                datetime: self.date_time_utc,
+            }],
+        }
     }
 }
 
@@ -89,7 +136,7 @@ fn transaction_from_nexo_tx(nexo_tx: NexoTx) -> Transaction {
                 get_decimals(&nexo_tx.output_currency),
             ),
             account_id: todo!(),
-            datetime: todo!(),
+            datetime: nexo_tx.date_time_utc,
         }],
         nexo_csv::TransactionType::TopUpCrypto => vec![TxEffect {
             // asset: asset_id_from_nexo(&nexo_tx.output_currency),
@@ -98,7 +145,7 @@ fn transaction_from_nexo_tx(nexo_tx: NexoTx) -> Transaction {
                 get_decimals(&nexo_tx.output_currency),
             ),
             account_id: todo!(),
-            datetime: todo!(),
+            datetime: nexo_tx.date_time_utc,
         }],
         nexo_csv::TransactionType::TermInterest => vec![TxEffect {
             // asset: asset_id_from_nexo(&nexo_tx.output_currency),
@@ -107,7 +154,7 @@ fn transaction_from_nexo_tx(nexo_tx: NexoTx) -> Transaction {
                 get_decimals(&nexo_tx.output_currency),
             ),
             account_id: todo!(),
-            datetime: todo!(),
+            datetime: nexo_tx.date_time_utc,
         }],
 
         // TODO figure out content by logging
@@ -140,6 +187,9 @@ fn asset_id_from_nexo(nexo_asset: &str) -> AssetId {
 
 #[cfg(test)]
 pub mod tests {
+    use chrono::Utc;
+    use nexo_csv::TransactionType;
+
     use super::*;
 
     #[test]

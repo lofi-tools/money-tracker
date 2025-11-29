@@ -1,6 +1,5 @@
-use crate::traits::Issuer3;
+use crate::Issuer4;
 use chrono::{DateTime, Utc};
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -27,29 +26,6 @@ pub struct Transaction {
     pub outputs: Vec<TxEffect>,
     /// The time the transaction occurred.
     pub datetime: DateTime<Utc>,
-}
-
-/// Database structure containing all domain entities
-pub struct Db {
-    pub assets: HashMap<AssetId, AssetId>,
-    pub positions: HashMap<PositionId, Position>,
-    pub products: HashMap<ProductId, Product>,
-    pub transactions: HashMap<TransactionId, Transaction>,
-}
-
-impl Db {
-    pub fn new() -> Self {
-        Db {
-            assets: HashMap::new(),
-            positions: HashMap::new(),
-            products: HashMap::new(),
-            transactions: HashMap::new(),
-        }
-    }
-
-    fn upsert_position(&mut self, position: &Position) {
-        self.positions.insert(position.id.clone(), position.clone());
-    }
 }
 
 /// Provider identifier
@@ -81,21 +57,21 @@ impl AssetId {
 #[derive(Debug, Clone)]
 pub struct ExternalAssetId {
     pub id: String,
-    pub issuer_name: String,
+    pub issuer_name: ProviderId,
     _asset: std::marker::PhantomData<AssetId>,
 }
 
 impl ExternalAssetId {
-    pub fn new<Issuer: Issuer3>(id: &str) -> Self {
+    pub fn new<Issuer: Issuer4>(id: &str) -> Self {
         ExternalAssetId {
             id: id.to_string(),
-            issuer_name: Issuer::name().to_string(),
+            issuer_name: Issuer::NAME,
             _asset: std::marker::PhantomData,
         }
     }
 
     pub fn issuer_id(&self) -> ProviderId {
-        ProviderId::from(self.issuer_name.as_str())
+        self.issuer_name.clone()
     }
 }
 
@@ -141,12 +117,19 @@ pub struct AccountId {
     pub provider: ProviderId,
     pub asset: AssetId,
 }
-
 impl AccountId {
     pub fn new(provider: ProviderId, asset: AssetId) -> Self {
         AccountId { provider, asset }
     }
 }
+// impl From<String> for AccountId {
+//     fn from(value: String) -> Self {
+//         AccountId {
+//             provider: todo!(),
+//             asset: todo!(),
+//         }
+//     }
+// }
 
 /// Position identifier
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -193,27 +176,6 @@ pub struct Product {
     pub apy: f64,
 }
 
-/// Collection of all products
-pub struct AllProducts {
-    pub products: HashMap<ProductId, Product>,
-}
-
-impl AllProducts {
-    pub fn new() -> Self {
-        AllProducts {
-            products: HashMap::new(),
-        }
-    }
-
-    pub fn insert(&mut self, product: Product) {
-        self.products.insert(product.id.clone(), product);
-    }
-
-    pub fn get(&self, id: &ProductId) -> Option<&Product> {
-        self.products.get(id)
-    }
-}
-
 /// Transaction identifier
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 #[serde(transparent)]
@@ -223,4 +185,14 @@ impl<S: AsRef<str>> From<S> for TransactionId {
     fn from(name: S) -> Self {
         TransactionId(name.as_ref().to_string())
     }
+}
+
+/// Data collected from a provider
+#[derive(Debug, Clone)]
+pub struct CollectProviderData {
+    pub provider_id: ProviderId,
+    pub transactions: Vec<Transaction>,
+    pub assets: Vec<Asset>,
+    pub positions: Vec<Position>,
+    pub products: Vec<Product>,
 }

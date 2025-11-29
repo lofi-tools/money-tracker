@@ -334,6 +334,7 @@ pub mod tests {
     use crate::payloads::LockedEarnPos;
 
     #[tokio::test]
+    #[ignore = "Needs network and API key"]
     async fn test_fetch_binance() -> anyhow::Result<()> {
         let client = BinanceClient::new()?;
         let products = client.list_staking_products().await?;

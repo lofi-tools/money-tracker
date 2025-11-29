@@ -85,8 +85,8 @@ impl IsProvider for BinanceSvc {
     }
 }
 impl Issuer3 for BinanceSvc {
-    fn name() -> &'static str {
-        PROVIDER_ID_BINANCE
+    fn name() -> ProviderId {
+        ProviderId::from(PROVIDER_ID_BINANCE)
     }
 }
 

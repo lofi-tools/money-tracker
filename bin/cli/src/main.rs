@@ -5,7 +5,7 @@
 use crate::adapters::nexo::NexoSvc;
 use adapters::coingecko::CoinGeckoSvc;
 use clap::Parser;
-use cli::Args;
+use cli::{Args, Config};
 use lib_core::Db;
 use lib_core::traits::IsProvider;
 
@@ -52,18 +52,18 @@ const DATA_DIR: LazyCell<PathBuf> = LazyCell::new(|| {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenvy::dotenv_override().ok();
-    let args = Args::parse();
-    dbg!(args);
+    // dotenvy::dotenv_override().ok();
+    let config = Config::new(Args::parse());
+    // dbg!(args);
     std::process::exit(0);
 
     // std::env::set_var("RUST_BACKTRACE", "1");
 
-    let mut db = Db::new();
+    // let mut db = Db::new();
 
     let providers: Vec<Box<dyn IsProvider>> = vec![
         // Box::new(BinanceSvc::new()?)
-        Box::new(NexoSvc::new()?),
+        Box::new(NexoSvc::new(&config)?),
     ];
     for provider in providers {
         // let positions = provider.fetch_positions().await?;

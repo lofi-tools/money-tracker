@@ -8,7 +8,7 @@ pub mod storage;
 pub mod traits;
 pub mod types;
 
-// Re-export commonly used types for convenience
 pub use history::*;
+pub use storage::*;
 pub use traits::*;
 pub use types::*;

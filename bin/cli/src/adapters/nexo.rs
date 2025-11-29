@@ -1,6 +1,9 @@
 use crate::cli::Config;
 use lib_core::traits::IsProvider;
-use lib_core::{AccountId, AssetId, Position, ProviderId, Transaction, TxEffect};
+use lib_core::{
+    AccountId, Asset, AssetId, Position, PositionId, Product, ProductId, ProviderId, Transaction,
+    TxEffect,
+};
 use nexo_csv::{NexoCsv, NexoTx};
 use std::path::PathBuf;
 use std::sync::LazyLock;
@@ -46,53 +49,15 @@ impl IsProvider for NexoSvc {
         nexo_transactions.sort_by(|a, b| a.date_time_utc.cmp(&b.date_time_utc));
 
         let transactions = nexo_transactions
-            .into_iter()
-            .map(|ntx| transaction_from_nexo_tx(ntx))
+            .iter()
+            .map(|ntx| {
+                let data = process_txn(ntx);
+                dbg!(&data);
+                data.transaction
+            })
             .collect();
 
         Ok(transactions)
-    }
-}
-
-impl NexoTx {
-    /// If there's only one input account, this returns it
-    pub fn input_account(&self) -> AccountId {
-        match &self.kind {
-            nexo_csv::TransactionType::Interest => todo!(),
-            nexo_csv::TransactionType::LockTermDeposit => todo!(),
-            nexo_csv::TransactionType::UnlockTermDeposit => todo!(),
-            nexo_csv::TransactionType::TermInterest => todo!(),
-            nexo_csv::TransactionType::TransferFromProWallet => todo!(),
-            nexo_csv::TransactionType::TransferToProWallet => todo!(),
-            nexo_csv::TransactionType::ExchangeDepositedOn => todo!(),
-            nexo_csv::TransactionType::DepositToExchange => todo!(),
-            nexo_csv::TransactionType::WithdrawExchanged => todo!(),
-            nexo_csv::TransactionType::ExchangeToWithdraw => todo!(),
-            nexo_csv::TransactionType::TopUpCrypto => todo!(),
-        }
-    }
-    pub fn inputs(&self) -> Vec<TxEffect> {
-        match &self.kind {
-            nexo_csv::TransactionType::Interest => todo!(),
-            nexo_csv::TransactionType::LockTermDeposit => todo!(),
-            nexo_csv::TransactionType::UnlockTermDeposit => todo!(),
-            nexo_csv::TransactionType::TermInterest => todo!(),
-            nexo_csv::TransactionType::TransferFromProWallet => todo!(),
-            nexo_csv::TransactionType::TransferToProWallet => todo!(),
-            nexo_csv::TransactionType::ExchangeDepositedOn => todo!(),
-            nexo_csv::TransactionType::DepositToExchange => todo!(),
-            nexo_csv::TransactionType::WithdrawExchanged => todo!(),
-            nexo_csv::TransactionType::ExchangeToWithdraw => todo!(),
-            nexo_csv::TransactionType::TopUpCrypto => vec![TxEffect {
-                // asset: AssetId::from("ETH"),
-                amount: to_u64(self.output_amount, get_decimals(&self.output_currency)),
-                account_id: NexoSvc::mk_account_id(&format!("NEXO_TOPUP_{}", self.output_currency)),
-                // asset: AssetId::from(&self.output_currency),
-                // direction: TxDirection::Credit,
-                // tx_type: TxType::Deposit,
-                datetime: self.date_time_utc,
-            }],
-        }
     }
 }
 
@@ -109,71 +74,314 @@ fn to_u64(amount: f64, decimals: u8) -> u64 {
     (amount * 10f64.powi(decimals as i32)).round() as u64
 }
 
-/// Convert a Nexo transaction to a Transaction
-fn transaction_from_nexo_tx(nexo_tx: NexoTx) -> Transaction {
-    let inputs = match &nexo_tx.kind {
-        // TODO make transactionInputOutput use ProductId not assetId
-        // TODO figure out content by logging
-        nexo_csv::TransactionType::ExchangeDepositedOn => vec![],
-        nexo_csv::TransactionType::DepositToExchange => vec![],
-        nexo_csv::TransactionType::WithdrawExchanged => vec![],
-        nexo_csv::TransactionType::ExchangeToWithdraw => vec![],
-        // should have no impact on total -> no inputs/outputs // TODO same inputs / outputs
-        nexo_csv::TransactionType::TransferFromProWallet => vec![],
-        nexo_csv::TransactionType::TransferToProWallet => vec![],
-        nexo_csv::TransactionType::LockTermDeposit => vec![], // TODO some(move between products)
-        nexo_csv::TransactionType::UnlockTermDeposit => vec![], // TODO Some(move between products)
-        // TODO inputs from other people / outside of Nexo
-        nexo_csv::TransactionType::TopUpCrypto => vec![],
-        nexo_csv::TransactionType::TermInterest => vec![],
-        nexo_csv::TransactionType::Interest => vec![],
-    };
-    let outputs = match &nexo_tx.kind {
-        nexo_csv::TransactionType::Interest => vec![TxEffect {
-            // asset: asset_id_from_nexo(&nexo_tx.output_currency),
-            amount: to_u64(
-                nexo_tx.output_amount,
-                get_decimals(&nexo_tx.output_currency),
-            ),
-            account_id: todo!(),
-            datetime: nexo_tx.date_time_utc,
-        }],
-        nexo_csv::TransactionType::TopUpCrypto => vec![TxEffect {
-            // asset: asset_id_from_nexo(&nexo_tx.output_currency),
-            amount: to_u64(
-                nexo_tx.output_amount,
-                get_decimals(&nexo_tx.output_currency),
-            ),
-            account_id: todo!(),
-            datetime: nexo_tx.date_time_utc,
-        }],
-        nexo_csv::TransactionType::TermInterest => vec![TxEffect {
-            // asset: asset_id_from_nexo(&nexo_tx.output_currency),
-            amount: to_u64(
-                nexo_tx.output_amount,
-                get_decimals(&nexo_tx.output_currency),
-            ),
-            account_id: todo!(),
-            datetime: nexo_tx.date_time_utc,
-        }],
+#[derive(Debug)]
+pub struct TxData {
+    pub assets: Vec<Asset>,
+    pub products: Vec<Product>,
+    pub positions: Vec<Position>,
+    pub transaction: Transaction,
+}
 
-        // TODO figure out content by logging
-        nexo_csv::TransactionType::ExchangeDepositedOn => vec![],
-        nexo_csv::TransactionType::DepositToExchange => vec![],
-        nexo_csv::TransactionType::WithdrawExchanged => vec![],
-        nexo_csv::TransactionType::ExchangeToWithdraw => vec![],
-        // should have no impact on total -> no inputs/outputs // TODO same inputs / outputs
-        nexo_csv::TransactionType::TransferFromProWallet => vec![],
-        nexo_csv::TransactionType::TransferToProWallet => vec![],
-        nexo_csv::TransactionType::LockTermDeposit => vec![], // TODO some(move between products)
-        nexo_csv::TransactionType::UnlockTermDeposit => vec![], // TODO Some(move between products)
+fn process_txn(tx: &NexoTx) -> TxData {
+    match tx.kind {
+        nexo_csv::TransactionType::Interest => process_interest(tx),
+        nexo_csv::TransactionType::LockTermDeposit => process_lock_term_deposit(tx),
+        nexo_csv::TransactionType::UnlockTermDeposit => process_unlock_term_deposit(tx),
+        nexo_csv::TransactionType::TermInterest => process_term_interest(tx),
+        nexo_csv::TransactionType::TransferFromProWallet => process_transfer_from_pro_wallet(tx),
+        nexo_csv::TransactionType::TransferToProWallet => process_transfer_to_pro_wallet(tx),
+        nexo_csv::TransactionType::ExchangeDepositedOn => process_exchange_deposited_on(tx),
+        nexo_csv::TransactionType::DepositToExchange => process_deposit_to_exchange(tx),
+        nexo_csv::TransactionType::WithdrawExchanged => process_withdraw_exchanged(tx),
+        nexo_csv::TransactionType::ExchangeToWithdraw => process_exchange_to_withdraw(tx),
+        nexo_csv::TransactionType::TopUpCrypto => process_top_up_crypto(tx),
+    }
+}
+
+fn process_interest(tx: &NexoTx) -> TxData {
+    let asset_id = asset_id_from_nexo(&tx.output_currency);
+    let amount = to_u64(tx.output_amount, get_decimals(&tx.output_currency));
+    let account_id = AccountId::new(PROVIDER_ID.clone(), asset_id.clone());
+
+    let effect = TxEffect {
+        account_id,
+        amount,
+        datetime: tx.date_time_utc,
     };
 
-    Transaction {
-        // id: TransactionId::from(""), // TODO
-        datetime: nexo_tx.date_time_utc,
-        inputs,
-        outputs,
+    let asset = Asset {
+        id: asset_id.clone(),
+        chain_id: "".to_string(),
+        decimals: get_decimals(&tx.output_currency),
+        external_ids: Default::default(),
+    };
+
+    TxData {
+        assets: vec![asset],
+        products: vec![],
+        positions: vec![],
+        transaction: Transaction {
+            inputs: vec![],
+            outputs: vec![effect],
+            datetime: tx.date_time_utc,
+        },
+    }
+}
+
+fn process_lock_term_deposit(tx: &NexoTx) -> TxData {
+    let asset_id = asset_id_from_nexo(&tx.input_currency);
+    let amount = to_u64(tx.input_amount, get_decimals(&tx.input_currency));
+    let account_id = AccountId::new(PROVIDER_ID.clone(), asset_id.clone());
+
+    // Debit Savings
+    let input_effect = TxEffect {
+        account_id,
+        amount,
+        datetime: tx.date_time_utc,
+    };
+
+    // Create Position
+    let position = Position {
+        id: PositionId::from(tx.tx_id.clone()),
+        product_id: ProductId::from("NEXO_TERM_DEPOSIT"),
+        amount,
+        start_date: tx.date_time_utc,
+        end_date: tx.date_time_utc, // TODO: find end date
+    };
+
+    let asset = Asset {
+        id: asset_id.clone(),
+        chain_id: "".to_string(),
+        decimals: get_decimals(&tx.input_currency),
+        external_ids: Default::default(),
+    };
+
+    TxData {
+        assets: vec![asset],
+        products: vec![],
+        positions: vec![position],
+        transaction: Transaction {
+            inputs: vec![input_effect],
+            outputs: vec![], // TODO: represent flow to position?
+            datetime: tx.date_time_utc,
+        },
+    }
+}
+
+fn process_unlock_term_deposit(tx: &NexoTx) -> TxData {
+    let asset_id = asset_id_from_nexo(&tx.output_currency);
+    let amount = to_u64(tx.output_amount, get_decimals(&tx.output_currency));
+    let account_id = AccountId::new(PROVIDER_ID.clone(), asset_id.clone());
+
+    // Credit Savings
+    let output_effect = TxEffect {
+        account_id,
+        amount,
+        datetime: tx.date_time_utc,
+    };
+
+    let asset = Asset {
+        id: asset_id.clone(),
+        chain_id: "".to_string(),
+        decimals: get_decimals(&tx.output_currency),
+        external_ids: Default::default(),
+    };
+
+    TxData {
+        assets: vec![asset],
+        products: vec![],
+        positions: vec![], // TODO: Close position?
+        transaction: Transaction {
+            inputs: vec![], // TODO: from position?
+            outputs: vec![output_effect],
+            datetime: tx.date_time_utc,
+        },
+    }
+}
+
+fn process_term_interest(tx: &NexoTx) -> TxData {
+    process_interest(tx)
+}
+
+fn process_transfer_from_pro_wallet(tx: &NexoTx) -> TxData {
+    TxData {
+        assets: vec![],
+        products: vec![],
+        positions: vec![],
+        transaction: Transaction {
+            inputs: vec![],
+            outputs: vec![],
+            datetime: tx.date_time_utc,
+        },
+    }
+}
+
+fn process_transfer_to_pro_wallet(tx: &NexoTx) -> TxData {
+    TxData {
+        assets: vec![],
+        products: vec![],
+        positions: vec![],
+        transaction: Transaction {
+            inputs: vec![],
+            outputs: vec![],
+            datetime: tx.date_time_utc,
+        },
+    }
+}
+
+fn process_exchange_deposited_on(tx: &NexoTx) -> TxData {
+    // Input side
+    let in_asset_id = asset_id_from_nexo(&tx.input_currency);
+    let in_amount = to_u64(tx.input_amount, get_decimals(&tx.input_currency));
+    let in_account_id = AccountId::new(PROVIDER_ID.clone(), in_asset_id.clone());
+
+    let in_effect = TxEffect {
+        account_id: in_account_id,
+        amount: in_amount,
+        datetime: tx.date_time_utc,
+    };
+
+    let in_asset = Asset {
+        id: in_asset_id.clone(),
+        chain_id: "".to_string(),
+        decimals: get_decimals(&tx.input_currency),
+        external_ids: Default::default(),
+    };
+
+    // Output side
+    let out_asset_id = asset_id_from_nexo(&tx.output_currency);
+    let out_amount = to_u64(tx.output_amount, get_decimals(&tx.output_currency));
+    let out_account_id = AccountId::new(PROVIDER_ID.clone(), out_asset_id.clone());
+
+    let out_effect = TxEffect {
+        account_id: out_account_id,
+        amount: out_amount,
+        datetime: tx.date_time_utc,
+    };
+
+    let out_asset = Asset {
+        id: out_asset_id.clone(),
+        chain_id: "".to_string(),
+        decimals: get_decimals(&tx.output_currency),
+        external_ids: Default::default(),
+    };
+
+    TxData {
+        assets: vec![in_asset, out_asset],
+        products: vec![],
+        positions: vec![],
+        transaction: Transaction {
+            inputs: vec![in_effect],
+            outputs: vec![out_effect],
+            datetime: tx.date_time_utc,
+        },
+    }
+}
+
+fn process_deposit_to_exchange(tx: &NexoTx) -> TxData {
+    // Treat as transfer? Or just ignore if it's internal bookkeeping?
+    // "Deposit To Exchange" usually means moving from Savings to Pro/Exchange wallet.
+    // Let's assume it's a transfer to Pro.
+    // Input: Savings, Output: Pro?
+    // If we track Pro as a separate provider or account, we should use that.
+    // For now, let's treat it as a withdrawal from Savings (Input) and ignore destination (or maybe we should track it).
+
+    let asset_id = asset_id_from_nexo(&tx.input_currency);
+    let amount = to_u64(tx.input_amount, get_decimals(&tx.input_currency));
+    let account_id = AccountId::new(PROVIDER_ID.clone(), asset_id.clone());
+
+    let input_effect = TxEffect {
+        account_id,
+        amount,
+        datetime: tx.date_time_utc,
+    };
+
+    let asset = Asset {
+        id: asset_id.clone(),
+        chain_id: "".to_string(),
+        decimals: get_decimals(&tx.input_currency),
+        external_ids: Default::default(),
+    };
+
+    TxData {
+        assets: vec![asset],
+        products: vec![],
+        positions: vec![],
+        transaction: Transaction {
+            inputs: vec![input_effect],
+            outputs: vec![], // TODO: Destination?
+            datetime: tx.date_time_utc,
+        },
+    }
+}
+
+fn process_withdraw_exchanged(tx: &NexoTx) -> TxData {
+    // "Withdraw Exchanged" - likely moving back from Exchange to Savings?
+    // Input: Exchange? Output: Savings.
+
+    let asset_id = asset_id_from_nexo(&tx.output_currency);
+    let amount = to_u64(tx.output_amount, get_decimals(&tx.output_currency));
+    let account_id = AccountId::new(PROVIDER_ID.clone(), asset_id.clone());
+
+    let output_effect = TxEffect {
+        account_id,
+        amount,
+        datetime: tx.date_time_utc,
+    };
+
+    let asset = Asset {
+        id: asset_id.clone(),
+        chain_id: "".to_string(),
+        decimals: get_decimals(&tx.output_currency),
+        external_ids: Default::default(),
+    };
+
+    TxData {
+        assets: vec![asset],
+        products: vec![],
+        positions: vec![],
+        transaction: Transaction {
+            inputs: vec![], // From Exchange?
+            outputs: vec![output_effect],
+            datetime: tx.date_time_utc,
+        },
+    }
+}
+
+fn process_exchange_to_withdraw(tx: &NexoTx) -> TxData {
+    // "Exchange To Withdraw" - maybe similar to Withdraw Exchanged?
+    // Or maybe the trade itself?
+    // Let's assume it's a trade.
+    process_exchange_deposited_on(tx)
+}
+
+fn process_top_up_crypto(tx: &NexoTx) -> TxData {
+    let asset_id = asset_id_from_nexo(&tx.output_currency);
+    let amount = to_u64(tx.output_amount, get_decimals(&tx.output_currency));
+    let account_id = AccountId::new(PROVIDER_ID.clone(), asset_id.clone());
+
+    let effect = TxEffect {
+        account_id,
+        amount,
+        datetime: tx.date_time_utc,
+    };
+
+    let asset = Asset {
+        id: asset_id.clone(),
+        chain_id: "".to_string(),
+        decimals: get_decimals(&tx.output_currency),
+        external_ids: Default::default(),
+    };
+
+    TxData {
+        assets: vec![asset],
+        products: vec![],
+        positions: vec![],
+        transaction: Transaction {
+            inputs: vec![],
+            outputs: vec![effect],
+            datetime: tx.date_time_utc,
+        },
     }
 }
 
@@ -193,7 +401,7 @@ pub mod tests {
     use super::*;
 
     #[test]
-    fn test_transaction_from_nexo_tx() -> anyhow::Result<()> {
+    fn test_process_txn() -> anyhow::Result<()> {
         let nexo_tx = NexoTx {
             tx_id: "1".to_string(),
             kind: TransactionType::Interest,
@@ -205,7 +413,49 @@ pub mod tests {
             details: "Interest".to_string(),
             date_time_utc: Utc::now(),
         };
-        let _transaction = transaction_from_nexo_tx(nexo_tx);
+        let _data = process_txn(&nexo_tx);
+        Ok(())
+    }
+
+    #[test]
+    fn test_process_txn_top_up() -> anyhow::Result<()> {
+        let nexo_tx = NexoTx {
+            tx_id: "2".to_string(),
+            kind: TransactionType::TopUpCrypto,
+            input_currency: "".to_string(),
+            input_amount: 0.0,
+            output_currency: "BTC".to_string(),
+            output_amount: 0.5,
+            usd_equivalent: "20000.0".to_string(),
+            details: "Top Up".to_string(),
+            date_time_utc: Utc::now(),
+        };
+        let data = process_txn(&nexo_tx);
+        assert_eq!(data.assets.len(), 1);
+        assert_eq!(data.transaction.outputs.len(), 1);
+        assert_eq!(data.transaction.outputs[0].amount, 50000000); // 0.5 BTC * 10^8
+        Ok(())
+    }
+
+    #[test]
+    fn test_process_txn_exchange() -> anyhow::Result<()> {
+        let nexo_tx = NexoTx {
+            tx_id: "3".to_string(),
+            kind: TransactionType::ExchangeDepositedOn,
+            input_currency: "USDT".to_string(),
+            input_amount: 1000.0,
+            output_currency: "ETH".to_string(),
+            output_amount: 0.5,
+            usd_equivalent: "1000.0".to_string(),
+            details: "Exchange".to_string(),
+            date_time_utc: Utc::now(),
+        };
+        let data = process_txn(&nexo_tx);
+        assert_eq!(data.assets.len(), 2);
+        assert_eq!(data.transaction.inputs.len(), 1);
+        assert_eq!(data.transaction.outputs.len(), 1);
+        assert_eq!(data.transaction.inputs[0].amount, 1000000000); // 1000 USDT * 10^6
+        assert_eq!(data.transaction.outputs[0].amount, 500000000000000000); // 0.5 ETH * 10^18
         Ok(())
     }
 }

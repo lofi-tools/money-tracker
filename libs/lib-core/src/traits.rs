@@ -1,5 +1,5 @@
-use crate::types::{Position, ProviderId, Transaction};
-use crate::{AccountId, AssetId};
+use crate::types::{ProviderId, Transaction, UserPosition};
+use crate::{AssetId, CollectTxnData, PositionId};
 use chrono::{DateTime, Utc};
 
 /// Provider trait with name method (object-safe)
@@ -23,24 +23,25 @@ pub trait IsProvider {
     fn provider_id(&self) -> ProviderId; // &self for object-safety
     // const PROVIDER_ID: ProviderId;
 
-    fn mk_account_id(&self, sub_id: &str) -> AccountId {
-        AccountId {
-            provider: self.provider_id(),
-            asset: AssetId::unknown(sub_id),
-        }
+    /// Fetches all positions from the provider
+    async fn fetch_positions(&self) -> anyhow::Result<Vec<UserPosition>> {
+        let data = self.fetch_all_txn_data().await?;
+        Ok(data.positions)
     }
 
-    /// Fetches all positions from the provider
-    async fn fetch_positions(&self) -> anyhow::Result<Vec<Position>>;
-
     /// Fetches all transactions from the provider
-    async fn fetch_transactions(&self) -> anyhow::Result<Vec<Transaction>>;
+    async fn fetch_transactions(&self) -> anyhow::Result<Vec<Transaction>> {
+        let data = self.fetch_all_txn_data().await?;
+        Ok(data.transactions)
+    }
+
+    async fn fetch_all_txn_data(&self) -> anyhow::Result<CollectTxnData>;
 }
 
 /// For types that have an associated account ID
-pub trait HasAccountId {
+pub trait HasPositionId {
     /// Returns the account ID associated with this type
-    fn account_id(&self) -> AccountId;
+    fn account_id(&self) -> PositionId;
 }
 pub trait HasDateTime {
     /// Returns the datetime associated with this type
@@ -56,4 +57,4 @@ pub trait HasAmount {
 }
 
 pub trait IsTransaction: HasDateTime + HasAssetId + HasAmount {}
-pub trait IsTxEffect: HasAccountId + HasDateTime + HasAssetId + HasAmount {}
+pub trait IsTxEffect: HasPositionId + HasDateTime + HasAssetId + HasAmount {}

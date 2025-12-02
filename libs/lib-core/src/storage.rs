@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use crate::{AssetId, Position, PositionId, Product, ProductId, Transaction, TransactionId};
+use crate::{AssetId, PositionId, Product, ProductId, Transaction, TransactionId, UserPosition};
 
 /// Database structure containing all domain entities
 pub struct Db {
     pub assets: HashMap<AssetId, AssetId>,
-    pub positions: HashMap<PositionId, Position>,
+    pub positions: HashMap<PositionId, UserPosition>,
     pub products: HashMap<ProductId, Product>,
     pub transactions: HashMap<TransactionId, Transaction>,
 }
@@ -20,7 +20,7 @@ impl Db {
         }
     }
 
-    fn upsert_position(&mut self, position: &Position) {
+    fn upsert_position(&mut self, position: &UserPosition) {
         self.positions.insert(position.id.clone(), position.clone());
     }
 }

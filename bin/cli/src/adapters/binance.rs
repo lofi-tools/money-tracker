@@ -1,6 +1,8 @@
 use binance_client::BinanceClient;
 use lib_core::traits::{IsProvider, Issuer3};
-use lib_core::{AssetId, Position, PositionId, Product, ProductId, ProviderId, Transaction};
+use lib_core::{
+    AssetId, CollectTxnData, PositionId, Product, ProductId, ProviderId, Transaction, UserPosition,
+};
 
 const PROVIDER_ID_BINANCE: &str = "binance";
 
@@ -43,16 +45,18 @@ impl BinanceSvc {
 
         let products = binance_products
             .into_iter()
-            .map(|sp| Product {
-                id: ProductId::from(&sp.project_id),
-                asset_id: asset_id_from_binance(&sp.detail.asset),
-                apy: sp.detail.apy,
+            .map(|sp| {
+                Ok(Product {
+                    id: ProductId::from(&sp.project_id),
+                    asset_id: BinanceAssets::try_from_str(&sp.detail.asset)?.to_asset_id(),
+                    apy: sp.detail.apy,
+                })
             })
-            .collect();
+            .collect::<anyhow::Result<Vec<_>>>()?;
         Ok(products)
     }
 
-    pub async fn fetch_positions(&self) -> anyhow::Result<Vec<Position>> {
+    pub async fn fetch_positions(&self) -> anyhow::Result<Vec<UserPosition>> {
         let binance_positions = self.client.list_staking_positions().await?;
         // TODO also simple flex and simple lock positions
 
@@ -60,12 +64,13 @@ impl BinanceSvc {
             .into_iter()
             // TODO impl TryFrom<BinanceModel> for each model
             .map(|sp| {
-                Ok(Position {
+                Ok(UserPosition {
                     id: PositionId::from(&(*sp.position_id).to_string()),
                     product_id: ProductId::from(&sp.product_id),
-                    amount: to_u64(sp.amount, get_decimals(&sp.asset_id)),
-                    start_date: sp.purchase_time,
-                    end_date: sp.interest_end_date,
+                    // amount: to_u64(sp.amount, get_decimals(&sp.asset_id)), // TODO PositionBalance
+                    start_date: Some(sp.purchase_time),
+                    end_date: Some(sp.interest_end_date),
+                    // owner: todo!(),
                 })
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
@@ -77,10 +82,13 @@ impl IsProvider for BinanceSvc {
     fn provider_id(&self) -> ProviderId {
         ProviderId::from(PROVIDER_ID_BINANCE)
     }
-    async fn fetch_positions(&self) -> anyhow::Result<Vec<Position>> {
+    async fn fetch_positions(&self) -> anyhow::Result<Vec<UserPosition>> {
         self.fetch_positions().await
     }
     async fn fetch_transactions(&self) -> anyhow::Result<Vec<Transaction>> {
+        todo!()
+    }
+    async fn fetch_all_txn_data(&self) -> anyhow::Result<CollectTxnData> {
         todo!()
     }
 }
@@ -90,13 +98,13 @@ impl Issuer3 for BinanceSvc {
     }
 }
 
-/// Convert a Binance asset identifier to an AssetId
-fn asset_id_from_binance(binance_asset: &str) -> AssetId {
-    match binance_asset {
-        "ethereum" => AssetId::Eth,
-        _ => AssetId::unknown(binance_asset),
-    }
-}
+// /// Convert a Binance asset identifier to an AssetId
+// fn asset_id_from_binance(binance_asset: &str) -> AssetId {
+//     // match binance_asset {
+//     //     "ethereum" => AssetId::Eth,
+//     //     _ => AssetId::unknown(binance_asset),
+//     // }
+// }
 
 pub mod old {
     // use crate::models::{ExternalId, ProductId};
@@ -163,4 +171,27 @@ pub mod old {
     // //     #[error("reqwest err: {0}")]
     // //     ReqwestErr(reqwest::Error),
     // // }
+}
+
+pub enum BinanceAssets {
+    Eth,
+    Bnb,
+    // Other(String),
+}
+impl BinanceAssets {
+    fn try_from_str(s: &str) -> anyhow::Result<Self> {
+        match s {
+            "ethereum" => Ok(BinanceAssets::Eth),
+            // "BNB" => Ok(BinanceAssets::Bnb),
+            _ => Err(anyhow::anyhow!(format!("Unknown binance asset: {}", s))),
+        }
+    }
+}
+impl BinanceAssets {
+    fn to_asset_id(&self) -> AssetId {
+        match self {
+            BinanceAssets::Eth => AssetId::str("ETH"),
+            BinanceAssets::Bnb => AssetId::str("BNB"),
+        }
+    }
 }

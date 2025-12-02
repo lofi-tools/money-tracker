@@ -70,7 +70,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // for position in positions {
         //     dbg!(position);
         // }
-        let transactions = provider.fetch_transactions().await?;
+        let txn_data = provider.fetch_all_txn_data().await?;
+        dbg!(txn_data);
     }
 
     let coingecko_svc = CoinGeckoSvc::new()?;

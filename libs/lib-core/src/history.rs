@@ -1,6 +1,6 @@
 //! Historical data types for tracking price and position history.
 
-use crate::types::{AssetId, Position};
+use crate::types::{AssetId, UserPosition};
 use chrono::{DateTime, Utc};
 
 /// A single point in asset price history
@@ -21,5 +21,5 @@ pub struct AssetPriceHistory {
 /// Collection of position snapshots over time
 #[derive(Debug, Clone)]
 pub struct PositionHistory {
-    pub points: Vec<Position>,
+    pub points: Vec<UserPosition>,
 }

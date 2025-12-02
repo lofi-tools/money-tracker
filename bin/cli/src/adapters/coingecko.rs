@@ -26,25 +26,27 @@ impl CoinGeckoSvc {
 
         let prices = resp
             .into_iter()
-            .map(|p| AssetPricePoint {
-                asset_id: asset_id_from_coingecko(&p.asset_id),
-                vs_asset_id: asset_id_from_coingecko(&p.vs_asset_id),
-                price: p.price,
-                datetime: p.time,
+            .map(|p| {
+                Ok(AssetPricePoint {
+                    asset_id: CoinGeckoAssets::try_from_str(&p.asset_id)?.to_asset_id()?,
+                    vs_asset_id: CoinGeckoAssets::try_from_str(&p.vs_asset_id)?.to_asset_id()?,
+                    price: p.price,
+                    datetime: p.time,
+                })
             })
-            .collect::<Vec<AssetPricePoint>>();
+            .collect::<anyhow::Result<Vec<AssetPricePoint>>>()?;
 
         Ok(prices)
     }
 }
 
-/// Convert a CoinGecko asset identifier to an AssetId
-fn asset_id_from_coingecko(coingecko_asset: &str) -> AssetId {
-    match coingecko_asset {
-        "ETH" => AssetId::Eth,
-        _ => AssetId::unknown(coingecko_asset),
-    }
-}
+// /// Convert a CoinGecko asset identifier to an AssetId
+// fn asset_id_from_coingecko(coingecko_asset: &str) -> AssetId {
+//     match coingecko_asset {
+//         "ETH" => AssetId::Eth,
+//         _ => AssetId::unknown(coingecko_asset),
+//     }
+// }
 
 pub mod old {
     // lazy_static::lazy_static! {
@@ -133,4 +135,28 @@ pub mod old {
 
     //     todo!()
     // }
+}
+
+pub enum CoinGeckoAssets {
+    Eth,
+    Bnb,
+    Other(String),
+}
+impl CoinGeckoAssets {
+    fn try_from_str(s: &str) -> anyhow::Result<Self> {
+        match s {
+            "ETH" => Ok(CoinGeckoAssets::Eth),
+            // "BNB" => Ok(CoinGeckoAssets::Bnb),
+            _ => Err(anyhow::anyhow!(format!("Unknown coin gecko asset: {}", s))),
+        }
+    }
+    fn to_asset_id(&self) -> anyhow::Result<AssetId> {
+        match self {
+            CoinGeckoAssets::Eth => Ok(AssetId::str("ETH")),
+            CoinGeckoAssets::Bnb => Ok(AssetId::str("BNB")),
+            CoinGeckoAssets::Other(s) => {
+                Err(anyhow::anyhow!(format!("Unknown coingecko asset: {}", s)))
+            }
+        }
+    }
 }

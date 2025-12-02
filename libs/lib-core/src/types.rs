@@ -6,7 +6,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TxEffect {
     /// The account affected by this effect (e.g. "Binance", "WalletA")
-    pub account_id: AccountId,
+    pub position_id: PositionId,
     /// The change in balance. Positive for debit (increase?), Negative for credit (decrease?)
     /// OR: In accounting, Debit is usually positive (assets increase), Credit is negative (assets decrease).
     /// The design doc says: "Outflow: Negative amount", "Inflow: Positive amount".
@@ -40,16 +40,29 @@ impl From<&str> for ProviderId {
 }
 
 /// Asset identifier - represents known and unknown assets
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum AssetId {
-    Eth,
-    Unknown(String),
-}
+// #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+// pub enum AssetId {
+//     Eth,
+//     Unknown(String),
+// }
 
+// impl AssetId {
+//     pub fn unknown(name: &str) -> Self {
+//         println!("Unknown asset: {}", name);
+//         AssetId::Unknown(name.to_string())
+//     }
+// }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct AssetId(pub String);
 impl AssetId {
-    pub fn unknown(name: &str) -> Self {
-        println!("Unknown asset: {}", name);
-        AssetId::Unknown(name.to_string())
+    pub fn str(id: &str) -> Self {
+        AssetId(id.to_string())
+    }
+}
+impl std::fmt::Display for AssetId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -94,34 +107,36 @@ impl std::hash::Hash for ExternalAssetId {
 #[derive(Debug, Clone)]
 pub struct Asset {
     pub id: AssetId,
-    pub chain_id: String,
+    // pub chain_id: String, -> Product is on a chain or custodial, not asset
     pub decimals: u8,
-    pub external_ids: HashMap<ProviderId, ExternalAssetId>,
+    pub ticker: String,
+    pub symbol: String,
+    // pub external_ids: HashMap<ProviderId, ExternalAssetId>,
 }
 
 impl Asset {
-    pub fn with_ext_id(mut self, ext_id: ExternalAssetId) -> Self {
-        self.external_ids.insert(ext_id.issuer_id(), ext_id);
-        self
-    }
+    // pub fn with_ext_id(mut self, ext_id: ExternalAssetId) -> Self {
+    //     self.external_ids.insert(ext_id.issuer_id(), ext_id);
+    //     self
+    // }
 
-    pub fn merge(&mut self, other: &Self) -> &mut Self {
-        self.external_ids.extend(other.external_ids.clone());
-        self
-    }
+    // pub fn merge(&mut self, other: &Self) -> &mut Self {
+    //     self.external_ids.extend(other.external_ids.clone());
+    //     self
+    // }
 }
 
 /// Account identifier combining provider and asset
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct AccountId {
-    pub provider: ProviderId,
-    pub asset: AssetId,
-}
-impl AccountId {
-    pub fn new(provider: ProviderId, asset: AssetId) -> Self {
-        AccountId { provider, asset }
-    }
-}
+// #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+// pub struct AccountId {
+//     pub provider: ProviderId,
+//     pub asset: AssetId,
+// }
+// impl AccountId {
+//     pub fn new(provider: ProviderId, asset: AssetId) -> Self {
+//         AccountId { provider, asset }
+//     }
+// }
 // impl From<String> for AccountId {
 //     fn from(value: String) -> Self {
 //         AccountId {
@@ -142,19 +157,50 @@ impl<S: AsRef<str>> From<S> for PositionId {
     }
 }
 
-/// Financial position representing a staked or invested amount
+/// Financial position representing an open balance
+/// A position's balance can vary over time (see PositionBalance)
+/// A user can have several positions for the same product
 #[derive(Debug, Clone)]
-pub struct Position {
+pub struct UserPosition {
     pub id: PositionId,
     pub product_id: ProductId,
+    // pub amount: u64,
+    pub start_date: Option<DateTime<Utc>>,
+    pub end_date: Option<DateTime<Utc>>,
+    // pub owner: PositionOwner,
+}
+impl UserPosition {
+    pub fn canonical_name(&self) -> String {
+        let mut name = self.product_id.0.clone();
+        if let Some(date) = self.start_date {
+            name.push_str(&format!("-{}", date.format("%Y%m%d")));
+        }
+        name
+    }
+}
+
+pub struct CounterpartyPosition {
+    pub id: PositionId,
+    pub asset_id: AssetId,
+    // pub amount: u64,
+}
+
+/// Position balance at a specific time
+pub struct PositionBalance {
+    pub position_id: PositionId,
+    pub datetime: DateTime<Utc>,
     pub amount: u64,
-    pub start_date: DateTime<Utc>,
-    pub end_date: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PositionOwner {
+    User,
+    Provider,
 }
 
 /// Collection of all positions
 pub struct AllPositions {
-    pub positions: HashMap<PositionId, Position>,
+    pub positions: HashMap<PositionId, UserPosition>,
 }
 
 /// Product identifier
@@ -169,6 +215,8 @@ impl<S: AsRef<str>> From<S> for ProductId {
 }
 
 /// Investment product offering
+/// Products are anything that can be staked or invested in
+/// When buying a product, you get a position
 #[derive(Debug, Clone)]
 pub struct Product {
     pub id: ProductId,
@@ -187,12 +235,53 @@ impl<S: AsRef<str>> From<S> for TransactionId {
     }
 }
 
-/// Data collected from a provider
+/// Items collected from a provider that needs to be inserted into DB (or matched to existing)
+/// Can be used to collect data from 1 or multiple transactions
 #[derive(Debug, Clone)]
-pub struct CollectProviderData {
-    pub provider_id: ProviderId,
+pub struct CollectTxnData {
+    // pub provider_id: ProviderId,
     pub transactions: Vec<Transaction>,
     pub assets: Vec<Asset>,
-    pub positions: Vec<Position>,
+    pub positions: Vec<UserPosition>,
     pub products: Vec<Product>,
+}
+impl CollectTxnData {
+    pub fn from_iter<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = CollectTxnData>,
+    {
+        let mut collector = CollectTxnData {
+            transactions: Vec::with_capacity(1),
+            assets: Vec::with_capacity(2),
+            positions: Vec::with_capacity(2),
+            products: Vec::with_capacity(2),
+        };
+        for data in iter {
+            collector.merge(data);
+        }
+        collector
+    }
+    pub fn try_from_iter<I, E>(iter: I) -> Result<Self, E>
+    where
+        I: Iterator<Item = Result<CollectTxnData, E>>,
+    {
+        let mut collector = CollectTxnData {
+            transactions: Vec::with_capacity(iter.size_hint().0),
+            assets: Vec::with_capacity(iter.size_hint().0 * 2),
+            positions: Vec::with_capacity(iter.size_hint().0 * 2),
+            products: Vec::with_capacity(iter.size_hint().0 * 2),
+        };
+        for data_result in iter {
+            let data = data_result?;
+            collector.merge(data);
+        }
+        Ok(collector)
+    }
+
+    pub fn merge(&mut self, other: CollectTxnData) {
+        self.transactions.extend(other.transactions);
+        self.assets.extend(other.assets);
+        self.positions.extend(other.positions);
+        self.products.extend(other.products);
+    }
 }

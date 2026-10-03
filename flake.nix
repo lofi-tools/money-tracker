@@ -4,24 +4,27 @@
   inputs.my-nix = { url = "github:nmrshll/nix-utils"; inputs.nixpkgs.follows = "nixpkgs"; inputs.fp.follows = "parts"; };
 
 
-  outputs = inputs@{ self, parts, my-nix, ... }: parts.lib.mkFlake { inherit inputs; } (top@{ lib, ... }:
+  outputs = inputs@{ self, parts, my-nix, ... }: parts.lib.mkFlake { inherit inputs; } ({ lib, ... }:
     with builtins; {
       systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" "x86_64-darwin" ];
-      imports = (attrValues inputs.my-nix.flakeModules) ++ [ ];
-      perSystem = { pkgs, system, lib, lib', self', ... }:
+      imports = lib.flatten [
+        (attrValues inputs.my-nix.flakeModules.essentials)
+        inputs.my-nix.flakeModules.rust
+      ];
+      perSystem = { pkgs, config, lib, ... }:
         let
-          l = builtins // top.lib // lib // lib';
-          bin = inputs.my-nix.bin.${system} // (mapAttrs (n: p: "${p}/bin/${n}") scripts);
+          l = builtins // lib // config.extraLib;
+          scripts = mapAttrs pkgs.writeShellScriptBin { };
           buildDeps = [
             pkgs.nodePackages_latest.pnpm
           ];
           devDeps = [
             pkgs.cargo-edit
             pkgs.watchexec
+            pkgs.cargo-nextest
           ];
 
           wd = "$(git rev-parse --show-toplevel)";
-          scripts = mapAttrs (n: s: pkgs.writeShellScriptBin n s) { };
 
           crates = {
             # new = l.customRust.buildCrate "new";
@@ -33,9 +36,9 @@
           };
         in
         {
-          packages = crates // { default = crates.new; } // scripts;
-          devShellParts.env = env;
-          devShellParts.buildInputs = buildDeps ++ devDeps ++ (attrValues scripts);
+          packages = scripts;
+          myDevShell.env = env;
+          myDevShell.buildInputs = buildDeps ++ devDeps ++ (attrValues scripts);
         };
     });
 }
@@ -54,7 +57,7 @@
 #     #   inputs.nixpkgs.follows = "nixpkgs";
 #     # };
 #    my-utils={
-#       url = "github:nmrshll/nix-utils";      
+#       url = "github:nmrshll/nix-utils";
 #       inputs.nixpkgs.follows = "nixpkgs";
 #       inputs.utils.follows = "utils";
 #       # inputs.rust-overlay.follows = "rust-overlay";
@@ -109,7 +112,7 @@
 #           devShells.default = pkgs.mkShell {
 #             buildInputs = buildDependencies ++ devDependencies ++ scripts;
 #             shellHook = ''
-#               ${binaries.configure-vscode}; 
+#               ${binaries.configure-vscode};
 #               dotenv
 #             '';
 #             inherit env;

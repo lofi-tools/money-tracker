@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TxEffect {
+pub struct TxnEffect {
     /// The account affected by this effect (e.g. "Binance", "WalletA")
     pub position_id: PositionId,
     /// The change in balance. Positive for debit (increase?), Negative for credit (decrease?)
@@ -15,15 +15,15 @@ pub struct TxEffect {
 }
 
 // inside a transaction, inputs and outputs must be balanced (sum of inputs == sum of outputs)
-pub struct TxInput(pub TxEffect); // An input withdraws from an account
-pub struct TxOutput(pub TxEffect); // An output deposits into an account
+pub struct TxInput(pub TxnEffect); // An input withdraws from an account
+pub struct TxOutput(pub TxnEffect); // An output deposits into an account
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
     /// List of effects that represent money leaving an account (debits/outflows).
-    pub inputs: Vec<TxEffect>,
+    pub inputs: Vec<TxnEffect>,
     /// List of effects that represent money entering an account (credits/inflows).
-    pub outputs: Vec<TxEffect>,
+    pub outputs: Vec<TxnEffect>,
     /// The time the transaction occurred.
     pub datetime: DateTime<Utc>,
 }
@@ -241,26 +241,29 @@ impl<S: AsRef<str>> From<S> for TransactionId {
 pub struct CollectTxnData {
     // pub provider_id: ProviderId,
     pub transactions: Vec<Transaction>,
+    // pub effects: Vec<TxnEffect>,
     pub assets: Vec<Asset>,
     pub positions: Vec<UserPosition>,
     pub products: Vec<Product>,
 }
 impl CollectTxnData {
-    pub fn from_iter<I>(iter: I) -> Self
-    where
-        I: Iterator<Item = CollectTxnData>,
-    {
-        let mut collector = CollectTxnData {
-            transactions: Vec::with_capacity(1),
-            assets: Vec::with_capacity(2),
-            positions: Vec::with_capacity(2),
-            products: Vec::with_capacity(2),
-        };
-        for data in iter {
-            collector.merge(data);
-        }
-        collector
-    }
+    // pub fn from_iter<I>(iter: I) -> Self
+    // where
+    //     I: Iterator<Item = CollectTxnData>,
+    // {
+    //     let mut collector = CollectTxnData {
+    //         transactions: Vec::with_capacity(1),
+    //         assets: Vec::with_capacity(2),
+    //         positions: Vec::with_capacity(2),
+    //         products: Vec::with_capacity(2),
+    //         effects: Vec::with_capacity(2),
+    //     };
+    //     for data in iter {
+    //         collector.merge(data);
+    //     }
+    //     collector
+    // }
+
     pub fn try_from_iter<I, E>(iter: I) -> Result<Self, E>
     where
         I: Iterator<Item = Result<CollectTxnData, E>>,
@@ -270,6 +273,7 @@ impl CollectTxnData {
             assets: Vec::with_capacity(iter.size_hint().0 * 2),
             positions: Vec::with_capacity(iter.size_hint().0 * 2),
             products: Vec::with_capacity(iter.size_hint().0 * 2),
+            // effects: Vec::with_capacity(iter.size_hint().0 * 2),
         };
         for data_result in iter {
             let data = data_result?;

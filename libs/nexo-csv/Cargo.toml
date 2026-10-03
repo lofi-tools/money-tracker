@@ -11,3 +11,5 @@ csv = "^1.3"
 chrono.workspace = true
 # errors, logs
 anyhow.workspace = true
+# own libs
+utils.workspace = true

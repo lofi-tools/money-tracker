@@ -1,8 +1,8 @@
 use crate::cli::Config;
 use lib_core::traits::IsProvider;
 use lib_core::{
-    Asset, AssetId, CollectTxnData, CounterpartyPosition, PositionId, Product, ProductId,
-    ProviderId, Transaction, TxEffect, UserPosition,
+    AssetId, CollectTxnData, CounterpartyPosition, PositionId, ProductId, ProviderId, Transaction,
+    TxnEffect, UserPosition,
 };
 use nexo_csv::{NexoCsv, NexoTx};
 use std::path::PathBuf;
@@ -23,7 +23,7 @@ impl NexoSvc {
     }
 
     pub fn fetch_transactions(&self) -> anyhow::Result<Vec<()>> {
-        let mut transactions = NexoCsv::read_all(&self.path_to_csv)?;
+        let mut transactions = NexoCsv::from_file(&self.path_to_csv)?;
         transactions.sort_by(|a, b| a.date_time_utc.cmp(&b.date_time_utc));
 
         dbg!(&transactions);
@@ -41,7 +41,7 @@ impl IsProvider for NexoSvc {
     }
 
     async fn fetch_all_txn_data(&self) -> anyhow::Result<CollectTxnData> {
-        let mut nexo_transactions = NexoCsv::read_all("nexo_transactions.csv")?;
+        let mut nexo_transactions = NexoCsv::from_file("nexo_transactions.csv")?;
         nexo_transactions.sort_by(|a, b| a.date_time_utc.cmp(&b.date_time_utc));
 
         let collect_txn_data =
@@ -69,7 +69,7 @@ fn process_txn(tx: &NexoTx) -> anyhow::Result<CollectTxnData> {
         nexo_csv::TransactionType::Interest => process_interest(tx),
         nexo_csv::TransactionType::LockTermDeposit => process_lock_term_deposit(tx),
         nexo_csv::TransactionType::UnlockTermDeposit => process_unlock_term_deposit(tx),
-        nexo_csv::TransactionType::TermInterest => process_term_interest(tx),
+        nexo_csv::TransactionType::FixedTermInterest => process_term_interest(tx),
         nexo_csv::TransactionType::TransferFromProWallet => process_transfer_from_pro_wallet(tx),
         nexo_csv::TransactionType::TransferToProWallet => process_transfer_to_pro_wallet(tx),
         nexo_csv::TransactionType::ExchangeDepositedOn => process_exchange_deposited_on(tx),
@@ -77,6 +77,18 @@ fn process_txn(tx: &NexoTx) -> anyhow::Result<CollectTxnData> {
         nexo_csv::TransactionType::WithdrawExchanged => process_withdraw_exchanged(tx),
         nexo_csv::TransactionType::ExchangeToWithdraw => process_exchange_to_withdraw(tx),
         nexo_csv::TransactionType::TopUpCrypto => process_top_up_crypto(tx),
+        nexo_csv::TransactionType::Cashback => todo!(),
+        nexo_csv::TransactionType::ExchangeCredit => todo!(),
+        nexo_csv::TransactionType::NexoCardTransactionFee => todo!(),
+        nexo_csv::TransactionType::CreditCardWithdrawalCredit => todo!(),
+        nexo_csv::TransactionType::TransferOut => todo!(),
+        nexo_csv::TransactionType::NexoCardPurchase => todo!(),
+        nexo_csv::TransactionType::CreditCardFiatExchangeToWithdraw => todo!(),
+        nexo_csv::TransactionType::Exchange => todo!(),
+        nexo_csv::TransactionType::ExchangeCashback => todo!(),
+        nexo_csv::TransactionType::Withdrawal => todo!(),
+        nexo_csv::TransactionType::ReferralBonus => todo!(),
+        nexo_csv::TransactionType::Dividend => todo!(),
     }
 }
 
@@ -107,7 +119,7 @@ fn process_interest(tx: &NexoTx) -> anyhow::Result<CollectTxnData> {
         id: PositionId::from(format!("counterparty_position:NEXO_REWARDS_{asset_id}")),
         asset_id: asset_id.clone(),
     };
-    let input_effect = TxEffect {
+    let input_effect = TxnEffect {
         amount,
         datetime: tx.date_time_utc,
         position_id: input_position.id,
@@ -125,7 +137,7 @@ fn process_interest(tx: &NexoTx) -> anyhow::Result<CollectTxnData> {
         start_date: None,
         end_date: None,
     };
-    let output_effect = TxEffect {
+    let output_effect = TxnEffect {
         amount,
         datetime: tx.date_time_utc,
         position_id: output_position.id.clone(),
@@ -142,6 +154,7 @@ fn process_interest(tx: &NexoTx) -> anyhow::Result<CollectTxnData> {
         products: vec![], // products are matched to hardcoded (unavailable via CSV / no API)
         positions: vec![output_position],
         transactions: vec![transaction],
+        // effects: vec![input_effect, output_effect],
     })
 }
 
@@ -419,73 +432,6 @@ fn process_top_up_crypto(tx: &NexoTx) -> anyhow::Result<CollectTxnData> {
 //     }
 // }
 
-#[cfg(test)]
-pub mod tests {
-    use chrono::Utc;
-    use nexo_csv::TransactionType;
-
-    use super::*;
-
-    #[test]
-    fn test_process_txn() -> anyhow::Result<()> {
-        let nexo_tx = NexoTx {
-            tx_id: "1".to_string(),
-            kind: TransactionType::Interest,
-            input_currency: "ETH".to_string(),
-            input_amount: 1.0,
-            output_currency: "ETH".to_string(),
-            output_amount: 1.0,
-            usd_equivalent: "1.0".to_string(),
-            details: "Interest".to_string(),
-            date_time_utc: Utc::now(),
-        };
-        let _data = process_txn(&nexo_tx);
-        Ok(())
-    }
-
-    // #[test]
-    // fn test_process_txn_top_up() -> anyhow::Result<()> {
-    //     let nexo_tx = NexoTx {
-    //         tx_id: "2".to_string(),
-    //         kind: TransactionType::TopUpCrypto,
-    //         input_currency: "".to_string(),
-    //         input_amount: 0.0,
-    //         output_currency: "BTC".to_string(),
-    //         output_amount: 0.5,
-    //         usd_equivalent: "20000.0".to_string(),
-    //         details: "Top Up".to_string(),
-    //         date_time_utc: Utc::now(),
-    //     };
-    //     let data = process_txn(&nexo_tx);
-    //     assert_eq!(data.assets.len(), 1);
-    //     assert_eq!(data.transaction.outputs.len(), 1);
-    //     assert_eq!(data.transaction.outputs[0].amount, 50000000); // 0.5 BTC * 10^8
-    //     Ok(())
-    // }
-
-    // #[test]
-    // fn test_process_txn_exchange() -> anyhow::Result<()> {
-    //     let nexo_tx = NexoTx {
-    //         tx_id: "3".to_string(),
-    //         kind: TransactionType::ExchangeDepositedOn,
-    //         input_currency: "USDT".to_string(),
-    //         input_amount: 1000.0,
-    //         output_currency: "ETH".to_string(),
-    //         output_amount: 0.5,
-    //         usd_equivalent: "1000.0".to_string(),
-    //         details: "Exchange".to_string(),
-    //         date_time_utc: Utc::now(),
-    //     };
-    //     let data = process_txn(&nexo_tx);
-    //     assert_eq!(data.assets.len(), 2);
-    //     assert_eq!(data.transaction.inputs.len(), 1);
-    //     assert_eq!(data.transaction.outputs.len(), 1);
-    //     assert_eq!(data.transaction.inputs[0].amount, 1000000000); // 1000 USDT * 10^6
-    //     assert_eq!(data.transaction.outputs[0].amount, 500000000000000000); // 0.5 ETH * 10^18
-    //     Ok(())
-    // }
-}
-
 pub enum NexoAssets {
     Eth,
     Nexo,
@@ -630,4 +576,75 @@ impl NexoLockDuration {
             NexoLockDuration::_12mth => "12mth",
         }
     }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    #[test]
+    fn test_process_interest() -> anyhow::Result<()> {
+        // let nexo_tx = NexoTx {
+        //     tx_id: "1".to_string(),
+        //     kind: TransactionType::Interest,
+        //     input_currency: "ETH".to_string(),
+        //     input_amount: 1.0,
+        //     output_currency: "ETH".to_string(),
+        //     output_amount: 1.0,
+        //     usd_equivalent: "1.0".to_string(),
+        //     details: "Interest".to_string(),
+        //     date_time_utc: Utc::now(),
+        // };
+        let nexo_tx = NexoTx::try_from_csv_row(
+            r#"NXT7YGjfSsQYl1XIWtcxdUcjx,Interest,NEXO,7.26938619,NEXO,7.26938619,$7.31,-,-,"approved / NEXO Interest Earned",2025-11-27 06:00:00"#,
+        )?;
+        let data = process_txn(&nexo_tx)?;
+        assert_eq!(data.assets.len(), 1);
+
+        // assert_eq!(data.transaction.outputs[0].amount, 1000000000); // 1000 USDT * 10^6
+
+        Ok(())
+    }
+
+    // #[test]
+    // fn test_process_txn_top_up() -> anyhow::Result<()> {
+    //     let nexo_tx = NexoTx {
+    //         tx_id: "2".to_string(),
+    //         kind: TransactionType::TopUpCrypto,
+    //         input_currency: "".to_string(),
+    //         input_amount: 0.0,
+    //         output_currency: "BTC".to_string(),
+    //         output_amount: 0.5,
+    //         usd_equivalent: "20000.0".to_string(),
+    //         details: "Top Up".to_string(),
+    //         date_time_utc: Utc::now(),
+    //     };
+    //     let data = process_txn(&nexo_tx);
+    //     assert_eq!(data.assets.len(), 1);
+    //     assert_eq!(data.transaction.outputs.len(), 1);
+    //     assert_eq!(data.transaction.outputs[0].amount, 50000000); // 0.5 BTC * 10^8
+    //     Ok(())
+    // }
+
+    // #[test]
+    // fn test_process_txn_exchange() -> anyhow::Result<()> {
+    //     let nexo_tx = NexoTx {
+    //         tx_id: "3".to_string(),
+    //         kind: TransactionType::ExchangeDepositedOn,
+    //         input_currency: "USDT".to_string(),
+    //         input_amount: 1000.0,
+    //         output_currency: "ETH".to_string(),
+    //         output_amount: 0.5,
+    //         usd_equivalent: "1000.0".to_string(),
+    //         details: "Exchange".to_string(),
+    //         date_time_utc: Utc::now(),
+    //     };
+    //     let data = process_txn(&nexo_tx);
+    //     assert_eq!(data.assets.len(), 2);
+    //     assert_eq!(data.transaction.inputs.len(), 1);
+    //     assert_eq!(data.transaction.outputs.len(), 1);
+    //     assert_eq!(data.transaction.inputs[0].amount, 1000000000); // 1000 USDT * 10^6
+    //     assert_eq!(data.transaction.outputs[0].amount, 500000000000000000); // 0.5 ETH * 10^18
+    //     Ok(())
+    // }
 }

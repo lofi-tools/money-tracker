@@ -141,3 +141,49 @@ pub mod api_client_utils {
     //     pub client: reqwest::Client,
     // }
 }
+
+pub mod string_utils {
+    pub fn unindent(s: &str) -> String {
+        s.lines()
+            .map(|line| line.trim_start())
+            .collect::<Vec<&str>>()
+            .join("\n")
+    }
+}
+
+pub mod time_utils {
+    use chrono::{DateTime, NaiveDateTime, Utc};
+    use serde::{Deserialize, Deserializer, de};
+
+    const DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
+
+    pub fn de_datetime<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let naive_dt = NaiveDateTime::parse_from_str(&s, DATE_FORMAT).map_err(de::Error::custom)?;
+        let dt = DateTime::<Utc>::from_naive_utc_and_offset(naive_dt, Utc);
+        Ok(dt.to_utc())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use serde::de::value::StringDeserializer;
+
+        #[test]
+        fn test_serde_datetime() -> Result<(), String> {
+            let dt = Utc::now();
+            let _dt_str = dt.format(DATE_FORMAT).to_string();
+
+            let s = "2024-04-19 05:00:00";
+            let _dt = de_datetime(StringDeserializer::<serde::de::value::Error>::new(
+                s.to_string(),
+            ))
+            .map_err(|e| e.to_string())?;
+
+            Ok(())
+        }
+    }
+}

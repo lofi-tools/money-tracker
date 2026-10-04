@@ -26,7 +26,7 @@ pub struct Config {
     pub data_dir: PathBuf,
 }
 impl Config {
-    pub fn new(args: Args) -> Self {
+    pub fn from_env(args: Args) -> Self {
         Self {
             cache_dir: args
                 .cache_dir
@@ -110,26 +110,41 @@ mod tests {
     #[test]
     fn test_config_no_args_no_env() {
         let _guard = ENV_MUTEX.lock().unwrap(); // test reads env
-
-        let args = Args::parse_from(vec![APP_NAME]);
-        let config = Config::new(args);
-        assert_eq!(config.cache_dir, STD_CACHE_DIR.join(APP_NAME));
-        assert_eq!(config.data_dir, STD_DATA_DIR.join(APP_NAME));
+        temp_env::with_vars(
+            vec![
+                ("APP_CACHE_DIR", None::<&str>),
+                ("APP_DATA_DIR", None::<&str>),
+            ],
+            || {
+                let args = Args::parse_from(vec![APP_NAME]);
+                let config = Config::from_env(args);
+                assert_eq!(config.cache_dir, STD_CACHE_DIR.join(APP_NAME));
+                assert_eq!(config.data_dir, STD_DATA_DIR.join(APP_NAME));
+            },
+        );
     }
 
     #[test]
     fn test_config_override_cli_args() {
         let _guard = ENV_MUTEX.lock().unwrap(); // test reads env
+                                                // Clear env so fallback assertions don't see the developer shell's values
+        temp_env::with_vars(
+            vec![
+                ("APP_CACHE_DIR", None::<&str>),
+                ("APP_DATA_DIR", None::<&str>),
+            ],
+            || {
+                let args = Args::parse_from(vec![APP_NAME, "--cache-dir", "/tmp/cli_cache"]);
+                let config = Config::from_env(args);
+                assert_eq!(config.cache_dir, PathBuf::from("/tmp/cli_cache"));
+                assert_eq!(config.data_dir, STD_DATA_DIR.join(APP_NAME));
 
-        let args = Args::parse_from(vec![APP_NAME, "--cache-dir", "/tmp/cli_cache"]);
-        let config = Config::new(args);
-        assert_eq!(config.cache_dir, PathBuf::from("/tmp/cli_cache"));
-        assert_eq!(config.data_dir, STD_DATA_DIR.join(APP_NAME));
-
-        let args = Args::parse_from(vec![APP_NAME, "--data-dir", "/tmp/cli_data"]);
-        let config = Config::new(args);
-        assert_eq!(config.cache_dir, STD_CACHE_DIR.join(APP_NAME));
-        assert_eq!(config.data_dir, PathBuf::from("/tmp/cli_data"));
+                let args = Args::parse_from(vec![APP_NAME, "--data-dir", "/tmp/cli_data"]);
+                let config = Config::from_env(args);
+                assert_eq!(config.cache_dir, STD_CACHE_DIR.join(APP_NAME));
+                assert_eq!(config.data_dir, PathBuf::from("/tmp/cli_data"));
+            },
+        );
     }
 
     #[test]
@@ -154,7 +169,7 @@ mod tests {
                 assert_eq!(args.cache_dir, Some(PathBuf::from("/tmp/cli_cache")));
                 assert_eq!(args.data_dir, Some(PathBuf::from("/tmp/cli_data")));
 
-                let config = Config::new(args);
+                let config = Config::from_env(args);
                 assert_eq!(config.cache_dir, PathBuf::from("/tmp/cli_cache"));
                 assert_eq!(config.data_dir, PathBuf::from("/tmp/cli_data"));
             },

@@ -53,7 +53,7 @@ const DATA_DIR: LazyCell<PathBuf> = LazyCell::new(|| {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // dotenvy::dotenv_override().ok();
-    let config = Config::new(Args::parse());
+    let config = Config::from_env(Args::parse());
     // dbg!(args);
     std::process::exit(0);
 

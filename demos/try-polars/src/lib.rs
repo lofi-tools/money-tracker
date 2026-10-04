@@ -1,16 +1,16 @@
 use polars::{frame::row::Row, prelude::*};
 
 pub trait ToRow {
-    fn to_row(&self) -> Row;
+    fn to_row(&self) -> Row<'_>;
     fn schema() -> Schema;
 }
 
 pub trait VecExt {
-    fn to_rows(&self) -> Vec<Row>;
+    fn to_rows(&self) -> Vec<Row<'_>>;
 }
 
 impl<T: ToRow> VecExt for Vec<T> {
-    fn to_rows(&self) -> Vec<Row> {
+    fn to_rows(&self) -> Vec<Row<'_>> {
         self.iter().map(|t| t.to_row().clone()).collect()
     }
 }
@@ -23,7 +23,7 @@ pub struct Employee {
 }
 
 impl ToRow for Employee {
-    fn to_row(&self) -> Row {
+    fn to_row(&self) -> Row<'_> {
         Row::new(vec![
             AnyValue::String(&self.name),
             AnyValue::UInt32(self.age),
@@ -59,8 +59,7 @@ pub fn ext_test_polars() -> anyhow::Result<()> {
         },
     ];
 
-    let df =
-        DataFrame::from_rows_iter_and_schema(employees.to_rows().iter(), &Employee::schema())?;
+    let df = DataFrame::from_rows_iter_and_schema(employees.to_rows().iter(), &Employee::schema())?;
     dbg!(df);
 
     Ok(())

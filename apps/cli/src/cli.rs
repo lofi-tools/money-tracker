@@ -1,9 +1,7 @@
 use clap::Parser;
-use std::{path::PathBuf, sync::LazyLock};
+use std::path::PathBuf;
 
 static APP_NAME: &str = "money-tracker";
-static STD_CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::cache_dir().unwrap());
-static STD_DATA_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::data_dir().unwrap());
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -19,15 +17,35 @@ pub struct Args {
     /// Data directory
     #[arg(short, long, env = "APP_DATA_DIR")]
     pub data_dir: Option<PathBuf>,
+
+    /// Nexo CSV export (defaults to .cache/nexo_transactions.csv)
+    #[arg(long)]
+    pub nexo_csv: Option<PathBuf>,
+
+    /// Extend price history back to this UTC date and print net worth (YYYY-MM-DD)
+    #[arg(long)]
+    pub historical_from: Option<String>,
+
+    /// End of historical backfill (YYYY-MM-DD; defaults to now)
+    #[arg(long)]
+    pub historical_to: Option<String>,
+
+    /// Import the CSV and query stored prices without contacting price providers
+    #[arg(long)]
+    pub offline: bool,
 }
 
 pub struct Config {
     pub cache_dir: PathBuf,
     pub data_dir: PathBuf,
+    pub nexo_csv_path: PathBuf,
 }
 impl Config {
     pub fn from_env(args: Args) -> Self {
         Self {
+            nexo_csv_path: args
+                .nexo_csv
+                .unwrap_or_else(|| PathBuf::from(".cache/nexo_transactions.csv")),
             cache_dir: args
                 .cache_dir
                 .or_else(|| dirs::cache_dir().map(|p| p.join(APP_NAME)))
@@ -52,9 +70,11 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
+    use std::sync::{LazyLock, Mutex};
 
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
+    static STD_CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::cache_dir().unwrap());
+    static STD_DATA_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::data_dir().unwrap());
 
     #[test]
     fn test_env_var_parsing() {
@@ -127,7 +147,7 @@ mod tests {
     #[test]
     fn test_config_override_cli_args() {
         let _guard = ENV_MUTEX.lock().unwrap(); // test reads env
-                                                // Clear env so fallback assertions don't see the developer shell's values
+        // Clear env so fallback assertions don't see the developer shell's values
         temp_env::with_vars(
             vec![
                 ("APP_CACHE_DIR", None::<&str>),
@@ -174,5 +194,26 @@ mod tests {
                 assert_eq!(config.data_dir, PathBuf::from("/tmp/cli_data"));
             },
         );
+    }
+
+    #[test]
+    fn nexo_csv_defaults_to_repo_cache_independent_of_data_dir() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let args = Args::parse_from([APP_NAME, "--data-dir", ".cache/data"]);
+        let config = Config::from_env(args);
+        assert_eq!(
+            config.nexo_csv_path,
+            PathBuf::from(".cache/nexo_transactions.csv")
+        );
+
+        let args = Args::parse_from([
+            APP_NAME,
+            "--data-dir",
+            ".cache/data",
+            "--nexo-csv",
+            "exports/nexo.csv",
+        ]);
+        let config = Config::from_env(args);
+        assert_eq!(config.nexo_csv_path, PathBuf::from("exports/nexo.csv"));
     }
 }

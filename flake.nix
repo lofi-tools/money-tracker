@@ -14,9 +14,8 @@
       perSystem = { pkgs, config, lib, ... }:
         let
           l = builtins // lib // config.extraLib;
-          scripts = mapAttrs pkgs.writeShellScriptBin { };
           buildDeps = [
-            pkgs.pnpm
+            # pkgs.pnpm
           ];
           devDeps = [
             pkgs.cargo-edit
@@ -25,10 +24,13 @@
           ];
 
           wd = "$(git rev-parse --show-toplevel)";
-
-          crates = {
-            # new = l.customRust.buildCrate "new";
+          scripts = mapAttrs pkgs.writeShellScriptBin {
+            h = ''cargo run -p cli'';
           };
+
+          # crates = {
+          #   # new = l.customRust.buildCrate "new";
+          # };
 
           env = {
             RUST_LOG = "debug";

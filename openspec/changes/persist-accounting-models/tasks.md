@@ -6,6 +6,6 @@
 - [x] Implement transaction and historical price writes in `Store`
 - [x] Implement account-balance aggregation and historical price valuation queries
 - [x] Add chronological cumulative balance tests
-- [ ] Add Store tests for persistence, balance aggregation, and historical valuation
+- [x] Add Store tests for persistence, balance aggregation, and historical valuation
 - [ ] Implement account metadata persistence and retrieval
 - [ ] Verify this change by building and running tests in an environment with dependencies available

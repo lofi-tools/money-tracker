@@ -1,4 +1,5 @@
 use crate::payloads::{ListResp, StakingPositionResp};
+pub mod archive;
 use payloads::{FlexEarnPos, LockedEarnPos, StakingProduct};
 use serde::Deserialize;
 use signing::RequestSigner;

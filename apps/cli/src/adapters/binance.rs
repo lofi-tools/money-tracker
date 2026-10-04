@@ -21,6 +21,7 @@ impl BinanceSvc {
     // }
 }
 
+#[allow(dead_code)] // Retained for Binance position amount mapping.
 fn get_decimals(asset: &str) -> u8 {
     match asset {
         "ETH" | "ethereum" => 18,
@@ -30,6 +31,7 @@ fn get_decimals(asset: &str) -> u8 {
     }
 }
 
+#[allow(dead_code)] // Retained for Binance position amount mapping.
 fn to_u64(amount: f64, decimals: u8) -> u64 {
     (amount * 10f64.powi(decimals as i32)).round() as u64
 }

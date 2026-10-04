@@ -1,0 +1,15 @@
+## Implementation
+- [x] Keep CSV parsing in `nexo-csv` and Nexo ledger mapping in the adapter
+- [x] Import Nexo signed movements into DuckDB idempotently
+- [x] Fetch current and historical CoinGecko prices into DuckDB
+- [x] Query historical asset amounts and USD net worth with asset scales
+- [x] Add fixture-based final amount and synthetic valuation tests
+- [x] Run CLI test suite and document the command
+- [x] Fetch prices only for assets with owned transaction effects
+- [x] Track fetched USD price intervals and fill older, newer, and interior gaps
+- [x] Seed conservative coverage for dense legacy price observations
+- [x] Show CLI progress during import and price fetching
+- [x] Deduplicate Nexo CSVs by exact file hash committed atomically with all transactions
+- [x] Fetch older daily closes from Binance Vision, cache traded pairs by month, and derive USD values using USDT as a proxy
+- [x] Keep CoinGecko requests inside its public historical window
+- [x] Fill missing crypto, fiat, and early NEXO months from public fallbacks or the local export

@@ -1,30 +1,82 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
+use snafu::{ResultExt, Snafu};
+
+#[derive(Debug, Snafu)]
+pub enum NexoCsvError {
+    #[snafu(display("cannot open Nexo CSV {}", path.display()))]
+    Open {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[snafu(display("cannot read Nexo CSV headers"))]
+    Headers { source: csv::Error },
+    #[snafu(display("cannot read Nexo CSV row {row}"))]
+    Row { row: usize, source: csv::Error },
+    #[snafu(display("cannot parse Nexo CSV row {row}"))]
+    ParseRow { row: usize, source: csv::Error },
+    #[snafu(display("Nexo CSV row is missing"))]
+    MissingRow,
+}
 
 pub struct NexoCsv {}
-impl NexoCsv {
-    pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Vec<NexoTx>> {
-        let file_reader = std::fs::File::open(path)?;
-        let nexo_txs = Self::from_reader(file_reader)?;
-        Ok(nexo_txs)
+
+/// Exact bytes of a Nexo export and their SHA-256 hash. The bytes are parsed
+/// only after the caller checks whether the hash was imported already.
+pub struct NexoCsvFile {
+    bytes: Vec<u8>,
+    pub sha256_hex: String,
+}
+
+impl NexoCsvFile {
+    pub fn read(path: impl AsRef<Path>) -> Result<Self, NexoCsvError> {
+        let path = path.as_ref();
+        let bytes = std::fs::read(path).context(OpenSnafu {
+            path: path.to_path_buf(),
+        })?;
+        let sha256_hex = sha256_hex(&bytes);
+        Ok(Self { bytes, sha256_hex })
     }
-    pub fn from_reader<R: std::io::Read>(reader: R) -> anyhow::Result<Vec<NexoTx>> {
+
+    pub fn parse(&self) -> Result<Vec<NexoTx>, NexoCsvError> {
+        NexoCsv::from_reader(self.bytes.as_slice())
+    }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    ring::digest::digest(&ring::digest::SHA256, bytes)
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+impl NexoCsv {
+    pub fn from_file(path: impl AsRef<Path>) -> Result<Vec<NexoTx>, NexoCsvError> {
+        let path = path.as_ref();
+        let file_reader = std::fs::File::open(path).context(OpenSnafu {
+            path: path.to_path_buf(),
+        })?;
+        Self::from_reader(file_reader)
+    }
+    pub fn from_reader<R: std::io::Read>(reader: R) -> Result<Vec<NexoTx>, NexoCsvError> {
         let mut rdr = csv::Reader::from_reader(reader);
 
-        let headers = rdr.headers()?.clone();
+        let headers = rdr.headers().context(HeadersSnafu)?.clone();
 
         let nexo_txs = rdr
             .records()
-            .map(|row| {
-                let row = row?;
+            .enumerate()
+            .map(|(index, row)| {
+                let row = row.context(RowSnafu { row: index + 2 })?;
                 let record: NexoTx = row
-                    .deserialize(Some(&headers.to_owned()))
-                    .map_err(|e| anyhow::Error::new(e).context(format!("{:#?}", row)))?;
+                    .deserialize(Some(&headers))
+                    .context(ParseRowSnafu { row: index + 2 })?;
                 Ok(record)
             })
-            .collect::<anyhow::Result<Vec<NexoTx>>>()?;
+            .collect::<Result<Vec<NexoTx>, NexoCsvError>>()?;
 
         Ok(nexo_txs)
     }
@@ -55,7 +107,7 @@ pub struct NexoTx {
     pub date_time_utc: DateTime<Utc>,
 }
 impl NexoTx {
-    pub fn try_from_csv_row(csv_row: &str) -> anyhow::Result<Self> {
+    pub fn try_from_csv_row(csv_row: &str) -> Result<Self, NexoCsvError> {
         const HEADERS: &str = "Transaction,Type,Input Currency,Input Amount,Output Currency,Output Amount,USD Equivalent,Fee,Fee Currency,Details,Date / Time (UTC)";
         let with_headers = format!("{}\n{}", HEADERS, csv_row);
         let mut rdr = csv::ReaderBuilder::new()
@@ -65,10 +117,8 @@ impl NexoTx {
         let record: NexoTx = rdr
             .deserialize()
             .next()
-            .ok_or_else(|| anyhow::anyhow!("No record found in CSV string"))?
-            .map_err(|e| {
-                anyhow::Error::new(e).context(format!("Failed to deserialize row: {}", csv_row))
-            })?;
+            .ok_or(NexoCsvError::MissingRow)?
+            .context(ParseRowSnafu { row: 2usize })?;
 
         Ok(record)
     }
@@ -135,6 +185,15 @@ pub mod tests {
     });
 
     #[test]
+    fn hashes_exact_bytes_with_sha256() {
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_ne!(sha256_hex(b"abc"), sha256_hex(b"abc\n"));
+    }
+
+    #[test]
     #[ignore = "Needs real data in .cache"]
     fn test_read_file() -> anyhow::Result<()> {
         let nexo_txs = NexoCsv::from_file(&*NEXO_CSV_PATH)?;
@@ -184,5 +243,21 @@ pub mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn reports_bad_row_without_losing_its_line_number() {
+        let error = NexoTx::try_from_csv_row(
+            "id,Interest,ETH,1,ETH,1,$1,-,-,approved / interest,not-a-date",
+        )
+        .unwrap_err();
+        assert!(matches!(error, NexoCsvError::ParseRow { row: 2, .. }));
+    }
+
+    #[test]
+    fn reports_missing_file_with_its_path() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("missing-nexo-test.csv");
+        let error = NexoCsv::from_file(&path).unwrap_err();
+        assert!(matches!(error, NexoCsvError::Open { path: p, .. } if p == path));
     }
 }

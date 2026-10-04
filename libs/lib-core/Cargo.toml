@@ -11,3 +11,6 @@ async-trait.workspace = true
 derive_more.workspace = true
 anyhow.workspace = true
 duckdb.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

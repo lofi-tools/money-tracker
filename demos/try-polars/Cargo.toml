@@ -1,0 +1,8 @@
+[package]
+name = "try-polars"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+polars.workspace = true
+anyhow.workspace = true

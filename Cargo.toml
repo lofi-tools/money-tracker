@@ -9,7 +9,8 @@ edition = "2024"
 resolver = "3"
 members = [
     "libs/*",
-    "bin/*"
+    "apps/*",
+    "demos/*",
 ]
 
 [workspace.dependencies]

@@ -1,8 +1,8 @@
 use crate::cli::Config;
 use lib_core::traits::IsProvider;
 use lib_core::{
-    AssetId, CollectTxnData, CounterpartyPosition, PositionId, ProductId, ProviderId, Transaction,
-    TxnEffect, UserPosition,
+    Asset, AssetId, CollectTxnData, CounterpartyPosition, PositionId, Product, ProductId,
+    ProviderId, Transaction, TxnEffect, UserPosition,
 };
 use nexo_csv::{NexoCsv, NexoTx};
 use std::path::PathBuf;
@@ -125,15 +125,15 @@ fn process_interest(tx: &NexoTx) -> anyhow::Result<CollectTxnData> {
         position_id: input_position.id,
     };
 
-    // let output_product = Product {
-    //     id: ProductId::from(format!("product:NEXO_FLEXIBLE_{asset_id}")),
-    //     asset_id,
-    //     apy: todo!(),
-    // };
     let output_product = NexoProducts::match_by_id(&format!("Nexo_{asset_id}_Flexible"))?;
+    let product = Product {
+        id: output_product.id()?,
+        asset_id: asset_id.clone(),
+        apy: output_product.apy(),
+    };
     let output_position = UserPosition {
         id: PositionId::from(format!("position:NEXO_REWARDS_{asset_id}")),
-        product_id: output_product.id()?,
+        product_id: product.id.clone(),
         start_date: None,
         end_date: None,
     };
@@ -150,8 +150,13 @@ fn process_interest(tx: &NexoTx) -> anyhow::Result<CollectTxnData> {
     };
 
     Ok(CollectTxnData {
-        assets: vec![],   // assets are matched to hardcoded (unavailable via CSV / no API)
-        products: vec![], // products are matched to hardcoded (unavailable via CSV / no API)
+        assets: vec![Asset {
+            id: asset_id,
+            decimals: get_decimals(&tx.output_currency),
+            ticker: tx.output_currency.clone(),
+            symbol: tx.output_currency.clone(),
+        }],
+        products: vec![product],
         positions: vec![output_position],
         transactions: vec![transaction],
         // effects: vec![input_effect, output_effect],
@@ -498,7 +503,7 @@ impl NexoProducts {
         match self {
             NexoProducts::EthFlexible => Ok(NexoAssets::Eth),
             NexoProducts::UsdtFlexible => Ok(NexoAssets::Usdt),
-            NexoProducts::NexoFlexible => Ok(NexoAssets::Other("NEXO".to_string())),
+            NexoProducts::NexoFlexible => Ok(NexoAssets::Nexo),
             NexoProducts::Eth1mth => Ok(NexoAssets::Eth),
             NexoProducts::Nexo3mth => Ok(NexoAssets::Other("NEXO".to_string())),
             NexoProducts::Nexo12mth => Ok(NexoAssets::Other("NEXO".to_string())),
@@ -554,8 +559,9 @@ impl NexoProducts {
     }
     fn match_by_id(id: &str) -> anyhow::Result<Self> {
         match id {
-            "ETH" => Ok(NexoProducts::EthFlexible),
-            "USDT" => Ok(NexoProducts::UsdtFlexible),
+            "ETH" | "Nexo_ETH_Flexible" => Ok(NexoProducts::EthFlexible),
+            "USDT" | "Nexo_USDT_Flexible" => Ok(NexoProducts::UsdtFlexible),
+            "NEXO" | "Nexo_NEXO_Flexible" => Ok(NexoProducts::NexoFlexible),
             _ => Err(anyhow::anyhow!(format!("Unknown nexo product: {id}"))),
         }
     }

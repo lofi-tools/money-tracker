@@ -2,7 +2,7 @@
 
 ## Database Schema
 
-We will use the following tables:
+We use the following tables:
 
 ### `accounts`
 | Column | Type | Notes |
@@ -26,7 +26,17 @@ We will use the following tables:
 | `amount` | `DECIMAL` | |
 | `asset` | `TEXT` | |
 
+### `asset_prices`
+| Column | Type | Notes |
+|---|---|---|
+| `datetime` | `TIMESTAMP` | Price observation time |
+| `asset_id` | `JSON` | Currency being priced |
+| `vs_asset_id` | `JSON` | Quote currency |
+| `price` | `DOUBLE` | Quote-currency units per asset |
+
+The implemented ledger schema stores each effect with its transaction, account, asset/currency, signed smallest-unit amount, and stable effect order. Inputs persist as negative balance changes and outputs as positive balance changes. `ASOF JOIN` valuation selects the most recent price at or before each balance timestamp.
+
 ## Architecture
-- `libs/lib-core/src/store.rs` will encapsulate all DB logic.
+- `libs/lib-core/src/storage.rs` will encapsulate all DB logic.
 - `Store` struct will hold the `duckdb::Connection`.
 - Initialization will run `CREATE TABLE IF NOT EXISTS`.

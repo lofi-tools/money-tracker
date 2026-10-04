@@ -10,4 +10,4 @@ chrono.workspace = true
 async-trait.workspace = true
 derive_more.workspace = true
 anyhow.workspace = true
-
+duckdb.workspace = true

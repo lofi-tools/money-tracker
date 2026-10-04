@@ -12,6 +12,7 @@ async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 polars.workspace = true
+ethnum.workspace = true
 chrono.workspace = true
 # crypto
 hmac-sha256.workspace = true

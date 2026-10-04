@@ -28,6 +28,46 @@ pub struct Transaction {
     pub datetime: DateTime<Utc>,
 }
 
+/// Convert a chronologically ordered transaction list to cumulative account balances.
+/// Inputs reduce the account balance and outputs increase it; values use the asset's
+/// smallest unit, as represented by `TxEffect::amount`.
+pub fn cumulative_balances(transactions: &[Transaction]) -> Vec<(DateTime<Utc>, HashMap<PositionId, i128>)> {
+    let mut ordered: Vec<&Transaction> = transactions.iter().collect();
+    ordered.sort_by_key(|tx| tx.datetime);
+    let mut balances = HashMap::<PositionId, i128>::new();
+    let mut history = Vec::with_capacity(ordered.len());
+    for tx in ordered {
+        for effect in &tx.inputs {
+            *balances.entry(effect.position_id.clone()).or_default() -= i128::from(effect.amount);
+        }
+        for effect in &tx.outputs {
+            *balances.entry(effect.position_id.clone()).or_default() += i128::from(effect.amount);
+        }
+        history.push((tx.datetime, balances.clone()));
+    }
+    history
+}
+
+#[cfg(test)]
+mod balance_tests {
+    use super::*;
+
+    #[test]
+    fn accumulates_balances_in_time_order() {
+        let position = PositionId::from("NEXO_SAVINGS_ETH");
+        let earlier = DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z").unwrap().to_utc();
+        let later = DateTime::parse_from_rfc3339("2024-01-02T00:00:00Z").unwrap().to_utc();
+        let txs = vec![
+            Transaction { datetime: later, inputs: vec![TxnEffect { position_id: position.clone(), amount: 250, datetime: later }], outputs: vec![] },
+            Transaction { datetime: earlier, inputs: vec![], outputs: vec![TxnEffect { position_id: position.clone(), amount: 1_000, datetime: earlier }] },
+        ];
+        let history = cumulative_balances(&txs);
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].1[&position], 1_000);
+        assert_eq!(history[1].1[&position], 750);
+    }
+}
+
 /// Provider identifier
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 #[serde(transparent)]
@@ -186,10 +226,11 @@ pub struct CounterpartyPosition {
 }
 
 /// Position balance at a specific time
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PositionBalance {
     pub position_id: PositionId,
     pub datetime: DateTime<Utc>,
-    pub amount: u64,
+    pub amount: i128,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

@@ -1,8 +1,11 @@
 # Tasks
 
-- [ ] Add `duckdb` dependency to `libs/lib-core/Cargo.toml` <!-- id: add-dep -->
-- [ ] Create `libs/lib-core/src/store.rs` with `Store` struct <!-- id: create-store -->
-- [ ] Implement `Store::init` to create tables <!-- id: init-db -->
-- [ ] Implement `Store::save_account` and `Store::get_accounts` <!-- id: account-ops -->
-- [ ] Implement `Store::save_transaction` (including effects) <!-- id: tx-ops -->
-- [ ] Export `Store` from `libs/lib-core/src/lib.rs` <!-- id: export-store -->
+- [x] Add DuckDB dependency to `libs/lib-core/Cargo.toml`
+- [x] Define persistent transactions, effects, and historical price tables
+- [x] Add transaction identity and currency-aware account effects to the core ledger
+- [x] Implement transaction and historical price writes in `Store`
+- [x] Implement account-balance aggregation and historical price valuation queries
+- [x] Add chronological cumulative balance tests
+- [ ] Add Store tests for persistence, balance aggregation, and historical valuation
+- [ ] Implement account metadata persistence and retrieval
+- [ ] Verify this change by building and running tests in an environment with dependencies available

@@ -39,11 +39,9 @@
           packages = scripts;
           myDevShell.env = env;
           myDevShell.buildInputs = buildDeps ++ devDeps ++ (attrValues scripts);
-          # my-nix defaults the shell to stdenvNoCC, which leaves SDKROOT
-          # pointing at the Xcode SDK while NIX_CFLAGS_COMPILE carries nix
-          # libcxx — that header mix breaks C++ builds (duckdb `bundled`).
-          # Full stdenv gives clang + libcxx + SDK from one nixpkgs instead.
-          myDevShell.overrides = lib.mkForce { };
+          # # DuckDB `bundled` compiles C++: opt into the coherent nixpkgs
+          # # toolchain explicitly (compiler + libcxx + SDK from one nixpkgs).
+          # myDevShell.toolchain = "nixpkgs";
         };
     });
 }

@@ -487,6 +487,39 @@ impl Store {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
+    /// Asset totals in exact smallest units at the specified instant, across
+    /// owned positions. No floating-point division: use this when dust
+    /// matters (e.g. proving a remainder is real, not DOUBLE noise).
+    pub fn asset_units_at(&self, datetime: DateTime<Utc>) -> anyhow::Result<Vec<(AssetId, i128)>> {
+        self.summed_units_at(datetime, true)
+    }
+
+    /// Credit-line (non-owned) asset totals in exact smallest units.
+    pub fn credit_units_at(&self, datetime: DateTime<Utc>) -> anyhow::Result<Vec<(AssetId, i128)>> {
+        self.summed_units_at(datetime, false)
+    }
+
+    fn summed_units_at(
+        &self,
+        datetime: DateTime<Utc>,
+        owned: bool,
+    ) -> anyhow::Result<Vec<(AssetId, i128)>> {
+        let mut statement = self.connection.prepare(
+            "SELECT p.asset_id, SUM(e.amount)::BIGINT \
+             FROM transaction_effects e \
+             JOIN transactions t ON t.id=e.transaction_id \
+             JOIN positions p ON p.position_id=e.position_id \
+             WHERE p.owned = ? AND t.datetime <= ? \
+             GROUP BY p.asset_id ORDER BY p.asset_id",
+        )?;
+        let rows = statement.query_map(params![owned, datetime.naive_utc()], |row| {
+            let asset_name: String = row.get(0)?;
+            let amount: i64 = row.get(1)?;
+            Ok((AssetId::str(&asset_name), i128::from(amount)))
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
     pub fn owned_asset_ids(&self) -> anyhow::Result<Vec<AssetId>> {
         let mut statement = self
             .connection

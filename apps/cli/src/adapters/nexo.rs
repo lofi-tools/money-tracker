@@ -280,11 +280,10 @@ fn units(amount: f64) -> Result<u64, NexoMapError> {
 }
 
 /// Rows that move funds within the credit-line (loan) domain rather than
-/// owned savings: loan withdrawals, card spends/fees (credit-line funded),
-/// and loan-interest accruals (negative inputs, fiatx only in practice).
-/// These are booked on `NEXO-CREDIT:{ticker}` positions (`owned = false`),
-/// so the credit-line balance over time is derived from transactions while
-/// owned balances stay clean.
+/// owned savings. Card spending is funded by the credit line and converted
+/// immediately to xUSD debt (1:1): each "Nexo Card Loan Withdrawal" appears
+/// as up to four rows for the same money (collateral/loan-fx leg, drawdown
+/// record, merchant spend, merchant-fx leg), so only the drawdown counts.
 fn is_credit_domain(row: &NexoTx) -> bool {
     use TransactionType::*;
     match row.kind {
@@ -297,6 +296,35 @@ fn is_credit_domain(row: &NexoTx) -> bool {
     }
 }
 
+/// xUSD debt accrued by one loan-domain row (drawdowns, card fees and loan
+/// interest all convert 1:1 to xUSD debt). Duplicate draw records, merchant
+/// spends of already-drawn cash and off-ledger USD annotations accrue 0.
+fn xusd_debt_accrued(row: &NexoTx) -> f64 {
+    use TransactionType::*;
+    let fiatx = ["USDX", "xUSD"];
+    match row.kind {
+        // The drawdown: collateral currency (USDX/xUSD) becomes xUSD debt.
+        // GBPX legs are merchant-fx on already-drawn loan: no new debt.
+        ExchangeCredit if fiatx.contains(&row.input_currency.as_str()) => {
+            row.input_amount.abs()
+        }
+        // Card fees are charged to the credit line.
+        NexoCardTransactionFee if fiatx.contains(&row.input_currency.as_str()) => {
+            row.input_amount.abs()
+        }
+        // Loan interest accrues as debt (negative inputs, fiatx only).
+        Interest | FixedTermInterest | Cashback | ExchangeCashback | ReferralBonus | Dividend
+        | TopUpCrypto | TransferFromProWallet => {
+            if row.input_amount < 0.0 {
+                row.output_amount
+            } else {
+                0.0
+            }
+        }
+        _ => 0.0,
+    }
+}
+
 fn convert_row(
     row: &NexoTx,
     assets: &mut BTreeMap<String, bool>,
@@ -304,19 +332,26 @@ fn convert_row(
     let credit = is_credit_domain(row);
     let mut changes: Vec<(&str, f64)> = Vec::new();
     use TransactionType::*;
-    match row.kind {
-        Interest | FixedTermInterest | Cashback | ExchangeCashback | ReferralBonus | Dividend
-        | TopUpCrypto | TransferFromProWallet => {
-            let amount = if row.output_amount == 0.0 {
-                row.input_amount
-            } else if row.input_amount < 0.0 {
-                // Loan interest charged on the credit line: grows debt.
-                -row.output_amount
-            } else {
-                row.output_amount
-            };
-            changes.push((&row.output_currency, amount));
+    if credit {
+        // Credit-line domain: only the xUSD debt accrual counts. Duplicate
+        // draw records, spends of drawn cash and merchant-fx legs accrue 0.
+        let debt = xusd_debt_accrued(row);
+        if debt != 0.0 {
+            changes.push(("xUSD", debt));
         }
+    } else {
+        match row.kind {
+            Interest | FixedTermInterest | Cashback | ExchangeCashback | ReferralBonus | Dividend
+            | TopUpCrypto | TransferFromProWallet => {
+                // Negative inputs are loan-domain (see is_credit_domain) and
+                // never reach this savings branch.
+                let amount = if row.output_amount == 0.0 {
+                    row.input_amount
+                } else {
+                    row.output_amount
+                };
+                changes.push((&row.output_currency, amount));
+            }
         DepositToExchange => changes.push((&row.input_currency, row.input_amount)),
         Exchange
         | ExchangeDepositedOn
@@ -347,6 +382,7 @@ fn convert_row(
         LockTermDeposit
         | UnlockTermDeposit
         | TransferOut => {}
+        }
     }
 
     let mut transaction = Transaction {
@@ -502,6 +538,14 @@ mod tests {
         for (asset, amount) in &amounts {
             println!("  {}: {amount}", asset.0);
         }
+        println!("exact owned units (1e-8):");
+        for (asset, units) in store.asset_units_at(end)? {
+            println!("  {}: {units}", asset.0);
+        }
+        println!("exact credit units (1e-8):");
+        for (asset, units) in store.credit_units_at(end)? {
+            println!("  {}: {units}", asset.0);
+        }
         let latest = |ticker: &str| {
             amounts
                 .iter()
@@ -532,29 +576,74 @@ mod tests {
                 latest(ticker)
             );
         }
-        // Credit-line wallet derived from the same transactions: loan
-        // withdrawals, card spends and loan interest accrue as debt.
-        // USDX: 3x -1037.74 loan legs, -0.71 fees, -24.05 loan interest.
-        let credit: BTreeMap<String, f64> = store
-            .credit_amounts_at(end)?
+        // Exact integer-unit expectations (1e-8). Integer sums prove what
+        // is dust and what is real: USDC 45 units is float-division noise,
+        // while GBP 7219002 units (£0.07219002) is a genuine remainder from
+        // the 2023-11-10 convert-and-withdraw (GBP 990.71 -> £990.78219002,
+        // withdrew £990.71). No arithmetic makes it zero.
+        let owned_units: BTreeMap<String, i128> = store
+            .asset_units_at(end)?
             .into_iter()
             .map(|(asset, n)| (asset.0, n))
             .collect();
-        println!("credit-line balances at {end}:");
-        for (asset, amount) in &credit {
-            println!("  {asset}: {amount}");
+        let expected_units: BTreeMap<String, i128> = [
+            ("BNB", 3737181767),
+            ("BTC", 0),
+            ("DOT", 224774400873),
+            ("ETH", 21410824548),
+            ("ETHW", 0),
+            ("EUR", 0),
+            ("EURX", 8377600000000),
+            ("GBP", 7219002),
+            ("GBPX", 1776300000000),
+            ("NEAR", 954024127999),
+            ("NEXO", 27187305093806),
+            ("POL", 923072400000),
+            ("USDC", 45),
+            ("USDT", 452178144),
+            ("USDX", 156000000),
+        ]
+        .into_iter()
+        .map(|(ticker, units)| (ticker.to_string(), units))
+        .collect();
+        assert_eq!(owned_units, expected_units);
+        // Credit line: every card spend was converted immediately to xUSD
+        // debt (1:1). Derived independently from the rows: drawdowns
+        // (USDX/xUSD loan inputs) + card fees = principal 1357.92,
+        // loan-interest outputs = 83.64, total draft 1441.56.
+        let (mut principal, mut loan_interest) = (0.0, 0.0);
+        for row in &rows {
+            use TransactionType::*;
+            let fiatx = ["USDX", "xUSD"];
+            match row.kind {
+                ExchangeCredit if fiatx.contains(&row.input_currency.as_str()) => {
+                    principal += row.input_amount.abs();
+                }
+                NexoCardTransactionFee if fiatx.contains(&row.input_currency.as_str()) => {
+                    principal += row.input_amount.abs();
+                }
+                Interest | FixedTermInterest | Cashback | ExchangeCashback | ReferralBonus
+                | Dividend | TopUpCrypto | TransferFromProWallet
+                    if row.input_amount < 0.0 =>
+                {
+                    loan_interest += row.output_amount;
+                }
+                _ => {}
+            }
         }
-        let credit_of = |ticker: &str| credit.get(ticker).copied().unwrap_or(0.0);
-        assert!(
-            (credit_of("USDX") - -3137.98).abs() < 1e-2,
-            "credit USDX: expected -3137.98, got {}",
-            credit_of("USDX")
-        );
-        assert!(
-            (credit_of("GBP") - 1006.86).abs() < 1e-2,
-            "credit GBP: expected 1006.86, got {}",
-            credit_of("GBP")
-        );
+        assert!((principal - 1357.92).abs() < 1e-6, "principal {principal}");
+        assert!((loan_interest - 83.64).abs() < 1e-6, "interest {loan_interest}");
+        let credit_units: BTreeMap<String, i128> = store
+            .credit_units_at(end)?
+            .into_iter()
+            .map(|(asset, n)| (asset.0, n))
+            .collect();
+        let expected_credit: BTreeMap<String, i128> =
+            [("xUSD", 144156000000)]
+                .into_iter()
+                .map(|(ticker, units)| (ticker.to_string(), units))
+                .collect();
+        assert_eq!(credit_units, expected_credit);
         Ok(())
     }
 

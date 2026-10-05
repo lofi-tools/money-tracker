@@ -463,6 +463,30 @@ impl Store {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
+    /// Credit-line (non-owned) asset totals in human units at the specified
+    /// instant. The Nexo adapter books loan-domain rows (card loan
+    /// withdrawals, card spends, loan interest) on non-owned `NEXO-CREDIT:*`
+    /// positions, so this derives the credit-line balance over time from the
+    /// same transaction sums. Negative means net borrowed/spent.
+    pub fn credit_amounts_at(&self, datetime: DateTime<Utc>) -> anyhow::Result<Vec<(AssetId, f64)>> {
+        let mut statement = self.connection.prepare(
+            "SELECT p.asset_id, SUM(e.amount)::DOUBLE / POWER(10, s.decimals) \
+             FROM transaction_effects e \
+             JOIN transactions t ON t.id=e.transaction_id \
+             JOIN positions p ON p.position_id=e.position_id \
+             JOIN asset_scales s ON s.asset_id=p.asset_id \
+             WHERE NOT p.owned AND t.datetime <= ? \
+             GROUP BY p.asset_id, s.decimals ORDER BY p.asset_id",
+        )?;
+        let rows = statement.query_map([datetime.naive_utc()], |row| {
+            let asset_name: String = row.get(0)?;
+            let amount: f64 = row.get(1)?;
+            let asset_id = AssetId::str(&asset_name);
+            Ok((asset_id, amount))
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
     pub fn owned_asset_ids(&self) -> anyhow::Result<Vec<AssetId>> {
         let mut statement = self
             .connection

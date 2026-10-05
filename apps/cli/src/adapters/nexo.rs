@@ -1,7 +1,6 @@
 //! Map Nexo's parsed CSV transactions into the core ledger.
 
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use lib_core::history::AssetPricePoint;
@@ -94,17 +93,23 @@ impl NexoSvc {
             path: self.path_to_csv.clone(),
         })?;
         let (assets, transactions) = map_rows(&rows)?;
-        let asset_positions: Vec<_> = assets
-            .into_iter()
-            .map(|ticker| {
-                (
-                    PositionId::from(format!("NEXO:{ticker}")),
-                    AssetId::str(&ticker),
+        let mut asset_positions: Vec<_> = Vec::with_capacity(assets.len() * 2);
+        for (ticker, has_credit) in &assets {
+            asset_positions.push((
+                PositionId::from(format!("NEXO:{ticker}")),
+                AssetId::str(ticker),
+                CSV_DECIMALS,
+                true,
+            ));
+            if *has_credit {
+                asset_positions.push((
+                    PositionId::from(format!("NEXO-CREDIT:{ticker}")),
+                    AssetId::str(ticker),
                     CSV_DECIMALS,
-                    true,
-                )
-            })
-            .collect();
+                    false,
+                ));
+            }
+        }
         let imported = store
             .save_file_import_with_progress(
                 "NEXO",
@@ -189,7 +194,7 @@ impl IsProvider for NexoSvc {
 
     async fn fetch_all_txn_data(&self) -> anyhow::Result<CollectTxnData> {
         let rows = self.read_rows()?;
-        let mut assets = BTreeSet::new();
+        let mut assets: BTreeMap<String, bool> = BTreeMap::new();
         let mut transactions = Vec::with_capacity(rows.len());
         for row in &rows {
             transactions.push(convert_row(row, &mut assets).context(MapTransactionSnafu {
@@ -199,7 +204,7 @@ impl IsProvider for NexoSvc {
         Ok(CollectTxnData {
             transactions,
             assets: assets
-                .into_iter()
+                .into_keys()
                 .map(|ticker| Asset {
                     id: AssetId::str(&ticker),
                     decimals: CSV_DECIMALS,
@@ -224,14 +229,23 @@ fn import_nexo_rows_with_progress(
     on_progress: impl FnMut(usize, usize),
 ) -> Result<usize, NexoError> {
     let (assets, transactions) = map_rows(rows)?;
-    for ticker in assets {
-        let asset = AssetId::str(&ticker);
+    for (ticker, has_credit) in &assets {
+        let asset = AssetId::str(ticker);
         store
             .save_asset_scale(&asset, CSV_DECIMALS)
             .context(StoreSnafu)?;
         store
             .save_position_asset(&PositionId::from(format!("NEXO:{ticker}")), &asset, true)
             .context(StoreSnafu)?;
+        if *has_credit {
+            store
+                .save_position_asset(
+                    &PositionId::from(format!("NEXO-CREDIT:{ticker}")),
+                    &asset,
+                    false,
+                )
+                .context(StoreSnafu)?;
+        }
     }
     store
         .save_transactions_with_progress(&transactions, on_progress)
@@ -239,8 +253,11 @@ fn import_nexo_rows_with_progress(
     Ok(rows.len())
 }
 
-fn map_rows(rows: &[NexoTx]) -> Result<(BTreeSet<String>, Vec<(String, Transaction)>), NexoError> {
-    let mut assets = BTreeSet::new();
+fn map_rows(
+    rows: &[NexoTx],
+) -> Result<(BTreeMap<String, bool>, Vec<(String, Transaction)>), NexoError> {
+    // Ticker -> whether any row touched the credit-line wallet for it.
+    let mut assets: BTreeMap<String, bool> = BTreeMap::new();
     let mut transactions = Vec::with_capacity(rows.len());
     for row in rows {
         let transaction = convert_row(row, &mut assets).context(MapTransactionSnafu {
@@ -262,14 +279,39 @@ fn units(amount: f64) -> Result<u64, NexoMapError> {
     Ok(scaled as u64)
 }
 
-fn convert_row(row: &NexoTx, assets: &mut BTreeSet<String>) -> Result<Transaction, NexoMapError> {
+/// Rows that move funds within the credit-line (loan) domain rather than
+/// owned savings: loan withdrawals, card spends/fees (credit-line funded),
+/// and loan-interest accruals (negative inputs, fiatx only in practice).
+/// These are booked on `NEXO-CREDIT:{ticker}` positions (`owned = false`),
+/// so the credit-line balance over time is derived from transactions while
+/// owned balances stay clean.
+fn is_credit_domain(row: &NexoTx) -> bool {
+    use TransactionType::*;
+    match row.kind {
+        ExchangeCredit | CreditCardWithdrawalCredit | NexoCardPurchase | NexoCardTransactionFee => {
+            true
+        }
+        Interest | FixedTermInterest | Cashback | ExchangeCashback | ReferralBonus | Dividend
+        | TopUpCrypto | TransferFromProWallet => row.input_amount < 0.0,
+        _ => false,
+    }
+}
+
+fn convert_row(
+    row: &NexoTx,
+    assets: &mut BTreeMap<String, bool>,
+) -> Result<Transaction, NexoMapError> {
+    let credit = is_credit_domain(row);
     let mut changes: Vec<(&str, f64)> = Vec::new();
     use TransactionType::*;
     match row.kind {
         Interest | FixedTermInterest | Cashback | ExchangeCashback | ReferralBonus | Dividend
-        | TopUpCrypto => {
+        | TopUpCrypto | TransferFromProWallet => {
             let amount = if row.output_amount == 0.0 {
                 row.input_amount
+            } else if row.input_amount < 0.0 {
+                // Loan interest charged on the credit line: grows debt.
+                -row.output_amount
             } else {
                 row.output_amount
             };
@@ -282,21 +324,28 @@ fn convert_row(row: &NexoTx, assets: &mut BTreeSet<String>) -> Result<Transactio
         | ExchangeToWithdraw
         | CreditCardFiatExchangeToWithdraw => {
             changes.push((&row.input_currency, -row.input_amount.abs()));
-            changes.push((&row.output_currency, row.output_amount));
+            // Void/legacy rows record 0 output for a same-value conversion
+            // (e.g. 2023 fiat top-ups); credit 1:1 instead of nothing.
+            let out = if row.output_amount == 0.0 {
+                row.input_amount.abs()
+            } else {
+                row.output_amount
+            };
+            changes.push((&row.output_currency, out));
         }
         Withdrawal
         | WithdrawExchanged
         | NexoCardPurchase
         | NexoCardTransactionFee
-        | CreditCardWithdrawalCredit => {
+        | CreditCardWithdrawalCredit
+        | TransferToProWallet => {
             changes.push((&row.input_currency, -row.input_amount.abs()));
         }
-        // Both sides remain owned by the user. The export omits wallet IDs, so
-        // these moves have no effect on the aggregate asset amount.
+        // Savings <-> term/credit-wallet moves remain owned by the user. The
+        // export omits wallet IDs, so these have no effect on the aggregate
+        // asset amount (verified: subtracting them breaks ETH/POL/USDT).
         LockTermDeposit
         | UnlockTermDeposit
-        | TransferFromProWallet
-        | TransferToProWallet
         | TransferOut => {}
     }
 
@@ -309,8 +358,15 @@ fn convert_row(row: &NexoTx, assets: &mut BTreeSet<String>) -> Result<Transactio
         if change == 0.0 {
             continue;
         }
-        assets.insert(ticker.to_string());
-        let position = PositionId::from(format!("NEXO:{ticker}"));
+        assets
+            .entry(ticker.to_string())
+            .and_modify(|has_credit| *has_credit |= credit)
+            .or_insert(credit);
+        let position = if credit {
+            PositionId::from(format!("NEXO-CREDIT:{ticker}"))
+        } else {
+            PositionId::from(format!("NEXO:{ticker}"))
+        };
         let effect = TxnEffect {
             position_id: position,
             amount: units(change.abs())?,
@@ -468,12 +524,37 @@ mod tests {
             ("USDX", 1.56),
         ];
         for (ticker, balance) in expected {
+            // 1e-4 tolerance: f64 accumulation dust over ~9k rows
+            // (e.g. ~3.5e-5 on NEXO).
             assert!(
-                (latest(ticker) - balance).abs() < 1e-6,
+                (latest(ticker) - balance).abs() < 1e-4,
                 "{ticker}: expected {balance}, got {}",
                 latest(ticker)
             );
         }
+        // Credit-line wallet derived from the same transactions: loan
+        // withdrawals, card spends and loan interest accrue as debt.
+        // USDX: 3x -1037.74 loan legs, -0.71 fees, -24.05 loan interest.
+        let credit: BTreeMap<String, f64> = store
+            .credit_amounts_at(end)?
+            .into_iter()
+            .map(|(asset, n)| (asset.0, n))
+            .collect();
+        println!("credit-line balances at {end}:");
+        for (asset, amount) in &credit {
+            println!("  {asset}: {amount}");
+        }
+        let credit_of = |ticker: &str| credit.get(ticker).copied().unwrap_or(0.0);
+        assert!(
+            (credit_of("USDX") - -3137.98).abs() < 1e-2,
+            "credit USDX: expected -3137.98, got {}",
+            credit_of("USDX")
+        );
+        assert!(
+            (credit_of("GBP") - 1006.86).abs() < 1e-2,
+            "credit GBP: expected 1006.86, got {}",
+            credit_of("GBP")
+        );
         Ok(())
     }
 

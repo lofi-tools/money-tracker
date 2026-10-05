@@ -13,7 +13,7 @@
       ];
       perSystem = { pkgs, config, lib, ... }:
         let
-          l = builtins // lib // config.extraLib;
+          # l = builtins // lib // config.extraLib;
           buildDeps = [
             # pkgs.pnpm
           ];
@@ -23,14 +23,11 @@
             pkgs.cargo-nextest
           ];
 
-          wd = "$(git rev-parse --show-toplevel)";
+          # wd = "$(git rev-parse --show-toplevel)";
           scripts = mapAttrs pkgs.writeShellScriptBin {
             h = ''cargo run -p cli'';
+            nexo = ''cargo test -p cli adapters::nexo::tests::latest_amount -- --ignored --nocapture'';
           };
-
-          # crates = {
-          #   # new = l.customRust.buildCrate "new";
-          # };
 
           env = {
             RUST_LOG = "debug";

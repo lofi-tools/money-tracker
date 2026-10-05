@@ -331,6 +331,74 @@ mod tests {
     use chrono::{DateTime, Utc};
 
     #[test]
+    fn nexo_balances_sum_from_transactions_without_prices() -> anyhow::Result<()> {
+        let rows = [
+            "id1,Top up Crypto,ETH,2,ETH,2,$200,-,-,approved / deposit,2025-01-01 00:00:00",
+            "id2,Top up Crypto,NEXO,100,NEXO,100,$50,-,-,approved / deposit,2025-01-02 00:00:00",
+            "id3,Interest,NEXO,1,NEXO,1,$1,-,-,approved / interest,2025-01-03 00:00:00",
+            "id4,Exchange,ETH,-0.5,NEXO,50,$100,-,-,approved / exchange,2025-01-04 00:00:00",
+            "id5,Withdrawal,NEXO,-10,NEXO,0,$0,-,-,approved / withdraw,2025-01-05 00:00:00",
+        ]
+        .into_iter()
+        .map(NexoTx::try_from_csv_row)
+        .collect::<Result<Vec<_>, _>>()?;
+        let store = Store::in_memory()?;
+        import_nexo_rows(&store, &rows)?;
+        let end = DateTime::<Utc>::from_timestamp(1736121600, 0).unwrap(); // 2025-01-06
+        let mut amounts: BTreeMap<String, f64> = store
+            .asset_amounts_at(end)?
+            .into_iter()
+            .map(|(asset, n)| (asset.0, n))
+            .collect();
+        // ETH: 2 - 0.5 = 1.5; NEXO: 100 + 1 + 50 - 10 = 141
+        assert!((amounts.remove("ETH").unwrap_or(0.0) - 1.5).abs() < 1e-8);
+        assert!((amounts.remove("NEXO").unwrap_or(0.0) - 141.0).abs() < 1e-8);
+        assert!(amounts.is_empty(), "unexpected assets: {amounts:?}");
+        Ok(())
+    }
+
+    #[test]
+    fn file_import_then_latest_balances_match_csv_movements() -> anyhow::Result<()> {
+        // End-to-end through the production path: hash-deduped file import
+        // (`import_into`, the same call `main()` makes) followed by the same
+        // DB balance query used for latest holdings (`asset_amounts_at`).
+        // No prices involved — pure transaction sums.
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("nexo.csv");
+        std::fs::write(
+            &path,
+            "Transaction,Type,Input Currency,Input Amount,Output Currency,Output Amount,USD Equivalent,Fee,Fee Currency,Details,Date / Time (UTC)\n\
+             id1,Top up Crypto,ETH,2,ETH,2,$200,-,-,approved / deposit,2025-01-01 00:00:00\n\
+             id2,Top up Crypto,NEXO,100,NEXO,100,$50,-,-,approved / deposit,2025-01-02 00:00:00\n\
+             id3,Interest,NEXO,1,NEXO,1,$1,-,-,approved / interest,2025-01-03 00:00:00\n\
+             id4,Exchange,ETH,0.5,NEXO,50,$100,-,-,approved / exchange,2025-01-04 00:00:00\n\
+             id5,Withdrawal,NEXO,10,NEXO,0,$0,-,-,approved / withdraw,2025-01-05 00:00:00\n",
+        )?;
+        let store = Store::in_memory()?;
+        let service = NexoSvc::from_path(&path);
+        assert_eq!(service.import_into(&store)?, NexoImportOutcome::Imported(5));
+        // Re-importing the unchanged file must be a deduped no-op.
+        assert_eq!(
+            service.import_into(&store)?,
+            NexoImportOutcome::AlreadyImported
+        );
+
+        let rows = service.read_rows()?;
+        assert_eq!(rows.len(), 5);
+        let end = rows.iter().map(|r| r.date_time_utc).max().unwrap();
+        let mut amounts: BTreeMap<String, f64> = store
+            .asset_amounts_at(end)?
+            .into_iter()
+            .map(|(asset, n)| (asset.0, n))
+            .collect();
+        // ETH: 2 - 0.5 = 1.5; NEXO: 100 + 1 + 50 - 10 = 141
+        assert!((amounts.remove("ETH").unwrap_or(0.0) - 1.5).abs() < 1e-8);
+        assert!((amounts.remove("NEXO").unwrap_or(0.0) - 141.0).abs() < 1e-8);
+        assert!(amounts.is_empty(), "unexpected assets: {amounts:?}");
+        Ok(())
+    }
+
+    #[test]
     fn implied_nexo_rate_carries_latest_csv_value_across_empty_month() -> anyhow::Result<()> {
         let rows = vec![
             NexoTx::try_from_csv_row(
@@ -352,17 +420,32 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "needs real export at .cache/nexo_transactions_05-10-2026_10-36-53.csv (not committed)"]
     fn latest_amount_after_cached_export() -> anyhow::Result<()> {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/nexo_transactions.csv");
-        if !path.exists() {
-            return Ok(());
-        }
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.cache/nexo_transactions_05-10-2026_10-36-53.csv");
         let service = NexoSvc::from_path(&path);
         let rows = service.read_rows()?;
-        let store = Store::in_memory()?;
-        service.import_into(&store)?;
+        // File-backed scratch DB next to the export: the hash-deduped import
+        // below is a no-op on repeat runs, so the test skips re-inserting
+        // thousands of transactions every time.
+        let db_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.cache/test-nexo_05-10-2026.duckdb");
+        let store = Store::open(&db_path)?;
+        match service.import_into_with_progress(&store, |done, total| {
+            eprintln!("Writing Nexo transactions: {done}/{total}");
+        })? {
+            NexoImportOutcome::Imported(n) => eprintln!("Imported {n} Nexo transactions"),
+            NexoImportOutcome::AlreadyImported => {
+                eprintln!("Nexo CSV already imported; reused {}", db_path.display())
+            }
+        }
         let end = rows.iter().map(|r| r.date_time_utc).max().unwrap();
         let amounts = store.asset_amounts_at(end)?;
+        println!("latest balances at {end} ({} rows):", rows.len());
+        for (asset, amount) in &amounts {
+            println!("  {}: {amount}", asset.0);
+        }
         let latest = |ticker: &str| {
             amounts
                 .iter()
@@ -370,9 +453,27 @@ mod tests {
                 .map(|(_, n)| *n)
                 .unwrap_or(0.0)
         };
-        // Anchors from this export, independently summed from the CSV movements.
-        assert!((latest("ETH") - 176.88934455).abs() < 1e-8);
-        assert!((latest("NEXO") - 231832.90565071).abs() < 1e-8);
+        // Expected dashboard totals for this export (balances only; price/
+        // credit-line fields are informational and not asserted here).
+        let expected = [
+            ("ETH", 214.10824555),
+            ("NEXO", 271873.05097308),
+            ("EURX", 83776.0),
+            ("NEAR", 9540.24127999),
+            ("BNB", 37.37181767),
+            ("GBPX", 17763.0),
+            ("DOT", 2247.74400873),
+            ("POL", 9230.724),
+            ("USDT", 4.521777),
+            ("USDX", 1.56),
+        ];
+        for (ticker, balance) in expected {
+            assert!(
+                (latest(ticker) - balance).abs() < 1e-6,
+                "{ticker}: expected {balance}, got {}",
+                latest(ticker)
+            );
+        }
         Ok(())
     }
 

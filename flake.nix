@@ -27,6 +27,7 @@
           scripts = mapAttrs pkgs.writeShellScriptBin {
             h = ''cargo run -p cli'';
             nexo = ''cargo test -p cli adapters::nexo::tests::latest_amount -- --ignored --nocapture'';
+            binance = ''cargo test -p cli adapters::binance::tests::latest_amount_after_cached_account -- --ignored --nocapture'';
           };
 
           env = {

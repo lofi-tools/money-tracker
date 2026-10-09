@@ -1,19 +1,20 @@
 use crate::payloads::{ListResp, StakingPositionResp};
+pub mod error;
+pub use error::BinanceError;
+pub mod account;
 pub mod archive;
 use payloads::{FlexEarnPos, LockedEarnPos, StakingProduct};
 use serde::Deserialize;
-use signing::RequestSigner;
-use utils::prelude::{RequestBuilderExt, *};
-
-// const API_BASE: OnceCell<Url> = OnceCell::new(|| Url::parse("https://api.binance.com").unwrap());
-// const API_KEY: OnceCell<String> = OnceCell::new(|| std::env::var("BINANCE_API_KEY").unwrap());
-// const API_SECRET: OnceCell<String> = OnceCell::new(|| std::env::var("BINANCE_SECRET_KEY").unwrap());
+use snafu::ResultExt;
+use utils::prelude::IsApiClient;
 
 pub struct BinanceClient {
     http_client: reqwest::Client,
     base_url: String,
     api_key: String,
     api_secret: String,
+    history_cache: Option<std::path::PathBuf>,
+    request_progress: Option<Box<dyn Fn(&str, bool) + Send + Sync>>,
 }
 impl IsApiClient for BinanceClient {
     fn base_url(&self) -> &str {
@@ -24,42 +25,59 @@ impl IsApiClient for BinanceClient {
     }
 }
 impl BinanceClient {
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new() -> Result<Self, BinanceError> {
+        let api_key =
+            error::credential_with_alias("BINANCE_API_KEY_ID", "BINANCE_API_KEY", |name| {
+                std::env::var(name)
+            })?;
+        let api_secret =
+            error::credential_with_alias("BINANCE_API_KEY_SECRET", "BINANCE_SECRET_KEY", |name| {
+                std::env::var(name)
+            })?;
         Ok(BinanceClient {
-            http_client: reqwest::Client::new(),
+            http_client: error::http_client()?,
             base_url: "https://api.binance.com/sapi/v1".to_string(),
-            api_key: std::env::var("BINANCE_API_KEY")?,
-            api_secret: std::env::var("BINANCE_SECRET_KEY")?,
+            api_key,
+            api_secret,
+            history_cache: None,
+            request_progress: None,
         })
     }
 
-    pub async fn list_staking_products(&self) -> anyhow::Result<Vec<StakingProduct>> {
-        let req = self
-            .get("/staking/productList")
-            .query(&[("product", "STAKING")])
-            .sign(self)?;
-        let resp = req.fetch_json::<Vec<StakingProduct>>().await?;
-        Ok(resp)
+    async fn private_json<T: serde::de::DeserializeOwned>(
+        &self,
+        endpoint: &str,
+        params: &[(String, String)],
+    ) -> Result<T, BinanceError> {
+        let value = self.account_request(endpoint, params, false).await?;
+        serde_json::from_value(value).context(error::DecodeResponseSnafu { endpoint })
     }
-    pub async fn list_staking_positions(&self) -> anyhow::Result<Vec<StakingPositionResp>> {
-        let req = self
-            .get("/staking/position")
-            .query(&[("product", "STAKING")])
-            .sign(self)?;
-        let resp: Vec<StakingPositionResp> = req.fetch_json::<Vec<StakingPositionResp>>().await?;
-        Ok(resp)
-    }
-    pub async fn list_locked_earn_positions(&self) -> anyhow::Result<Vec<LockedEarnPos>> {
-        let req = self.get("/simple-earn/locked/position").sign(self)?;
-        let resp = req.fetch_json::<ListResp<LockedEarnPos>>().await?;
 
-        Ok(resp.rows)
+    pub async fn list_staking_products(&self) -> Result<Vec<StakingProduct>, BinanceError> {
+        self.private_json(
+            "/sapi/v1/staking/productList",
+            &[("product".into(), "STAKING".into())],
+        )
+        .await
     }
-    pub async fn list_flexible_earn_pos(&self) -> anyhow::Result<Vec<FlexEarnPos>> {
-        let req = self.get("/simple-earn/flexible/position").sign(self)?;
-        let resp = req.fetch_json::<ListResp<FlexEarnPos>>().await?;
-
-        Ok(resp.rows)
+    pub async fn list_staking_positions(&self) -> Result<Vec<StakingPositionResp>, BinanceError> {
+        self.private_json(
+            "/sapi/v1/staking/position",
+            &[("product".into(), "STAKING".into())],
+        )
+        .await
+    }
+    pub async fn list_locked_earn_positions(&self) -> Result<Vec<LockedEarnPos>, BinanceError> {
+        Ok(self
+            .private_json::<ListResp<LockedEarnPos>>("/sapi/v1/simple-earn/locked/position", &[])
+            .await?
+            .rows)
+    }
+    pub async fn list_flexible_earn_pos(&self) -> Result<Vec<FlexEarnPos>, BinanceError> {
+        Ok(self
+            .private_json::<ListResp<FlexEarnPos>>("/sapi/v1/simple-earn/flexible/position", &[])
+            .await?
+            .rows)
     }
 }
 
@@ -218,39 +236,46 @@ pub mod payloads {
 }
 
 pub mod signing {
-    use crate::{BinanceClient, local_utils::hex};
+    use crate::{BinanceClient, BinanceError, error::*, local_utils::hex};
     use hmac_sha256::HMAC;
     use reqwest::{Request, RequestBuilder};
+    use snafu::{OptionExt, ResultExt};
     use std::time::SystemTime;
     // use utils::api_client_utils;
 
     pub trait RequestSigner {
-        fn sign(self, client: &BinanceClient) -> Result<RequestBuilder, anyhow::Error>;
-        fn request(self) -> Result<Request, anyhow::Error>;
+        fn sign(self, client: &BinanceClient) -> Result<RequestBuilder, BinanceError>;
+        fn request(self) -> Result<Request, BinanceError>;
     }
     impl RequestSigner for RequestBuilder {
-        fn request(self) -> Result<Request, anyhow::Error> {
+        fn request(self) -> Result<Request, BinanceError> {
             let (_client, request_result) = self.build_split();
-            let request = request_result?;
+            let request = request_result
+                .map_err(reqwest::Error::without_url)
+                .context(BuildRequestSnafu)?;
             Ok(request)
         }
-        fn sign(self, client: &BinanceClient) -> Result<RequestBuilder, anyhow::Error> {
+        fn sign(self, client: &BinanceClient) -> Result<RequestBuilder, BinanceError> {
             let mut req = self.header("X-MBX-APIKEY", &client.api_key).request()?;
             let url = req.url_mut();
 
             // append timestamp
             {
                 let timestamp = SystemTime::now()
-                    .duration_since(SystemTime::UNIX_EPOCH)?
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .context(ClockSnafu)?
                     .as_millis();
                 let mut query_pairs = url.query_pairs_mut();
                 query_pairs.append_pair("timestamp", &timestamp.to_string());
             }
 
             // then hmac query
-            let query_str = url.query().unwrap(); // TODO err
+            let query_str = url.query().context(InvalidResponseSnafu {
+                endpoint: "signing",
+                reason: "missing timestamp query",
+            })?;
             let signature = HMAC::mac(query_str, &client.api_secret);
-            let sig_hex = hex(signature)?;
+            let sig_hex = hex(signature).context(HexSnafu)?;
 
             // then append hmac signature
             {
@@ -338,8 +363,9 @@ pub mod tests {
     #[ignore = "Needs network and API key"]
     async fn test_fetch_binance() -> anyhow::Result<()> {
         let client = BinanceClient::new()?;
-        let products = client.list_staking_products().await?;
-        dbg!(products);
+        let snapshot = client.fetch_account_snapshot(&[]).await?;
+        assert_eq!(snapshot.version, 1);
+        assert_eq!(snapshot.balances.len(), 4);
 
         Ok(())
     }

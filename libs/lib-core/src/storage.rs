@@ -51,6 +51,7 @@ impl Store {
              CREATE TABLE IF NOT EXISTS asset_prices (datetime TIMESTAMP NOT NULL, asset_id VARCHAR NOT NULL, vs_asset_id VARCHAR NOT NULL, price DOUBLE NOT NULL, PRIMARY KEY(datetime, asset_id, vs_asset_id));
              CREATE TABLE IF NOT EXISTS price_coverage (asset_id VARCHAR NOT NULL, vs_asset_id VARCHAR NOT NULL, from_datetime TIMESTAMP NOT NULL, to_datetime TIMESTAMP NOT NULL, PRIMARY KEY(asset_id, vs_asset_id, from_datetime, to_datetime));
              CREATE TABLE IF NOT EXISTS unavailable_price_periods (provider VARCHAR NOT NULL, pair VARCHAR NOT NULL, from_datetime TIMESTAMP NOT NULL, to_datetime TIMESTAMP NOT NULL, PRIMARY KEY(provider, pair, from_datetime, to_datetime));
+             CREATE TABLE IF NOT EXISTS balance_observations (source VARCHAR NOT NULL, content_hash VARCHAR NOT NULL, position_id VARCHAR NOT NULL, datetime TIMESTAMP NOT NULL, amount VARCHAR NOT NULL);
              CREATE TABLE IF NOT EXISTS imported_files (source VARCHAR NOT NULL, content_hash VARCHAR NOT NULL, transaction_count BIGINT NOT NULL, completed_at TIMESTAMP NOT NULL, PRIMARY KEY(source, content_hash));",
         )?;
         self.infer_legacy_price_coverage()?;
@@ -170,6 +171,27 @@ impl Store {
         content_hash: &str,
         asset_positions: &[(PositionId, AssetId, u8, bool)],
         transactions: &[(String, Transaction)],
+        on_progress: impl FnMut(usize, usize),
+    ) -> anyhow::Result<bool> {
+        self.save_file_import_with_observations(
+            source,
+            content_hash,
+            asset_positions,
+            transactions,
+            &[],
+            on_progress,
+        )
+    }
+
+    /// Commit independent balance observations with the ledger and import marker.
+    /// Observations are reference data; they never contribute transaction effects.
+    pub fn save_file_import_with_observations(
+        &self,
+        source: &str,
+        content_hash: &str,
+        asset_positions: &[(PositionId, AssetId, u8, bool)],
+        transactions: &[(String, Transaction)],
+        observations: &[PositionBalance],
         mut on_progress: impl FnMut(usize, usize),
     ) -> anyhow::Result<bool> {
         let tx = self.connection.unchecked_transaction()?;
@@ -192,12 +214,65 @@ impl Store {
             )?;
         }
         Self::write_transactions(&tx, transactions, &mut on_progress)?;
+        for balance in observations {
+            tx.execute(
+                "INSERT INTO balance_observations VALUES (?, ?, ?, ?, ?)",
+                params![
+                    source,
+                    content_hash,
+                    balance.position_id.0,
+                    balance.datetime.naive_utc(),
+                    balance.amount.to_string()
+                ],
+            )?;
+        }
         tx.execute(
             "INSERT INTO imported_files VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
             params![source, content_hash, i64::try_from(transactions.len())?],
         )?;
         tx.commit()?;
         Ok(true)
+    }
+
+    pub fn balance_observations(
+        &self,
+        source: &str,
+        content_hash: &str,
+    ) -> anyhow::Result<Vec<PositionBalance>> {
+        let mut statement = self.connection.prepare(
+            "SELECT position_id, datetime, amount FROM balance_observations WHERE source=? AND content_hash=?",
+        )?;
+        let rows = statement
+            .query_map(params![source, content_hash], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, NaiveDateTime>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.into_iter()
+            .map(|(position, datetime, amount)| {
+                Ok(PositionBalance {
+                    position_id: PositionId(position),
+                    datetime: datetime.and_utc(),
+                    amount: amount.parse()?,
+                })
+            })
+            .collect()
+    }
+
+    /// Sum the complete persisted ledger, excluding external counterparties.
+    pub fn latest_balances(&self) -> anyhow::Result<Vec<PositionBalance>> {
+        let latest: Option<NaiveDateTime> =
+            self.connection
+                .query_row("SELECT MAX(datetime) FROM transactions", [], |row| {
+                    row.get(0)
+                })?;
+        match latest {
+            Some(datetime) => self.balances_at(datetime.and_utc()),
+            None => Ok(Vec::new()),
+        }
     }
 
     pub fn has_imported_file(&self, source: &str, content_hash: &str) -> anyhow::Result<bool> {
@@ -443,6 +518,16 @@ impl Store {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
+    /// Decimal precision used to encode an asset's ledger amounts.
+    pub fn asset_scale(&self, asset: &AssetId) -> anyhow::Result<u8> {
+        let decimals: i32 = self.connection.query_row(
+            "SELECT decimals FROM asset_scales WHERE asset_id=?",
+            [asset.0.as_str()],
+            |row| row.get(0),
+        )?;
+        Ok(u8::try_from(decimals)?)
+    }
+
     /// Asset totals in human units at the specified instant, across owned positions.
     pub fn asset_amounts_at(&self, datetime: DateTime<Utc>) -> anyhow::Result<Vec<(AssetId, f64)>> {
         let mut statement = self.connection.prepare(
@@ -468,7 +553,10 @@ impl Store {
     /// withdrawals, card spends, loan interest) on non-owned `NEXO-CREDIT:*`
     /// positions, so this derives the credit-line balance over time from the
     /// same transaction sums. Negative means net borrowed/spent.
-    pub fn credit_amounts_at(&self, datetime: DateTime<Utc>) -> anyhow::Result<Vec<(AssetId, f64)>> {
+    pub fn credit_amounts_at(
+        &self,
+        datetime: DateTime<Utc>,
+    ) -> anyhow::Result<Vec<(AssetId, f64)>> {
         let mut statement = self.connection.prepare(
             "SELECT p.asset_id, SUM(e.amount)::DOUBLE / POWER(10, s.decimals) \
              FROM transaction_effects e \
@@ -934,6 +1022,67 @@ mod tests {
         let store = Store::open(&path)?;
         assert!(store.has_unavailable_price_period("binance-vision", "NEXOUSD", january)?);
         assert!(!store.has_unavailable_price_period("kucoin", "NEXOUSD", january)?);
+        Ok(())
+    }
+
+    #[test]
+    fn observations_commit_with_import_and_remain_independent() -> anyhow::Result<()> {
+        let store = Store::in_memory()?;
+        let position = PositionId::from("BINANCE:spot:ETH");
+        let assets = [(position.clone(), AssetId::str("ETH"), 8, true)];
+        let observations = [PositionBalance {
+            position_id: position.clone(),
+            datetime: time(2),
+            amount: i128::MAX,
+        }];
+        let valid = (
+            "deposit".to_owned(),
+            transaction(time(1), &position, 0, 100),
+        );
+        let invalid = (
+            "overflow".to_owned(),
+            transaction(time(2), &position, 0, u64::MAX),
+        );
+        assert!(
+            store
+                .save_file_import_with_observations(
+                    "BINANCE",
+                    "fixture",
+                    &assets,
+                    &[valid.clone(), invalid],
+                    &observations,
+                    |_, _| {},
+                )
+                .is_err()
+        );
+        assert!(!store.has_imported_file("BINANCE", "fixture")?);
+        assert!(store.balance_observations("BINANCE", "fixture")?.is_empty());
+        assert!(store.latest_balances()?.is_empty());
+        assert!(store.save_file_import_with_observations(
+            "BINANCE",
+            "fixture",
+            &assets,
+            &[valid],
+            &observations,
+            |_, _| {},
+        )?);
+        assert_eq!(
+            store.balance_observations("BINANCE", "fixture")?,
+            observations
+        );
+        assert_eq!(store.latest_balances()?[0].amount, 100);
+        assert!(!store.save_file_import_with_observations(
+            "BINANCE",
+            "fixture",
+            &[],
+            &[],
+            &[],
+            |_, _| panic!("must skip imported rows"),
+        )?);
+        assert_eq!(
+            store.balance_observations("BINANCE", "fixture")?,
+            observations
+        );
         Ok(())
     }
 

@@ -333,11 +333,12 @@ fn convert_row(
     let mut changes: Vec<(&str, f64)> = Vec::new();
     use TransactionType::*;
     if credit {
-        // Credit-line domain: only the xUSD debt accrual counts. Duplicate
-        // draw records, spends of drawn cash and merchant-fx legs accrue 0.
+        // Credit-line domain: only the xUSD debt accrual counts, recorded
+        // as money owed (negative). Duplicate draw records, spends of drawn
+        // cash and merchant-fx legs accrue 0.
         let debt = xusd_debt_accrued(row);
         if debt != 0.0 {
-            changes.push(("xUSD", debt));
+            changes.push(("xUSD", -debt));
         }
     } else {
         match row.kind {
@@ -536,15 +537,11 @@ mod tests {
         let amounts = store.asset_amounts_at(end)?;
         println!("latest balances at {end} ({} rows):", rows.len());
         for (asset, amount) in &amounts {
-            println!("  {}: {amount}", asset.0);
+            println!("  {}: {}", asset.0, with_commas(*amount));
         }
-        println!("exact owned units (1e-8):");
-        for (asset, units) in store.asset_units_at(end)? {
-            println!("  {}: {units}", asset.0);
-        }
-        println!("exact credit units (1e-8):");
-        for (asset, units) in store.credit_units_at(end)? {
-            println!("  {}: {units}", asset.0);
+        println!("credit line (owed, negative) at {end}:");
+        for (asset, amount) in store.credit_amounts_at(end)? {
+            println!("  {}: {}", asset.0, with_commas(amount));
         }
         let latest = |ticker: &str| {
             amounts
@@ -608,9 +605,10 @@ mod tests {
         .collect();
         assert_eq!(owned_units, expected_units);
         // Credit line: every card spend was converted immediately to xUSD
-        // debt (1:1). Derived independently from the rows: drawdowns
-        // (USDX/xUSD loan inputs) + card fees = principal 1357.92,
-        // loan-interest outputs = 83.64, total draft 1441.56.
+        // debt (1:1), recorded as money owed (negative). Derived
+        // independently from the rows: drawdowns (USDX/xUSD loan inputs) +
+        // card fees = principal 1357.92, loan-interest outputs = 83.64,
+        // total draft -1441.56.
         let (mut principal, mut loan_interest) = (0.0, 0.0);
         for row in &rows {
             use TransactionType::*;
@@ -639,12 +637,32 @@ mod tests {
             .map(|(asset, n)| (asset.0, n))
             .collect();
         let expected_credit: BTreeMap<String, i128> =
-            [("xUSD", 144156000000)]
+            [("xUSD", -144156000000)]
                 .into_iter()
                 .map(|(ticker, units)| (ticker.to_string(), units))
                 .collect();
         assert_eq!(credit_units, expected_credit);
         Ok(())
+    }
+
+    /// Format a decimal amount with thousands separators (e.g. 271873.05 ->
+    /// "271,873.05093806").
+    fn with_commas(amount: f64) -> String {
+        let negative = amount < 0.0;
+        let raw = format!("{:.8}", amount.abs());
+        let (int, frac) = raw.split_once('.').unwrap();
+        let grouped = int
+            .chars()
+            .rev()
+            .collect::<Vec<_>>()
+            .chunks(3)
+            .map(|chunk| chunk.iter().collect::<String>())
+            .collect::<Vec<_>>()
+            .join(",")
+            .chars()
+            .rev()
+            .collect::<String>();
+        format!("{}{}.{frac}", if negative { "-" } else { "" }, grouped)
     }
 
     #[test]

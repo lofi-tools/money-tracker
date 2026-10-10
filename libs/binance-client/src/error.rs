@@ -95,6 +95,21 @@ pub enum BinanceError {
     InvalidStatement { reason: &'static str },
     #[snafu(display("cannot serialize Binance request metadata"))]
     EncodeMetadata { source: serde_json::Error },
+    #[snafu(display("cannot {operation} Binance limiter state {}", path.display()))]
+    LimiterIo {
+        operation: &'static str,
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[snafu(display("cannot decode Binance limiter state {}; refusing to reset its budget", path.display()))]
+    LimiterDecode {
+        path: PathBuf,
+        source: serde_json::Error,
+    },
+    #[snafu(display("cannot encode Binance limiter state"))]
+    LimiterEncode { source: serde_json::Error },
+    #[snafu(display("invalid Binance limiter state: {reason}"))]
+    InvalidLimiterState { reason: &'static str },
 }
 
 pub(crate) fn validate_credential(

@@ -60,11 +60,16 @@ The importer SHALL accept original Binance transaction-history CSV and ZIP files
 #### Scenario: Independent positions and omitted Earn activity
 - **WHEN** the statement fixture has no position reference or Earn supplement
 - **THEN** the test fetches and caches independent API positions and supported omitted Earn movements once, without a full trade-history backfill
+
+#### Scenario: Legacy Savings maturity omitted from the statement
+- **WHEN** cached API records show one successful legacy fixed-term Savings subscription, one paid maturity and its immediate Flexible reinvestments
+- **THEN** maturity interest is derived from the evidenced redemption minus principal, the original subscription deduplicates against the CSV in either import order, and replay imports the omitted movements once
+- **AND** missing or ambiguous principal evidence fails import instead of deriving an adjustment from API positions
 - **AND** subsequent runs reuse the persistent DB and frozen API fixtures without credentials or network
 - **AND** unexplained differences fail the strict reconciliation test without generated balancing entries
 
 ### Requirement: Weighted adaptive request budgets
-All Binance client instances SHALL share one HTTP transport and process-wide limiter. The limiter SHALL retain weighted call history over a rolling minute, seed budgets and request costs from documented limits with headroom, consume server usage headers and current Spot minute limits from exchangeInfo, and reduce the effective budget after throttling. Successful requests SHALL restore budget gradually without exceeding headroom. Cached responses SHALL consume no request budget. Independent mock-server tests MAY inject isolated limiters to control virtual time.
+All Binance client instances SHALL share one HTTP transport within a process and a limiter whose budget, history and cooldown are shared across Cargo processes using the same repository cache. The limiter SHALL retain weighted call history over a rolling minute, seed budgets and request costs from documented limits with headroom, consume server usage headers and current Spot minute limits from exchangeInfo, and reduce the effective budget after throttling. Successful requests SHALL restore budget gradually without exceeding headroom. Cached responses SHALL consume no request budget. Independent mock-server tests MAY inject isolated limiters to control virtual time.
 
 #### Scenario: Expensive fiat history
 - **WHEN** fiat-history requests consume 45,000 UID weight each
@@ -77,3 +82,18 @@ All Binance client instances SHALL share one HTTP transport and process-wide lim
 #### Scenario: Server observes other callers
 - **WHEN** response headers report usage near the effective limit
 - **THEN** the next network request waits until sufficient budget is available
+
+### Requirement: Limiter persistence across processes
+The limiter SHALL coordinate parallel processes through an OS file lock and versioned state under repository `.cache/binance/limiter`. The lock inode SHALL remain separate from atomically replaced JSON state. Each network attempt SHALL persist its weighted reservation before sending; responses SHALL persist server usage, learned budgets and cooldowns before releasing the lock. Budget waits SHALL release the file lock and re-read state before admission. Malformed state or storage errors SHALL return typed errors rather than silently resetting the budget. Credentials SHALL NOT be persisted.
+
+#### Scenario: Parallel processes
+- **WHEN** separate test binaries request Binance data concurrently
+- **THEN** their weighted reservations are combined without lost updates and they share pacing and cooldown
+
+#### Scenario: Terminated lock owner
+- **WHEN** a process holding the lock is terminated after saving a reservation and cooldown
+- **THEN** the OS releases its lock and other processes still honor the saved history and cooldown
+
+#### Scenario: Cached response with unavailable limiter state
+- **WHEN** a historical response is cached and limiter state is malformed
+- **THEN** the cache hit succeeds without acquiring the file lock or modifying the limiter state

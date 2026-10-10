@@ -36,6 +36,71 @@ enum Paging {
     Split,
 }
 
+// Legacy fixed Savings product IDs carry the DAYSS term suffix. Ordinary
+// Flexible redemptions do not provide principal evidence for accrued interest.
+fn statement_legacy_records(
+    subscriptions: &[Value],
+    redemptions: Vec<Value>,
+) -> (Vec<Value>, Vec<Value>) {
+    let legacy_products: HashSet<_> = subscriptions
+        .iter()
+        .filter_map(|s| s.get("productId").and_then(Value::as_str))
+        .filter(|id| id.contains("DAYSS"))
+        .collect();
+    let maturities: Vec<_> = redemptions
+        .into_iter()
+        .filter(|r| {
+            r.get("productId")
+                .and_then(Value::as_str)
+                .is_some_and(|id| legacy_products.contains(id))
+        })
+        .collect();
+    let legacy_subscriptions: Vec<Value> = subscriptions
+        .iter()
+        .filter(|s| {
+            s.get("productId")
+                .and_then(Value::as_str)
+                .is_some_and(|id| legacy_products.contains(id))
+                || maturities.iter().any(|r| {
+                    s["asset"] == r["asset"]
+                        && s["time"]
+                            .as_i64()
+                            .zip(r["time"].as_i64())
+                            .is_some_and(|(purchase, maturity)| purchase.abs_diff(maturity) <= 1000)
+                })
+        })
+        .cloned()
+        .collect();
+    (legacy_subscriptions, maturities)
+}
+
+#[test]
+fn statement_supplement_selects_legacy_maturity_and_reinvestments() {
+    use serde_json::json;
+    let original = json!({"productId":"CSOL15DAYSS001","asset":"SOL","time":1000});
+    let reinvest_principal = json!({"productId":"SOL001","asset":"SOL","time":1999});
+    let reinvest_interest = json!({"productId":"SOL001","asset":"SOL","time":2000});
+    let maturity = json!({"productId":"CSOL15DAYSS001","asset":"SOL","time":2000});
+    let (subscriptions, redemptions) = statement_legacy_records(
+        &[
+            original.clone(),
+            reinvest_principal.clone(),
+            reinvest_interest.clone(),
+            json!({"productId":"SOL001","asset":"SOL","time":4000}),
+            json!({"productId":"BNB001","asset":"BNB","time":2000}),
+        ],
+        vec![
+            maturity.clone(),
+            json!({"productId":"SOL001","asset":"SOL","time":4000}),
+        ],
+    );
+    assert_eq!(
+        subscriptions,
+        vec![original, reinvest_principal, reinvest_interest]
+    );
+    assert_eq!(redemptions, vec![maturity]);
+}
+
 impl BinanceClient {
     /// Constructor for callers with an explicit credential source and mock HTTP servers.
     pub fn with_credentials(
@@ -159,8 +224,10 @@ impl BinanceClient {
             // Hold the gate through the response so concurrent callers cannot
             // race past a newly received cooldown. Cache hits bypass this gate.
             let mut pacer = self.pacer.lock().await;
-            pacer.wait(path).await;
+            let permit = pacer.acquire(path).await?;
             pacer.start_request(path);
+            // Save the reservation before sending: a crash still charges the call.
+            pacer.persist(&permit)?;
             let builder = if post {
                 self.http_client.post(&url)
             } else {
@@ -196,6 +263,7 @@ impl BinanceClient {
                     endpoint: path,
                     reason: "server cooldown exceeds supported timer range",
                 })?;
+                pacer.persist(&permit)?;
                 if let Some(on_backoff) = &self.backoff_progress {
                     on_backoff(path, status, attempt + 1, delay);
                 }
@@ -211,14 +279,18 @@ impl BinanceClient {
                     .fail();
                 }
                 drop(response);
+                drop(permit);
                 drop(pacer);
                 continue;
             }
+            pacer.persist(&permit)?;
             let value = decode_response(response, path).await?;
             if path == "/api/v3/exchangeInfo" {
                 pacer.observe_exchange_info(&value);
             }
             pacer.success();
+            pacer.persist(&permit)?;
+            drop(permit);
             drop(pacer);
             if let Some(path) = &cache {
                 // Generated cache paths always have the configured directory as parent.
@@ -633,6 +705,36 @@ impl BinanceClient {
         );
         let to = reference.fetched_at.timestamp_millis();
         let mut history = BTreeMap::new();
+        // Legacy fixed-term Savings maturities and their automatic Flexible
+        // resubscriptions are absent from transaction statements.
+        let subscriptions = self
+            .history(
+                "/sapi/v1/simple-earn/flexible/history/subscriptionRecord",
+                "rows",
+                &[],
+                BINANCE_LAUNCH_MS,
+                to,
+                30,
+                100,
+                Paging::Page,
+            )
+            .await?;
+        let redemptions = self
+            .history(
+                "/sapi/v1/simple-earn/flexible/history/redemptionRecord",
+                "rows",
+                &[],
+                BINANCE_LAUNCH_MS,
+                to,
+                30,
+                100,
+                Paging::Page,
+            )
+            .await?;
+        let (legacy_subscriptions, maturities) =
+            statement_legacy_records(&subscriptions, redemptions);
+        history.insert("flexible/subscriptionRecord/".into(), legacy_subscriptions);
+        history.insert("flexible/redemptionRecord/".into(), maturities);
         let rewards = self
             .history(
                 "/sapi/v1/simple-earn/flexible/history/rewardsRecord",
@@ -785,6 +887,59 @@ mod tests {
         net::TcpListener,
         task::JoinHandle,
     };
+
+    #[tokio::test]
+    async fn received_429_persists_cooldown_and_learned_budget() -> anyhow::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let (mut client, server, times) = header_server(vec![
+            (429, "{\"code\":-1003}".into(), "Retry-After: 1\r\n".into()),
+            (200, "[]".into(), String::new()),
+        ])
+        .await;
+        client.pacer = std::sync::Arc::new(tokio::sync::Mutex::new(
+            crate::backpressure::Pacer::persistent(directory.path().into()),
+        ));
+        client
+            .account_request("/api/v3/account", &[], false)
+            .await?;
+        assert_eq!(server.await?.len(), 2);
+        let times = times.lock().unwrap();
+        assert!(times[1] - times[0] >= std::time::Duration::from_secs(1));
+        let state: Value =
+            serde_json::from_slice(&std::fs::read(directory.path().join("state-v1.json"))?)?;
+        assert_eq!(state["budgets"]["spot"]["total"], 40);
+        assert_eq!(state["budgets"]["spot"]["effective"], 2400);
+        assert_eq!(
+            state["budgets"]["spot"]["calls"].as_array().unwrap().len(),
+            2
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cached_response_bypasses_even_corrupted_persistent_limiter() -> anyhow::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let (client, server) = server(vec![(200, serde_json::json!([]))]).await;
+        let mut client = client.with_history_cache(directory.path().join("responses"));
+        let endpoint = "/sapi/v1/capital/deposit/hisrec";
+        client.account_request(endpoint, &[], false).await?;
+        assert_eq!(server.await?.len(), 1);
+        let limiter = directory.path().join("limiter");
+        std::fs::create_dir_all(&limiter)?;
+        std::fs::write(limiter.join("state-v1.json"), "corrupted")?;
+        client.pacer = std::sync::Arc::new(tokio::sync::Mutex::new(
+            crate::backpressure::Pacer::persistent(limiter),
+        ));
+        assert_eq!(
+            client.account_request(endpoint, &[], false).await?,
+            serde_json::json!([])
+        );
+        assert!(matches!(
+            client.account_request("/api/v3/account", &[], false).await,
+            Err(BinanceError::LimiterDecode { .. })
+        ));
+        Ok(())
+    }
 
     async fn server(responses: Vec<(u16, Value)>) -> (BinanceClient, JoinHandle<Vec<String>>) {
         raw_server(

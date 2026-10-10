@@ -592,6 +592,70 @@ mod tests {
     }
 
     #[test]
+    fn legacy_savings_maturity_reinvestment_deduplicates_statement_principal() -> anyhow::Result<()>
+    {
+        use serde_json::json;
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("export.csv");
+        std::fs::write(
+            &path,
+            "UTC_Time,Account,Operation,Coin,Change,Remark\n2022-08-14 12:25:03,Spot,Simple Earn Flexible Subscription,SOL,-5,\n2024-04-15 14:39:09,Spot,Simple Earn Flexible Redemption,SOL,5.12257706,\n",
+        )?;
+        let mut snapshot = AccountSnapshot {
+            version: 1,
+            from: "2022-08-14T12:25:03Z".parse()?,
+            fetched_at: "2024-04-15T14:39:09Z".parse()?,
+            symbols: vec![],
+            balances: BTreeMap::new(),
+            history: BTreeMap::from([
+                (
+                    "flexible/subscriptionRecord/".into(),
+                    vec![
+                        json!({"asset":"SOL","productId":"CSOL15DAYSS001","purchaseId":1,"amount":"5","sourceAccount":"SPOT","status":"SUCCESS","time":1660479903000i64,"type":"NORMAL"}),
+                        json!({"asset":"SOL","productId":"SOL001","purchaseId":2,"amount":"5","sourceAccount":"SPOT","status":"SUCCESS","time":1661819592000i64}),
+                        json!({"asset":"SOL","productId":"SOL001","purchaseId":3,"amount":"0.07192","sourceAccount":"SPOT","status":"SUCCESS","time":1661819593000i64}),
+                    ],
+                ),
+                (
+                    "flexible/redemptionRecord/".into(),
+                    vec![
+                        json!({"asset":"SOL","productId":"CSOL15DAYSS001","redeemId":4,"amount":"5.07192","destAccount":"SPOT","status":"PAID","time":1661819593000i64}),
+                    ],
+                ),
+                (
+                    "flexible/rewardsRecord/REALTIME".into(),
+                    vec![json!({"asset":"SOL","rewards":"0.05065706","time":1713139200000i64})],
+                ),
+            ]),
+        };
+        for api_first in [false, true] {
+            let store = Store::in_memory()?;
+            if api_first {
+                import_api_history(&snapshot, &store)?;
+            }
+            import_statement(&path, dir.path(), &store)?;
+            import_api_history(&snapshot, &store)?;
+            assert!(!import_api_history(&snapshot, &store)?);
+            let balances: HashMap<_, _> = store
+                .latest_balances()?
+                .into_iter()
+                .map(|b| (b.position_id.0, b.amount))
+                .collect();
+            assert_eq!(balances["BINANCE:flexible:SOL"], 0);
+            assert_eq!(balances["BINANCE:spot:SOL"], 12257706);
+        }
+        // Without the original subscription, a position-derived plug must never
+        // stand in for evidence of the maturity's principal and interest.
+        snapshot
+            .history
+            .get_mut("flexible/subscriptionRecord/")
+            .unwrap()
+            .remove(0);
+        assert!(import_api_history(&snapshot, &Store::in_memory()?).is_err());
+        Ok(())
+    }
+
+    #[test]
     fn earn_migration_and_funding_redemption_use_owned_counterparties() -> anyhow::Result<()> {
         use serde_json::json;
         let datetime = "2024-01-01T00:00:00Z".parse::<DateTime<Utc>>()?;

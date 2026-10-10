@@ -1,6 +1,8 @@
-//! One process-wide request budget, independent of URL and credentials.
+//! One request budget across processes, independent of URL and credentials.
+mod persistence;
 use std::{
     collections::{HashMap, VecDeque},
+    path::PathBuf,
     sync::{Arc, OnceLock},
     time::Duration,
 };
@@ -110,11 +112,17 @@ pub(crate) struct Pacer {
     interval: Duration,
     budgets: HashMap<String, Budget>,
     active: Option<(String, u32)>,
+    directory: Option<PathBuf>,
 }
+
 pub(crate) fn shared() -> Arc<AsyncMutex<Pacer>> {
     static PACER: OnceLock<Arc<AsyncMutex<Pacer>>> = OnceLock::new();
     PACER
-        .get_or_init(|| Arc::new(AsyncMutex::new(Pacer::new())))
+        .get_or_init(|| {
+            Arc::new(AsyncMutex::new(Pacer::persistent(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.cache/binance/limiter"),
+            )))
+        })
         .clone()
 }
 impl Pacer {
@@ -124,6 +132,13 @@ impl Pacer {
             interval: INITIAL_INTERVAL,
             budgets: HashMap::new(),
             active: None,
+            directory: None,
+        }
+    }
+    pub(crate) fn persistent(directory: PathBuf) -> Self {
+        Self {
+            directory: Some(directory),
+            ..Self::new()
         }
     }
     fn budget(&mut self, path: &str) -> &mut Budget {

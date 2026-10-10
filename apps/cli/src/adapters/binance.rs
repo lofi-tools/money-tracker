@@ -328,7 +328,23 @@ fn events(snapshot: &AccountSnapshot) -> anyhow::Result<Vec<Event>> {
                                 if row.get("originalAmount").is_some() {
                                     ensure!(received.checked_add(loss) == Some(amount(row, "originalAmount")?), "Earn redemption amount and loss differ from original principal");
                                 }
-                                vec![movement(account, target, asset, received), movement(account, "external:fees", asset, loss)]
+                                let mut moves = vec![movement(account, target, asset, received), movement(account, "external:fees", asset, loss)];
+                                // Legacy fixed-term Savings settlements include interest in
+                                // the redeemed amount. The matching subscription is evidence
+                                // of principal; current positions never determine this reward.
+                                if account == "flexible" && row.get("productId").and_then(Value::as_str).is_some_and(|id| id.contains("DAYSS")) {
+                                    let product = text(row, "productId")?;
+                                    let subscriptions: Vec<_> = snapshot.history.get("flexible/subscriptionRecord/")
+                                        .into_iter().flatten().filter(|s| s["productId"] == product && s["asset"] == asset && s["status"] == "SUCCESS" && s["time"].as_i64() < row["time"].as_i64()).collect();
+                                    ensure!(subscriptions.len() == 1, "legacy Savings maturity requires one evidenced principal subscription");
+                                    let settlements = snapshot.history.get(kind).into_iter().flatten()
+                                        .filter(|r| r["productId"] == product && r["asset"] == asset && r["status"] == "PAID").count();
+                                    ensure!(settlements == 1, "ambiguous repeated legacy Savings maturities");
+                                    let principal = amount(subscriptions[0], "amount")?;
+                                    ensure!(received >= principal && loss.is_zero(), "legacy Savings redemption is smaller than principal");
+                                    moves.push(movement("external:rewards", account, asset, received - principal));
+                                }
+                                moves
                             }
                             "rewardsRecord" => {
                                 // Flexible REALTIME rewards stay in Earn; bonus/airdrop and

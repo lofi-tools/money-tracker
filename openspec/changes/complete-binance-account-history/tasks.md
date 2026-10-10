@@ -16,7 +16,7 @@
 - [x] Load Binance CSV/ZIP from .cache/imports, cache decompressed CSV under .cache/test-data, and move Binance/Nexo test DBs there
 - [x] Map statement movements, pair Spot/Funding transfers, preserve repeated rows, and deduplicate exact overlapping API/statement movements
 - [x] Fetch/cache independent positions without full-history backfill and supplement omitted Earn records; add separate display and strict reconciliation tests
-- [ ] Resolve the real fixture’s remaining 0.07192 SOL Flexible deficit using historical Earn evidence; every Spot, Funding and Locked position reconciles
+- [x] Resolve the real fixture’s 0.07192 SOL Flexible deficit using cached legacy Savings maturity and reinvestment records; all owned positions reconcile, with original principal deduplicated against CSV in either order
 
 - [x] Verify 20 Binance client, 34 CLI and 11 core tests; real ZIP/CSV and Nexo cached display replay; strict statement reconciliation retains the sole SOL discrepancy; OpenSpec validation and Nix syntax pass
 
@@ -25,3 +25,8 @@
 - [x] Share one HTTP transport and limiter across all client URLs/credentials in a process; track weighted history, consume usage headers/Spot limits, and learn lower effective budgets from throttling with gradual recovery
 
 - [x] Verify weighted/adaptive limiter with virtual-time tests, mock 429/418 responses and cache bypass; 24 client and 34 CLI tests pass; OpenSpec validation passes
+
+- [x] Share weighted limiter state across Cargo processes using a stable OS file lock, atomic versioned JSON, Unix deadlines, pre-send reservations and persisted response/cooldown feedback
+- [x] Verify separate-process contention, killed lock owner recovery, preserved cooldown/history, corruption errors and expiry pruning; cache hits bypass persistence
+
+- [x] Replay ignored statement tests entirely from existing caches; recover endpoint/query-verified legacy Savings records, preserve provenance and original supplement, and reject maturity interest without principal evidence

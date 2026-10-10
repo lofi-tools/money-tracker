@@ -1,0 +1,89 @@
+# Airtable data model comparison
+
+Reviewed 10 October 2026. The spreadsheet tracked a portfolio of providers, products, yield offers, and subscriptions, with manual balances and follow-up notes. The current application has a useful transaction ledger and historical valuation foundation, but cannot yet preserve most of those relationships. Restore account and product metadata, yield terms, liquidity state, and liabilities before expanding connector coverage widely. See [the prioritized roadmap](provider-roadmap.md) for goals and implementation todos.
+
+## Export evidence and limits
+
+The actual directory is `.cache/airtable_export/`, singular. Two CSVs are available:
+
+| Export | Evidence |
+| --- | --- |
+| `products-model2-draft.csv` | 108 rows; 72 distinct populated `provider` strings; 20 rows without a provider; 13 parent links; 59 signed-up flags; 5 closed flags. |
+| `wallets-Default view.csv` | 124 rows; 73 populated old account fields; 63 APY links; 34 migration flags; 45 movable flags; 3 placeholder rows named ` - `. |
+
+These are mixed legacy and draft views. Neither has a snapshot timestamp or explicit fiat valuation currency. Historical nonzero values and signed-up flags are evidence of previous use, not current holdings or service availability. A blank checkbox is not proof of an active account, unrestricted withdrawal, or a never-used provider.
+
+The referenced `APYs` and `individual_subs` tables are not exported. They appear to hold the rate tiers and subscription details that replaced some old wallet fields. The `amount (rollup from individual_subs)` column is empty in every wallet row. Recover those tables before claiming full migration parity.
+
+Do not add provider totals and child product totals together. `provider_amount_fiat (for sorting)` repeats parent totals across children. Do not add crypto quantities across different currencies. Old and new wallet fields coexist, and names repeat: `Coinlist - MINA`, `Binance - BNB`, `Nexo - BNB`, and others need explicit identity resolution rather than name-based deduplication. Keep personal balances and free-text financial amounts in the ignored source exports; this document records their structure and implications.
+
+## What already exists
+
+The implementation, rather than the older spec text, is the baseline:
+
+- [Core types](../libs/lib-core/src/types.rs) define `ProviderId`, `Asset`, `ExternalAssetId`, `Product`, `UserPosition`, transactions, and balance observations. `UserPosition` already has `product_id`, `start_date`, and `end_date`. `Product` has one `asset_id` and one `apy: f64`.
+- [DuckDB storage](../libs/lib-core/src/storage.rs) persists transaction IDs/times, signed effects, position asset/ownership, asset scales, prices, price coverage, imported file hashes, and independent balance observations. It does **not** persist the full `Product` or `UserPosition` relationships and dates, a provider catalogue, or an account entity.
+- [Binance](../apps/cli/src/adapters/binance.rs) and [statement mapping](../apps/cli/src/adapters/binance/statements.rs) cover Spot, Funding, Flexible Earn, and Locked Earn. Product/position objects are constructed, but APY is currently a placeholder `0.0`; Locked Earn is aggregated by asset. Current observations are kept separate from ledger effects for reconciliation.
+- [Nexo](../apps/cli/src/adapters/nexo.rs) imports CSV movements into aggregate per-asset positions. Its provider interface explicitly cannot identify individual wallet/product positions and returns no products. Credit activity has a separate mapping, discussed below.
+- [CoinGecko](../apps/cli/src/adapters/coingecko.rs), [Binance Vision](../apps/cli/src/adapters/binance_vision.rs), and [fallback prices](../apps/cli/src/adapters/fallback_prices.rs) provide pricing. KuCoin candles and ECB FX already exist as fallbacks; they are not account connectors.
+- The [CLI](../apps/cli/src/main.rs) runs the Nexo/valuation path. Binance workflows are currently exposed through tests and Nix commands described in [the README](../README.md) and [Binance history guide](binance-history.md). An adapter existing in source is different from a normal multi-provider user workflow.
+
+## Missing and incomplete model features
+
+Ordered by importance for migration and reliable provider integration.
+
+| Priority | Spreadsheet evidence | Current gap | Required model or behavior |
+| --- | --- | --- | --- |
+| P0 | `provider`, `parent_product`, `DisplayName`, `short_name` | Provider IDs exist, but there is no persisted provider/account/product hierarchy. Position IDs carry implicit account information. | Stable `Provider`, `Account`, `Product`, and `Position` relationships; display names and aliases; optional product parent; separate account instance IDs for multiple accounts at one provider. |
+| P0 | `-> APYs`, `moved_to_individual_subs`, repeated provider/asset rows | Multiple positions are possible in Rust, but subscription identity and terms are not persisted. Binance aggregates Locked positions; Nexo lacks identifying data. | Separate product offers/rate tiers from individual subscriptions. Store source subscription ID, account, asset, principal evidence, opening date, maturity, renewal, and closure. Leave unknown terms unset. |
+| P0 | `amount_manual (old)`, empty subscription rollup | No Airtable importer or manual balance workflow. Independent source observations already exist in DuckDB. | Import/manual observations with timestamp, source, confidence, and provenance. Keep an observation distinct from a transaction. An opening checkpoint must be explicitly dated and evidenced; it must not invent earlier history. |
+| P0 | `obligation/loss`, provider closure, historical lenders | The ownership boolean conflates external counterparties with obligations; no general liability/claim model. | Explicit owned asset, owned liability, external counterparty, and recovery claim roles. Record loan principal/interest/repayment, impairment, recoveries, claim valuation, and evidence. |
+| P1 | APY links with 7/14/360-day offers, balance caps, first/after threshold bands | One scalar APY; no rate history, tier cap, reward asset, qualification, or term model. | Effective-dated rate schedules with APR/APY semantics, amount bands, fixed/flexible term, compounding, payout asset, and eligibility. `Unknown` must differ from zero yield. |
+| P1 | `earn_rate (old)`, `apy-lookup`, `apy-rollup`, `effective_apy` | Live provider rates and portfolio yield are not implemented. | Separate advertised rate, expected income, and observed realized return. Compute a fiat-value-weighted portfolio rate only across comparable, dated inputs. Do not average APYs across unlike terms or assume every linked offer is held. |
+| P1 | `epy_crypto` old/new, `epy_fiat`, product yield rollups | No expected annual income or realized income report. Provider event semantics are largely lost in the generic persisted transaction. | Preserve interest, staking reward, cashback, bonus, fee, and gain classifications; derive projections by reward asset and reporting currency; compare projections with actual credited income. Confirm what legacy `epy` means before rebuilding formulas. |
+| P1 | `movable`, `Unstaking`, card/exchange staking, fixed terms | No available/locked/pending/unstaking/frozen lifecycle or unlock date. | Liquidity state, withdrawable amount, maturity/unbonding dates, notice period, and restrictions. Report accessible value alongside total value. |
+| P1 | Product/wallet `expected movement` notes | No structured unresolved movement or reconciliation issue entity. | Expected incoming/outgoing transfer or reward, source/destination, asset, expected amount/date, status, and retained note. Connect to evidence when resolved; never book a guessed movement automatically. |
+| P1 | `Quickswap` ETH/MATIC and MATIC/QUICK rows; Alpha `ibETH`; MetaPool links | One-asset products cannot express pool exposures, receipt-token conversion, or protocol debt. | Composite positions with underlying components, receipt shares, conversion/index observations, pool/contract identity, and reward balances. Value either the receipt or its underlying exposure once. |
+| P1 | MetaMask chain children; ImToken, Trust Wallet, Yoroi, Polkadot, NEAR | No persisted chain/address/contract/validator identity. `AssetId` is used as a ticker in adapters. | Chain-qualified token identity and decimals, wallet address/account identity, protocol/version/contracts, validator and delegation data. Preserve economic grouping separately from token identity. |
+| P2 | `signed up`, `closed`, `tags`, `short_name` | No account lifecycle, categorization, or research catalogue. | Separate personally used accounts from researched providers/products. Track account status and closure date independently of provider service status; tags, aliases, archive state, and notes. |
+| P2 | `amount_fiat (old)`, `total_amount_fiat`, `provider_amount_fiat (for sorting)` | Valuation exists, but not the hierarchical reporting or historical quote metadata from the spreadsheet workflow. | Derived position/product/provider/portfolio reports with explicit quote currency and time. Preserve old figures as reference observations; record price source, staleness, and approximation. |
+| P2 | Structured/options tags and Matrixport dual-currency position | No structured payoff or contingent settlement model. | Strike, expiry, settlement currencies, principal at risk, payoff terms, and settlement events. Do not project these as ordinary guaranteed interest. |
+
+### Liability reporting needs correction before broadening net worth
+
+Nexo records credit-domain debt as negative effects on `NEXO-CREDIT:*` positions with `owned = false`. `credit_amounts_at` queries **all** non-owned positions. `total_value_history` queries only owned positions, so it excludes those Nexo obligations. In a combined database, non-owned Binance market/reward/fee counterparties can also enter the credit query.
+
+The current owned-holdings valuation is therefore not sufficient for net worth across assets and debt. Persist an explicit economic role, subtract user liabilities, and exclude external counterparties from both user assets and user debt. This is an accounting gap independent of how many providers are connected.
+
+### Asset identity and precision need work for on-chain imports
+
+`ExternalAssetId::eq` compares only `id`, while its hash includes `issuer_name` as well. Equal IDs from different issuers can therefore hash differently, violating the equality/hash contract. Fix that before relying on it for provider mappings. Cross-provider asset mappings on `Asset` are currently commented out.
+
+Introduce token identity by chain and contract/mint, native-asset identity by chain, and effective-dated aliases/migrations. Investigate the exported CHSB, MATIC, Elrond eGLD, and LUNA labels against actual source history; do not treat a renamed token, migrated token, fork, and wrapped token as interchangeable merely because tickers resemble each other.
+
+Binance parses decimal strings exactly; Nexo currently parses amounts as `f64` and rounds into eight decimal places. Ledger effects are `u64` in Rust and checked into signed `BIGINT` in DuckDB, which is too narrow for general raw 18-decimal token balances. Choose an exact numeric representation and stable scale policy before chain connectors; reject or explicitly migrate scale changes instead of reinterpreting existing units.
+
+### On-chain balances can change without transfer events
+
+Transfers alone are insufficient for yield-bearing positions. Lido distinguishes rebasing stETH from fixed-balance, value-accruing wstETH; Rocket Pool rETH uses an evolving ETH conversion rate. Aave debt balances include accrued interest. Preserve time/block-specific balances, shares, and indices alongside decoded movements. Sources: [Lido token accounting](https://docs.lido.fi/guides/lido-tokens-integration-guide/), [Rocket Pool staking overview](https://docs.rocketpool.net/liquid-staking/overview.html), [Aave tokenization](https://www.aave.com/docs/aave-v3/smart-contracts/tokenization).
+
+## Migration rules
+
+1. Preserve file hash, row identity, raw text, and column names. Airtable record IDs are absent; assign import-scoped row IDs rather than using display names as keys.
+2. Import the product catalogue and explicit parent links first; detect cycles and unresolved links. Model parent catalogue rows without forcing an asset onto every row.
+3. Preserve old and new wallet fields independently. APY lists indicate candidate offers, not necessarily separate owned subscriptions. Recover missing linked tables to resolve that distinction.
+4. Quarantine the three placeholder rows. Retain duplicates for review. A migrated old balance may duplicate a subscription, and a pool's two asset rows may describe one economic position.
+5. Treat blank provider fields as unresolved or catalogue-only. IndexCoop, Bitso, Radiant, and others still appear by display name; searching only the `provider` column would miss them. Jump Crypto and Electric Capital are research entries, not automatically financial accounts.
+6. Preserve `NaN`, blanks, unknown timestamps, and uncertain notes as unknown states. Do not turn them into zero balances, zero rates, or confirmed movements. Legacy wallet `epy_crypto (old)` has many `1.000` values despite sparse account fields; validate formulas before reuse.
+7. Recompute fiat totals and income projections from normalized, dated inputs. The export's rounded totals are comparison evidence, not authoritative valuation history.
+8. Reconcile imported observations against provider records at a common cutoff where possible. Keep completeness boundaries visible: a current balance or opening checkpoint cannot establish earlier income, performance, or cost basis.
+
+## Existing work to extend
+
+- [Persist accounting models](../openspec/changes/persist-accounting-models/tasks.md) still has account metadata persistence/retrieval outstanding. Extend this effort for provider/account/product/position relationships rather than creating a competing persistence system.
+- [Historical net worth](../openspec/changes/add-historical-net-worth/tasks.md) is marked complete; its owned-only implementation still needs the liability and composite-position extensions above.
+- [Complete Binance account history](../openspec/changes/complete-binance-account-history/tasks.md) has extensive implemented reconciliation work. Prioritize a normal application import/sync workflow and explicit coverage before adding another exhaustive Binance endpoint family.
+- [Improve Nexo file handling](../openspec/changes/improve-nexo-file-handling/tasks.md) remains unchecked, although file hash deduplication and configurable input already exist in code. Reconcile the proposal with actual implementation before scheduling duplicate work.
+- [Core domain specification](../openspec/specs/core-domain-types/spec.md) contains stale descriptions, including enum asset IDs, external mapping methods, and transaction representations that differ from source. Align specs with implementation during the relevant changes.
+
+This comparison is a planning document. Implementation of new schema and connector capabilities should use the repository's OpenSpec proposal workflow.

@@ -1,4 +1,5 @@
 //! Binance API records -> exact, asset-balanced ledger transactions.
+pub mod statements;
 use anyhow::{Context, ensure};
 use binance_client::{BinanceClient, account::AccountSnapshot};
 use chrono::{DateTime, NaiveDateTime, Utc};
@@ -316,7 +317,9 @@ fn events(snapshot: &AccountSnapshot) -> anyhow::Result<Vec<Event>> {
                                 if status.is_some_and(|s| matches!(s, "FAILED" | "FAIL" | "PENDING" | "REDEEMING" | "WAIT_FOR_REDEMPTION")) { return Ok(None); }
                                 ensure!(status.is_none_or(|s| matches!(s, "PAID" | "SUCCESS" | "REDEEMED")), "unknown Earn redemption status");
                                 if row.get("isComplete").and_then(Value::as_bool) == Some(false) { return Ok(None); }
-                                let target = match row.get("redeemTo").and_then(Value::as_str).unwrap_or("SPOT") {
+                                let destination = row.get("redeemTo").or_else(|| row.get("destAccount")).and_then(Value::as_str)
+                                    .unwrap_or(if account == "locked" && row["type"] == "NEW_TRANSFERRED" { "FLEXIBLE" } else { "SPOT" });
+                                let target = match destination {
                                     "SPOT" => "spot", "FLEXIBLE" => "flexible", "FUND" | "FUNDING" => "funding",
                                     _ => anyhow::bail!("unsupported Earn redemption destination"),
                                 };
@@ -441,13 +444,28 @@ pub fn map_snapshot(snapshot: &AccountSnapshot) -> anyhow::Result<BinanceAccount
             current.push((account.clone(), asset, n));
         }
     }
-    let mut precision = BTreeMap::<String, u8>::new();
+    map_movements(events, current, snapshot.fetched_at, &BTreeMap::new())
+}
+
+fn map_movements(
+    events: Vec<Event>,
+    current: Vec<(String, String, Decimal)>,
+    fetched_at: DateTime<Utc>,
+    existing_scales: &BTreeMap<String, u8>,
+) -> anyhow::Result<BinanceAccountData> {
+    let mut precision = existing_scales.clone();
     for (asset, n) in events
         .iter()
         .flat_map(|e| e.movements.iter().map(|m| (&m.asset, m.amount)))
         .chain(current.iter().map(|(_, a, n)| (a, *n)))
     {
         let decimals = u8::try_from(n.normalize().scale())?.max(8);
+        ensure!(
+            existing_scales
+                .get(asset)
+                .is_none_or(|existing| *existing >= decimals),
+            "existing ledger precision for {asset} is insufficient; rebuild the cached DB"
+        );
         precision
             .entry(asset.clone())
             .and_modify(|d| *d = (*d).max(decimals))
@@ -489,7 +507,7 @@ pub fn map_snapshot(snapshot: &AccountSnapshot) -> anyhow::Result<BinanceAccount
         accounts.insert(id.0.clone(), (asset.clone(), true));
         current_balances.push(PositionBalance {
             position_id: id,
-            datetime: snapshot.fetched_at,
+            datetime: fetched_at,
             amount: i128::from(units(n, precision[&asset])?),
         });
     }
@@ -790,6 +808,12 @@ mod tests {
         eprintln!("Fetching Binance snapshot; reusing cached historical responses");
         let progress = std::sync::Mutex::new((0usize, String::new()));
         let snapshot = client
+            .with_backoff_progress(|endpoint, status, attempt, delay| {
+                eprintln!(
+                    "Binance {endpoint}: HTTP {status}, attempt {attempt}; cooling down for {:.1}s",
+                    delay.as_secs_f64()
+                );
+            })
             .with_request_progress(move |endpoint, cached| {
                 let mut progress = progress.lock().unwrap_or_else(|e| e.into_inner());
                 progress.0 += 1;
@@ -802,7 +826,9 @@ mod tests {
                 }
                 progress.1 = endpoint.to_owned();
             })
-            .with_history_cache(parent.join("requests"))
+            .with_history_cache(
+                Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/api_responses/binance"),
+            )
             .fetch_account_snapshot(&additional_symbols()?)
             .await?;
         std::fs::create_dir_all(parent)?;
@@ -898,7 +924,8 @@ mod tests {
     }
 
     fn real_db_path() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/test-binance-v1.duckdb")
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.cache/test-data/test-binance-api-v1.duckdb")
     }
 
     #[tokio::test]

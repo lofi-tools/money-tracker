@@ -37,3 +37,43 @@ An ignored test SHALL reuse the raw snapshot and persistent test DB, report fetc
 #### Scenario: Display imported totals
 - **WHEN** the user runs `binance` with a completed test DB import
 - **THEN** the test reports DB reuse and prints asset balances without fetching or reimporting transactions
+
+
+### Requirement: Binance backpressure
+The client SHALL honor the full Retry-After cooldown on HTTP 429, use bounded exponential fallback when the header is absent or invalid, and serialize network requests behind one limiter and cooldown shared by all client instances within the process regardless of base URL or credentials. Requests SHALL be signed after waiting. Cached responses SHALL bypass throttling. Repeated throttling SHALL reduce the subsequent request rate. Exhaustion after eight attempts and HTTP 418 bans SHALL return typed errors and preserve the shared cooldown. Rate-limit errors SHALL NOT be cached as successful responses.
+
+#### Scenario: Long server cooldown
+- **WHEN** Binance returns HTTP 429 with Retry-After of 120 seconds
+- **THEN** the next network request waits at least 120 seconds and later requests use slower pacing
+
+#### Scenario: Ban or retry exhaustion
+- **WHEN** the retry limit is exhausted or HTTP 418 is returned
+- **THEN** the client stops the fetch, reports the cooldown and prevents subsequent requests in that process from sending early
+
+### Requirement: Historical statement fixtures
+The importer SHALL accept original Binance transaction-history CSV and ZIP files under repository `.cache/imports`, cache extracted CSVs under `.cache/test-data`, and store Binance and Nexo test DBs under `.cache/test-data`. It SHALL honor the export timezone, preserve repeated rows, reject unsupported operations and incomplete transfer pairs before committing, and import each content hash once. Exact matching API and statement movements SHALL share IDs including occurrence counts. Different representations SHALL NOT be approximately matched.
+
+#### Scenario: ZIP and CSV replay
+- **WHEN** a single-part archive and its original CSV are imported
+- **THEN** both identify the same file contents and the second import adds no transactions
+
+#### Scenario: Independent positions and omitted Earn activity
+- **WHEN** the statement fixture has no position reference or Earn supplement
+- **THEN** the test fetches and caches independent API positions and supported omitted Earn movements once, without a full trade-history backfill
+- **AND** subsequent runs reuse the persistent DB and frozen API fixtures without credentials or network
+- **AND** unexplained differences fail the strict reconciliation test without generated balancing entries
+
+### Requirement: Weighted adaptive request budgets
+All Binance client instances SHALL share one HTTP transport and process-wide limiter. The limiter SHALL retain weighted call history over a rolling minute, seed budgets and request costs from documented limits with headroom, consume server usage headers and current Spot minute limits from exchangeInfo, and reduce the effective budget after throttling. Successful requests SHALL restore budget gradually without exceeding headroom. Cached responses SHALL consume no request budget. Independent mock-server tests MAY inject isolated limiters to control virtual time.
+
+#### Scenario: Expensive fiat history
+- **WHEN** fiat-history requests consume 45,000 UID weight each
+- **THEN** the limiter spaces calls and waits for history expiry before exceeding its minute budget
+
+#### Scenario: Several clients and hosts
+- **WHEN** tests construct clients with different base URLs or credentials in the same process
+- **THEN** they share one limiter and cooldown instead of independent URL budgets
+
+#### Scenario: Server observes other callers
+- **WHEN** response headers report usage near the effective limit
+- **THEN** the next network request waits until sufficient budget is available

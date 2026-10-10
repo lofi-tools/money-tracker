@@ -3,6 +3,8 @@ pub mod error;
 pub use error::BinanceError;
 pub mod account;
 pub mod archive;
+mod backpressure;
+pub mod statement;
 use payloads::{FlexEarnPos, LockedEarnPos, StakingProduct};
 use serde::Deserialize;
 use snafu::ResultExt;
@@ -14,6 +16,8 @@ pub struct BinanceClient {
     api_key: String,
     api_secret: String,
     history_cache: Option<std::path::PathBuf>,
+    pacer: std::sync::Arc<tokio::sync::Mutex<backpressure::Pacer>>,
+    backoff_progress: Option<Box<dyn Fn(&str, u16, usize, std::time::Duration) + Send + Sync>>,
     request_progress: Option<Box<dyn Fn(&str, bool) + Send + Sync>>,
 }
 impl IsApiClient for BinanceClient {
@@ -40,6 +44,8 @@ impl BinanceClient {
             api_key,
             api_secret,
             history_cache: None,
+            pacer: backpressure::shared(),
+            backoff_progress: None,
             request_progress: None,
         })
     }

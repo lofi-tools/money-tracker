@@ -18,7 +18,7 @@ pub struct Args {
     #[arg(short, long, env = "APP_DATA_DIR")]
     pub data_dir: Option<PathBuf>,
 
-    /// Nexo CSV export (defaults to .cache/nexo_transactions.csv)
+    /// Nexo CSV export (defaults to .cache/imports/nexo_transactions_05-10-2026_10-36-53.csv)
     #[arg(long)]
     pub nexo_csv: Option<PathBuf>,
 
@@ -43,9 +43,9 @@ pub struct Config {
 impl Config {
     pub fn from_env(args: Args) -> Self {
         Self {
-            nexo_csv_path: args
-                .nexo_csv
-                .unwrap_or_else(|| PathBuf::from(".cache/nexo_transactions.csv")),
+            nexo_csv_path: args.nexo_csv.unwrap_or_else(|| {
+                PathBuf::from(".cache/imports/nexo_transactions_05-10-2026_10-36-53.csv")
+            }),
             cache_dir: args
                 .cache_dir
                 .or_else(|| dirs::cache_dir().map(|p| p.join(APP_NAME)))
@@ -203,7 +203,7 @@ mod tests {
         let config = Config::from_env(args);
         assert_eq!(
             config.nexo_csv_path,
-            PathBuf::from(".cache/nexo_transactions.csv")
+            PathBuf::from(".cache/imports/nexo_transactions_05-10-2026_10-36-53.csv")
         );
 
         let args = Args::parse_from([

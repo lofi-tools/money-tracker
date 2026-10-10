@@ -513,17 +513,18 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "needs real export at .cache/nexo_transactions_05-10-2026_10-36-53.csv (not committed)"]
+    #[ignore = "needs real export at .cache/imports/nexo_transactions_05-10-2026_10-36-53.csv (not committed)"]
     fn latest_amount_after_cached_export() -> anyhow::Result<()> {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../.cache/nexo_transactions_05-10-2026_10-36-53.csv");
+            .join("../../.cache/imports/nexo_transactions_05-10-2026_10-36-53.csv");
         let service = NexoSvc::from_path(&path);
         let rows = service.read_rows()?;
-        // File-backed scratch DB next to the export: the hash-deduped import
+        // File-backed scratch DB under .cache/test-data: the hash-deduped import
         // below is a no-op on repeat runs, so the test skips re-inserting
         // thousands of transactions every time.
         let db_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../.cache/test-nexo_05-10-2026.duckdb");
+            .join("../../.cache/test-data/test-nexo_05-10-2026.duckdb");
+        std::fs::create_dir_all(db_path.parent().unwrap())?;
         let store = Store::open(&db_path)?;
         match service.import_into_with_progress(&store, |done, total| {
             eprintln!("Writing Nexo transactions: {done}/{total}");
@@ -771,9 +772,11 @@ mod tests {
         )?;
         let service = NexoSvc::from_path(&csv_path);
         {
-            let store = Store::open(&db_path)?;
+            std::fs::create_dir_all(db_path.parent().unwrap())?;
+        let store = Store::open(&db_path)?;
             assert_eq!(service.import_into(&store)?, NexoImportOutcome::Imported(1));
         }
+        std::fs::create_dir_all(db_path.parent().unwrap())?;
         let store = Store::open(&db_path)?;
         assert_eq!(
             service.import_into(&store)?,

@@ -45,9 +45,13 @@ impl BinanceClient {
     ) -> Result<Self, BinanceError> {
         let api_key = validate_credential("BINANCE_API_KEY_ID", Ok(api_key))?;
         let api_secret = validate_credential("BINANCE_API_KEY_SECRET", Ok(api_secret))?;
+        let base_url = base_url.into();
+        let pacer = crate::backpressure::shared();
         Ok(Self {
             http_client: http_client()?,
-            base_url: base_url.into(),
+            base_url,
+            pacer,
+            backoff_progress: None,
             api_key,
             api_secret,
             history_cache: None,
@@ -61,6 +65,15 @@ impl BinanceClient {
         on_progress: impl Fn(&str, bool) + Send + Sync + 'static,
     ) -> Self {
         self.request_progress = Some(Box::new(on_progress));
+        self
+    }
+
+    /// Report throttling without exposing signed URLs, credentials or response bodies.
+    pub fn with_backoff_progress(
+        mut self,
+        on_backoff: impl Fn(&str, u16, usize, std::time::Duration) + Send + Sync + 'static,
+    ) -> Self {
+        self.backoff_progress = Some(Box::new(on_backoff));
         self
     }
 
@@ -85,6 +98,16 @@ impl BinanceClient {
         path: &str,
         params: &[(String, String)],
         post: bool,
+    ) -> Result<Value, BinanceError> {
+        self.request_json(path, params, post, true).await
+    }
+
+    async fn request_json(
+        &self,
+        path: &str,
+        params: &[(String, String)],
+        post: bool,
+        signed: bool,
     ) -> Result<Value, BinanceError> {
         let historical = path.contains("/history/")
             || matches!(
@@ -132,33 +155,71 @@ impl BinanceClient {
             .trim_end_matches("/sapi/v1")
             .trim_end_matches('/');
         let url = format!("{origin}{path}");
-        for attempt in 0..4 {
+        for attempt in 0..crate::backpressure::MAX_ATTEMPTS {
+            // Hold the gate through the response so concurrent callers cannot
+            // race past a newly received cooldown. Cache hits bypass this gate.
+            let mut pacer = self.pacer.lock().await;
+            pacer.wait(path).await;
+            pacer.start_request(path);
             let builder = if post {
                 self.http_client.post(&url)
             } else {
                 self.http_client.get(&url)
             };
-            let response = builder
+            let builder = builder
                 .query(params)
-                .query(&[("recvWindow", "10000")])
-                .timeout(std::time::Duration::from_secs(30))
-                .sign(self)?
+                .timeout(std::time::Duration::from_secs(30));
+            // Sign only after waiting: a signature prepared before a long
+            // cooldown would have an expired timestamp.
+            let builder = if signed {
+                builder.query(&[("recvWindow", "10000")]).sign(self)?
+            } else {
+                builder
+            };
+            let response = builder
                 .send()
                 .await
                 .map_err(reqwest::Error::without_url)
                 .context(RequestSnafu { endpoint: path })?;
-            if response.status().as_u16() == 429 && attempt < 3 {
-                let seconds = response
-                    .headers()
-                    .get("retry-after")
-                    .and_then(|v| v.to_str().ok())
-                    .and_then(|s| s.parse::<u64>().ok())
-                    .unwrap_or(30)
-                    .min(60);
-                tokio::time::sleep(std::time::Duration::from_secs(seconds)).await;
+            pacer.observe_headers(path, response.headers());
+            let status = response.status().as_u16();
+            if matches!(status, 429 | 418) {
+                let delay = crate::backpressure::retry_delay(
+                    response
+                        .headers()
+                        .get("retry-after")
+                        .and_then(|v| v.to_str().ok()),
+                    attempt,
+                    Utc::now(),
+                );
+                pacer.cool_down(delay).context(InvalidResponseSnafu {
+                    endpoint: path,
+                    reason: "server cooldown exceeds supported timer range",
+                })?;
+                if let Some(on_backoff) = &self.backoff_progress {
+                    on_backoff(path, status, attempt + 1, delay);
+                }
+                // Do not retry a ban. Keep the cooldown for all later requests,
+                // including a newly constructed client in this process.
+                if status == 418 || attempt + 1 == crate::backpressure::MAX_ATTEMPTS {
+                    return RateLimitedSnafu {
+                        endpoint: path,
+                        status,
+                        attempts: attempt + 1,
+                        retry_after: delay,
+                    }
+                    .fail();
+                }
+                drop(response);
+                drop(pacer);
                 continue;
             }
             let value = decode_response(response, path).await?;
+            if path == "/api/v3/exchangeInfo" {
+                pacer.observe_exchange_info(&value);
+            }
+            pacer.success();
+            drop(pacer);
             if let Some(path) = &cache {
                 // Generated cache paths always have the configured directory as parent.
                 let directory = path.parent().context(InvalidResponseSnafu {
@@ -180,7 +241,6 @@ impl BinanceClient {
             if let Some(on_progress) = &self.request_progress {
                 on_progress(path, false);
             }
-            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
             return Ok(value);
         }
         PaginationSnafu {
@@ -342,20 +402,9 @@ impl BinanceClient {
                 reason: "launch timestamp out of range",
             })?;
         let cutoff = Utc::now();
-        let origin = self
-            .base_url
-            .trim_end_matches("/sapi/v1")
-            .trim_end_matches('/');
-        let response = self
-            .http_client
-            .get(format!("{origin}/api/v3/exchangeInfo"))
-            .send()
-            .await
-            .map_err(reqwest::Error::without_url)
-            .context(RequestSnafu {
-                endpoint: "/api/v3/exchangeInfo",
-            })?;
-        let info = decode_response(response, "/api/v3/exchangeInfo").await?;
+        let info = self
+            .request_json("/api/v3/exchangeInfo", &[], false, false)
+            .await?;
         let mut symbols: Vec<Symbol> =
             serde_json::from_value(info["symbols"].clone()).context(DecodeResponseSnafu {
                 endpoint: "/api/v3/exchangeInfo",
@@ -558,6 +607,99 @@ impl BinanceClient {
         }
         // Fetch these after history; reconcile only a quiet account. Concurrent activity
         // during collection is intentionally visible as a mismatch.
+        let balances = self.fetch_current_balances().await?;
+        Ok(AccountSnapshot {
+            version: 1,
+            from,
+            fetched_at: cutoff,
+            symbols,
+            history,
+            balances,
+        })
+    }
+    /// Earn movements omitted from the Spot/Funding transaction-history export.
+    /// Keep the reference cutoff fixed so cached statements and positions replay together.
+    pub async fn fetch_statement_supplement(
+        &self,
+        statement_end: DateTime<Utc>,
+        reference: &AccountSnapshot,
+    ) -> Result<AccountSnapshot, BinanceError> {
+        ensure!(
+            statement_end <= reference.fetched_at,
+            InvalidResponseSnafu {
+                endpoint: "statement supplement",
+                reason: "statement ends after position snapshot"
+            }
+        );
+        let to = reference.fetched_at.timestamp_millis();
+        let mut history = BTreeMap::new();
+        let rewards = self
+            .history(
+                "/sapi/v1/simple-earn/flexible/history/rewardsRecord",
+                "rows",
+                &[("type".into(), "REALTIME".into())],
+                BINANCE_LAUNCH_MS,
+                to,
+                30,
+                100,
+                Paging::Page,
+            )
+            .await?;
+        history.insert("flexible/rewardsRecord/REALTIME".into(), rewards);
+        let redemptions = self
+            .history(
+                "/sapi/v1/simple-earn/locked/history/redemptionRecord",
+                "rows",
+                &[],
+                BINANCE_LAUNCH_MS,
+                to,
+                30,
+                100,
+                Paging::Page,
+            )
+            .await?
+            .into_iter()
+            .filter(|r| r["type"] == "NEW_TRANSFERRED")
+            .collect();
+        history.insert("locked/redemptionRecord/".into(), redemptions);
+        let rewards = self
+            .history(
+                "/sapi/v1/simple-earn/locked/history/rewardsRecord",
+                "rows",
+                &[],
+                statement_end.timestamp_millis() + 1,
+                to,
+                30,
+                100,
+                Paging::Page,
+            )
+            .await?;
+        history.insert("locked/rewardsRecord/".into(), rewards);
+        Ok(AccountSnapshot {
+            version: 1,
+            from: DateTime::from_timestamp_millis(BINANCE_LAUNCH_MS).unwrap(),
+            fetched_at: reference.fetched_at,
+            history,
+            symbols: vec![],
+            balances: reference.balances.clone(),
+        })
+    }
+
+    /// Fetch current Spot, Funding and Earn positions without downloading history.
+    pub async fn fetch_current_positions(&self) -> Result<AccountSnapshot, BinanceError> {
+        let balances = self.fetch_current_balances().await?;
+        let fetched_at = Utc::now();
+        Ok(AccountSnapshot {
+            version: 1,
+            from: fetched_at,
+            fetched_at,
+            symbols: vec![],
+            history: BTreeMap::new(),
+            balances,
+        })
+    }
+
+    async fn fetch_current_balances(&self) -> Result<BTreeMap<String, Vec<Value>>, BinanceError> {
         let mut balances = BTreeMap::new();
         let spot = self.account_request("/api/v3/account", &[], false).await?;
         balances.insert(
@@ -596,14 +738,7 @@ impl BinanceClient {
                 .await?,
             );
         }
-        Ok(AccountSnapshot {
-            version: 1,
-            from,
-            fetched_at: cutoff,
-            symbols,
-            history,
-            balances,
-        })
+        Ok(balances)
     }
 }
 
@@ -662,11 +797,30 @@ mod tests {
     }
 
     async fn raw_server(responses: Vec<(u16, String)>) -> (BinanceClient, JoinHandle<Vec<String>>) {
+        let (client, task, _) = header_server(
+            responses
+                .into_iter()
+                .map(|(status, body)| (status, body, String::new()))
+                .collect(),
+        )
+        .await;
+        (client, task)
+    }
+
+    async fn header_server(
+        responses: Vec<(u16, String, String)>,
+    ) -> (
+        BinanceClient,
+        JoinHandle<Vec<String>>,
+        std::sync::Arc<std::sync::Mutex<Vec<tokio::time::Instant>>>,
+    ) {
+        let times = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured = times.clone();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let task = tokio::spawn(async move {
             let mut requests = Vec::new();
-            for (status, body) in responses {
+            for (status, body, headers) in responses {
                 let (mut stream, _) = listener.accept().await.unwrap();
                 let mut bytes = Vec::new();
                 loop {
@@ -678,20 +832,170 @@ mod tests {
                         break;
                     }
                 }
+                captured.lock().unwrap().push(tokio::time::Instant::now());
                 requests.push(String::from_utf8(bytes).unwrap());
-                stream.write_all(format!("HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+                stream.write_all(format!("HTTP/1.1 {status} Test\r\n{headers}Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
             }
             requests
         });
-        (
-            BinanceClient::with_credentials(
-                format!("http://{address}"),
-                "private-test-key".into(),
-                "private-test-secret".into(),
-            )
-            .unwrap(),
-            task,
+        let mut client = BinanceClient::with_credentials(
+            format!("http://{address}"),
+            "private-test-key".into(),
+            "private-test-secret".into(),
         )
+        .unwrap();
+        // Mock servers run on independent paused clocks. Actual constructors
+        // always use the global limiter; inject an isolated budget only here.
+        client.pacer =
+            std::sync::Arc::new(tokio::sync::Mutex::new(crate::backpressure::Pacer::new()));
+        (client, task, times)
+    }
+
+    // Keep Tokio from auto-advancing HTTP timeouts while the OS handles I/O.
+    // The tests explicitly advance only the throttle wait, never network time.
+    fn keep_virtual_clock_active() -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async {
+            loop {
+                tokio::task::yield_now().await;
+            }
+        })
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn retries_429_then_slows_later_requests_and_caches_only_success() -> anyhow::Result<()> {
+        let clock_guard = keep_virtual_clock_active();
+        let dir = tempfile::tempdir()?;
+        let (client, task, times) = header_server(vec![
+            (
+                429,
+                "{\"code\":-1003}".into(),
+                "Retry-After: 120\r\n".into(),
+            ),
+            (200, "[]".into(), String::new()),
+            (200, "[]".into(), String::new()),
+        ])
+        .await;
+        let (sender, mut backoffs) = tokio::sync::mpsc::unbounded_channel();
+        let client =
+            std::sync::Arc::new(client.with_history_cache(dir.path()).with_backoff_progress(
+                move |_, _, _, delay| {
+                    sender.send(delay).unwrap();
+                },
+            ));
+        let request_client = client.clone();
+        let request = tokio::spawn(async move {
+            request_client
+                .account_request("/sapi/v1/fiat/orders", &[], false)
+                .await
+        });
+        let delay = backoffs.recv().await.unwrap();
+        assert_eq!(delay, std::time::Duration::from_secs(120));
+        tokio::time::advance(delay).await;
+        request.await??;
+        let before = tokio::time::Instant::now();
+        client
+            .account_request("/sapi/v1/fiat/orders", &[], false)
+            .await?;
+        assert_eq!(before, tokio::time::Instant::now());
+        let spacing = client
+            .pacer
+            .lock()
+            .await
+            .next_request
+            .saturating_duration_since(tokio::time::Instant::now());
+        tokio::time::advance(spacing).await;
+        client
+            .account_request("/api/v3/account", &[], false)
+            .await?;
+        assert_eq!(task.await?.len(), 3);
+        let times = times.lock().unwrap();
+        assert!(times[1] - times[0] >= std::time::Duration::from_secs(120));
+        assert!(times[2] - times[1] >= std::time::Duration::from_millis(7500));
+        clock_guard.abort();
+        Ok(())
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn exhausted_429_preserves_cooldown_and_does_not_cache_errors() -> anyhow::Result<()> {
+        let clock_guard = keep_virtual_clock_active();
+        let dir = tempfile::tempdir()?;
+        let (client, task, _) = header_server(
+            (0..crate::backpressure::MAX_ATTEMPTS)
+                .map(|_| {
+                    (
+                        429,
+                        "{\"code\":-1003}".into(),
+                        "Retry-After: 120\r\n".into(),
+                    )
+                })
+                .collect(),
+        )
+        .await;
+        let (sender, mut backoffs) = tokio::sync::mpsc::unbounded_channel();
+        let client =
+            std::sync::Arc::new(client.with_history_cache(dir.path()).with_backoff_progress(
+                move |_, _, _, delay| {
+                    sender.send(delay).unwrap();
+                },
+            ));
+        let request_client = client.clone();
+        let request = tokio::spawn(async move {
+            request_client
+                .account_request("/sapi/v1/fiat/orders", &[], false)
+                .await
+        });
+        for _ in 1..crate::backpressure::MAX_ATTEMPTS {
+            let delay = backoffs.recv().await.unwrap();
+            tokio::time::advance(delay).await;
+        }
+        let error = request.await?.unwrap_err();
+        assert!(matches!(
+            error,
+            BinanceError::RateLimited {
+                status: 429,
+                attempts: 8,
+                ..
+            }
+        ));
+        assert_eq!(task.await?.len(), 8);
+        assert!(client.pacer.lock().await.next_request > tokio::time::Instant::now());
+        assert!(std::fs::read_dir(dir.path())?.next().is_none());
+        clock_guard.abort();
+        Ok(())
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn ban_418_is_not_retried_and_preserves_shared_cooldown() -> anyhow::Result<()> {
+        let clock_guard = keep_virtual_clock_active();
+        let (client, task, _) = header_server(vec![(
+            418,
+            "{\"code\":-1003}".into(),
+            "Retry-After: 180\r\n".into(),
+        )])
+        .await;
+        let error = client
+            .account_request("/api/v3/account", &[], false)
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            BinanceError::RateLimited {
+                status: 418,
+                attempts: 1,
+                ..
+            }
+        ));
+        assert_eq!(task.await?.len(), 1);
+        let mut other = BinanceClient::with_credentials(
+            client.base_url.clone(),
+            "other-key".into(),
+            "other-secret".into(),
+        )?;
+        other.pacer = client.pacer.clone();
+        assert!(std::sync::Arc::ptr_eq(&client.pacer, &other.pacer));
+        assert!(other.pacer.lock().await.next_request > tokio::time::Instant::now());
+        clock_guard.abort();
+        Ok(())
     }
 
     #[tokio::test]

@@ -518,6 +518,32 @@ impl Store {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
+    pub fn position_metadata(&self) -> anyhow::Result<Vec<(PositionId, AssetId, u8, bool)>> {
+        let mut statement = self.connection.prepare(
+            "SELECT p.position_id, p.asset_id, s.decimals, p.owned FROM positions p JOIN asset_scales s ON s.asset_id=p.asset_id",
+        )?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i32>(2)?,
+                    row.get::<_, bool>(3)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.into_iter()
+            .map(|(position, asset, scale, owned)| {
+                Ok((
+                    PositionId(position),
+                    AssetId(asset),
+                    u8::try_from(scale)?,
+                    owned,
+                ))
+            })
+            .collect()
+    }
+
     /// Decimal precision used to encode an asset's ledger amounts.
     pub fn asset_scale(&self, asset: &AssetId) -> anyhow::Result<u8> {
         let decimals: i32 = self.connection.query_row(

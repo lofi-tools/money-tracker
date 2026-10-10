@@ -43,6 +43,13 @@ pub enum BinanceError {
         status: u16,
         code: Option<i64>,
     },
+    #[snafu(display("Binance {endpoint}: HTTP {status} after {attempts} attempt(s); shared cooldown {:.1}s", retry_after.as_secs_f64()))]
+    RateLimited {
+        endpoint: String,
+        status: u16,
+        attempts: usize,
+        retry_after: std::time::Duration,
+    },
     #[snafu(display("Binance {endpoint}: unsuccessful API response, code {code:?}"))]
     Api { endpoint: String, code: Option<i64> },
     #[snafu(display("Binance {endpoint}: {reason}"))]
@@ -75,6 +82,17 @@ pub enum BinanceError {
         path: PathBuf,
         source: serde_json::Error,
     },
+    #[snafu(display("cannot read Binance statement ZIP {}", path.display()))]
+    StatementZip {
+        path: PathBuf,
+        source: zip::result::ZipError,
+    },
+    #[snafu(display("invalid Binance statement CSV"))]
+    StatementCsv { source: csv::Error },
+    #[snafu(display("invalid Binance statement date"))]
+    StatementDate { source: chrono::ParseError },
+    #[snafu(display("invalid Binance statement: {reason}"))]
+    InvalidStatement { reason: &'static str },
     #[snafu(display("cannot serialize Binance request metadata"))]
     EncodeMetadata { source: serde_json::Error },
 }
@@ -95,10 +113,17 @@ pub(crate) fn validate_credential(
 }
 
 pub(crate) fn http_client() -> Result<reqwest::Client, BinanceError> {
-    reqwest::Client::builder()
+    static CLIENT: std::sync::Mutex<Option<reqwest::Client>> = std::sync::Mutex::new(None);
+    let mut shared = CLIENT.lock().unwrap_or_else(|error| error.into_inner());
+    if let Some(client) = shared.as_ref() {
+        return Ok(client.clone());
+    }
+    let client = reqwest::Client::builder()
         .build()
         .map_err(reqwest::Error::without_url)
-        .context(HttpClientSnafu)
+        .context(HttpClientSnafu)?;
+    *shared = Some(client.clone());
+    Ok(client)
 }
 
 pub(crate) fn credential_with_alias(

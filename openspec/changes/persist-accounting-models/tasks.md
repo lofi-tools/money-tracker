@@ -7,5 +7,6 @@
 - [x] Implement account-balance aggregation and historical price valuation queries
 - [x] Add chronological cumulative balance tests
 - [x] Add Store tests for persistence, balance aggregation, and historical valuation
+- [x] Separate ordered, idempotent startup migrations into their own module and verify repeated startup, data preservation, and rollback/retry
 - [ ] Implement account metadata persistence and retrieval
 - [ ] Verify this change by building and running tests in an environment with dependencies available

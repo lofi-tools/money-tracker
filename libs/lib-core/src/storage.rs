@@ -37,110 +37,8 @@ impl Store {
     }
 
     fn from_connection(connection: Connection) -> anyhow::Result<Self> {
-        let store = Self { connection };
-        store.init()?;
-        Ok(store)
-    }
-
-    fn init(&self) -> anyhow::Result<()> {
-        self.connection.execute_batch(
-            "CREATE TABLE IF NOT EXISTS transactions (id VARCHAR PRIMARY KEY, datetime TIMESTAMP NOT NULL);
-             CREATE TABLE IF NOT EXISTS positions (position_id VARCHAR PRIMARY KEY, asset_id VARCHAR NOT NULL, owned BOOLEAN NOT NULL, role VARCHAR NOT NULL CHECK (role IN ('asset', 'liability', 'external')));
-             CREATE TABLE IF NOT EXISTS asset_scales (asset_id VARCHAR PRIMARY KEY, decimals INTEGER NOT NULL);
-             CREATE TABLE IF NOT EXISTS transaction_effects (transaction_id VARCHAR NOT NULL, position_id VARCHAR NOT NULL, amount BIGINT NOT NULL, effect_order INTEGER NOT NULL);
-             CREATE TABLE IF NOT EXISTS asset_prices (datetime TIMESTAMP NOT NULL, asset_id VARCHAR NOT NULL, vs_asset_id VARCHAR NOT NULL, price DOUBLE NOT NULL, PRIMARY KEY(datetime, asset_id, vs_asset_id));
-             CREATE TABLE IF NOT EXISTS price_coverage (asset_id VARCHAR NOT NULL, vs_asset_id VARCHAR NOT NULL, from_datetime TIMESTAMP NOT NULL, to_datetime TIMESTAMP NOT NULL, PRIMARY KEY(asset_id, vs_asset_id, from_datetime, to_datetime));
-             CREATE TABLE IF NOT EXISTS unavailable_price_periods (provider VARCHAR NOT NULL, pair VARCHAR NOT NULL, from_datetime TIMESTAMP NOT NULL, to_datetime TIMESTAMP NOT NULL, PRIMARY KEY(provider, pair, from_datetime, to_datetime));
-             CREATE TABLE IF NOT EXISTS balance_observations (source VARCHAR NOT NULL, content_hash VARCHAR NOT NULL, position_id VARCHAR NOT NULL, datetime TIMESTAMP NOT NULL, amount VARCHAR NOT NULL);
-             CREATE TABLE IF NOT EXISTS imported_files (source VARCHAR NOT NULL, content_hash VARCHAR NOT NULL, transaction_count BIGINT NOT NULL, completed_at TIMESTAMP NOT NULL, PRIMARY KEY(source, content_hash));",
-        )?;
-        self.migrate_position_roles()?;
-        self.infer_legacy_price_coverage()?;
-        Ok(())
-    }
-
-    /// Upgrade the old ownership-only schema without reimporting source files.
-    /// Only the legacy Nexo adapter's credit namespace denotes user debt.
-    fn migrate_position_roles(&self) -> anyhow::Result<()> {
-        let has_role: bool = self.connection.query_row(
-            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('positions') WHERE name='role')",
-            [],
-            |row| row.get(0),
-        )?;
-        if !has_role {
-            let tx = self.connection.unchecked_transaction()?;
-            tx.execute_batch(
-                "CREATE TABLE positions_with_roles (
-                     position_id VARCHAR PRIMARY KEY, asset_id VARCHAR NOT NULL,
-                     owned BOOLEAN NOT NULL, role VARCHAR NOT NULL
-                     CHECK (role IN ('asset', 'liability', 'external')));
-                 INSERT INTO positions_with_roles
-                     SELECT position_id, asset_id, owned, CASE
-                         WHEN owned THEN 'asset'
-                         WHEN starts_with(position_id, 'NEXO-CREDIT:') THEN 'liability'
-                         ELSE 'external' END FROM positions;
-                 DROP TABLE positions;
-                 ALTER TABLE positions_with_roles RENAME TO positions;",
-            )?;
-            tx.commit()?;
-        }
-        Ok(())
-    }
-
-    /// Older databases contain observations but no request boundaries. Treat
-    /// dense runs of observations as known history, leaving sparse spot quotes
-    /// and the edges outside those runs available for a precise backfill.
-    fn infer_legacy_price_coverage(&self) -> anyhow::Result<()> {
-        let mut statement = self.connection.prepare(
-            "SELECT ap.asset_id, ap.vs_asset_id, ap.datetime FROM asset_prices ap \
-             WHERE NOT EXISTS (SELECT 1 FROM price_coverage pc \
-                 WHERE pc.asset_id=ap.asset_id AND pc.vs_asset_id=ap.vs_asset_id) \
-             ORDER BY ap.asset_id, ap.vs_asset_id, ap.datetime",
-        )?;
-        let observations = statement
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, NaiveDateTime>(2)?,
-                ))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut runs = Vec::new();
-        let mut run: Option<(String, String, NaiveDateTime, NaiveDateTime)> = None;
-        for (asset, quote, at) in observations {
-            match &mut run {
-                Some((current_asset, current_quote, _, end))
-                    if *current_asset == asset
-                        && *current_quote == quote
-                        && at.signed_duration_since(*end) <= chrono::Duration::hours(48) =>
-                {
-                    *end = at;
-                }
-                _ => {
-                    if let Some(previous) = run.take() {
-                        if previous.2 < previous.3 {
-                            runs.push(previous);
-                        }
-                    }
-                    run = Some((asset, quote, at, at));
-                }
-            }
-        }
-        if let Some(previous) = run {
-            if previous.2 < previous.3 {
-                runs.push(previous);
-            }
-        }
-        let tx = self.connection.unchecked_transaction()?;
-        for (asset, quote, from, to) in runs {
-            tx.execute(
-                "INSERT OR IGNORE INTO price_coverage VALUES (?, ?, ?, ?)",
-                params![asset, quote, from, to],
-            )?;
-        }
-        tx.commit()?;
-        Ok(())
+        crate::migrations::run(&connection)?;
+        Ok(Self { connection })
     }
 
     /// Register a position's currency and economic role. The legacy ownership
@@ -1185,7 +1083,7 @@ mod tests {
                 price: 100.0,
             })?;
         }
-        store.infer_legacy_price_coverage()?;
+        crate::migrations::run(&store.connection)?;
         assert_eq!(
             store.missing_price_ranges(&eth, &usd, PriceRange::new(time(1), time(11))?)?,
             vec![

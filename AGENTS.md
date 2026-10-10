@@ -1,18 +1,9 @@
-<!-- OPENSPEC:START -->
-# OpenSpec Instructions
+# Repository instructions
 
-These instructions are for AI assistants working in this project.
+For planning, new capabilities, architecture changes, or ambiguous behavior, read [the documentation index](docs/README.md), [project context](docs/spec/project.md), and relevant topic specs before editing.
 
-Always open `@/openspec/AGENTS.md` when the request:
-- Mentions planning or proposals (words like proposal, spec, change, plan)
-- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
-- Sounds ambiguous and you need the authoritative spec before coding
+- `docs/spec/`: implemented contracts, acceptance scenarios, and explicitly labeled proposed designs.
+- `docs/findings/`: evidence, limitations, operational guides, and design decisions.
+- `docs/todo/`: outstanding goals and work in priority order; reuse existing tasks and avoid duplication.
 
-Use `@/openspec/AGENTS.md` to learn:
-- How to create and apply change proposals
-- Spec format and conventions
-- Project structure and guidelines
-
-Keep this managed block so 'openspec update' can refresh the instructions.
-
-<!-- OPENSPEC:END -->
+Ground documentation in current source. Do not present proposed capabilities as implemented. Preserve useful rationale when compacting completed work, and update links and task states with relevant changes. Follow the user's authorization; documentation maintenance does not impose an additional approval gate. See the maintenance workflow in `docs/README.md`.

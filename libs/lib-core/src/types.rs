@@ -31,7 +31,9 @@ pub struct Transaction {
 /// Convert a chronologically ordered transaction list to cumulative account balances.
 /// Inputs reduce the account balance and outputs increase it; values use the asset's
 /// smallest unit, as represented by `TxEffect::amount`.
-pub fn cumulative_balances(transactions: &[Transaction]) -> Vec<(DateTime<Utc>, HashMap<PositionId, i128>)> {
+pub fn cumulative_balances(
+    transactions: &[Transaction],
+) -> Vec<(DateTime<Utc>, HashMap<PositionId, i128>)> {
     let mut ordered: Vec<&Transaction> = transactions.iter().collect();
     ordered.sort_by_key(|tx| tx.datetime);
     let mut balances = HashMap::<PositionId, i128>::new();
@@ -55,11 +57,31 @@ mod balance_tests {
     #[test]
     fn accumulates_balances_in_time_order() {
         let position = PositionId::from("NEXO_SAVINGS_ETH");
-        let earlier = DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z").unwrap().to_utc();
-        let later = DateTime::parse_from_rfc3339("2024-01-02T00:00:00Z").unwrap().to_utc();
+        let earlier = DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
+            .unwrap()
+            .to_utc();
+        let later = DateTime::parse_from_rfc3339("2024-01-02T00:00:00Z")
+            .unwrap()
+            .to_utc();
         let txs = vec![
-            Transaction { datetime: later, inputs: vec![TxnEffect { position_id: position.clone(), amount: 250, datetime: later }], outputs: vec![] },
-            Transaction { datetime: earlier, inputs: vec![], outputs: vec![TxnEffect { position_id: position.clone(), amount: 1_000, datetime: earlier }] },
+            Transaction {
+                datetime: later,
+                inputs: vec![TxnEffect {
+                    position_id: position.clone(),
+                    amount: 250,
+                    datetime: later,
+                }],
+                outputs: vec![],
+            },
+            Transaction {
+                datetime: earlier,
+                inputs: vec![],
+                outputs: vec![TxnEffect {
+                    position_id: position.clone(),
+                    amount: 1_000,
+                    datetime: earlier,
+                }],
+            },
         ];
         let history = cumulative_balances(&txs);
         assert_eq!(history.len(), 2);
@@ -237,6 +259,47 @@ pub struct PositionBalance {
 pub enum PositionOwner {
     User,
     Provider,
+}
+
+/// Economic role in the user's portfolio. Liability balances are signed:
+/// borrowing decreases the balance, and repayment increases it toward zero.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PositionRole {
+    Asset,
+    Liability,
+    ExternalCounterparty,
+}
+
+impl PositionRole {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Asset => "asset",
+            Self::Liability => "liability",
+            Self::ExternalCounterparty => "external",
+        }
+    }
+
+    /// Map an adapter's ownership classification; debt must be explicit.
+    pub fn from_owned(owned: bool) -> Self {
+        if owned {
+            Self::Asset
+        } else {
+            Self::ExternalCounterparty
+        }
+    }
+}
+
+impl TryFrom<&str> for PositionRole {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "asset" => Ok(Self::Asset),
+            "liability" => Ok(Self::Liability),
+            "external" => Ok(Self::ExternalCounterparty),
+            _ => anyhow::bail!("unknown position role: {value}"),
+        }
+    }
 }
 
 /// Collection of all positions

@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use lib_core::history::AssetPricePoint;
 use lib_core::traits::IsProvider;
 use lib_core::{
-    Asset, AssetId, CollectTxnData, PositionId, PriceRange, ProviderId, Store, Transaction,
-    TxnEffect, UserPosition,
+    Asset, AssetId, CollectTxnData, PositionId, PositionRole, PriceRange, ProviderId, Store,
+    Transaction, TxnEffect, UserPosition,
 };
 use nexo_csv::{NexoCsv, NexoCsvError, NexoCsvFile, NexoTx, TransactionType};
 use snafu::{ResultExt, Snafu};
@@ -99,14 +99,14 @@ impl NexoSvc {
                 PositionId::from(format!("NEXO:{ticker}")),
                 AssetId::str(ticker),
                 CSV_DECIMALS,
-                true,
+                PositionRole::Asset,
             ));
             if *has_credit {
                 asset_positions.push((
                     PositionId::from(format!("NEXO-CREDIT:{ticker}")),
                     AssetId::str(ticker),
                     CSV_DECIMALS,
-                    false,
+                    PositionRole::Liability,
                 ));
             }
         }
@@ -235,14 +235,18 @@ fn import_nexo_rows_with_progress(
             .save_asset_scale(&asset, CSV_DECIMALS)
             .context(StoreSnafu)?;
         store
-            .save_position_asset(&PositionId::from(format!("NEXO:{ticker}")), &asset, true)
+            .save_position_asset(
+                &PositionId::from(format!("NEXO:{ticker}")),
+                &asset,
+                PositionRole::Asset,
+            )
             .context(StoreSnafu)?;
         if *has_credit {
             store
                 .save_position_asset(
                     &PositionId::from(format!("NEXO-CREDIT:{ticker}")),
                     &asset,
-                    false,
+                    PositionRole::Liability,
                 )
                 .context(StoreSnafu)?;
         }
@@ -290,8 +294,14 @@ fn is_credit_domain(row: &NexoTx) -> bool {
         ExchangeCredit | CreditCardWithdrawalCredit | NexoCardPurchase | NexoCardTransactionFee => {
             true
         }
-        Interest | FixedTermInterest | Cashback | ExchangeCashback | ReferralBonus | Dividend
-        | TopUpCrypto | TransferFromProWallet => row.input_amount < 0.0,
+        Interest
+        | FixedTermInterest
+        | Cashback
+        | ExchangeCashback
+        | ReferralBonus
+        | Dividend
+        | TopUpCrypto
+        | TransferFromProWallet => row.input_amount < 0.0,
         _ => false,
     }
 }
@@ -305,16 +315,20 @@ fn xusd_debt_accrued(row: &NexoTx) -> f64 {
     match row.kind {
         // The drawdown: collateral currency (USDX/xUSD) becomes xUSD debt.
         // GBPX legs are merchant-fx on already-drawn loan: no new debt.
-        ExchangeCredit if fiatx.contains(&row.input_currency.as_str()) => {
-            row.input_amount.abs()
-        }
+        ExchangeCredit if fiatx.contains(&row.input_currency.as_str()) => row.input_amount.abs(),
         // Card fees are charged to the credit line.
         NexoCardTransactionFee if fiatx.contains(&row.input_currency.as_str()) => {
             row.input_amount.abs()
         }
         // Loan interest accrues as debt (negative inputs, fiatx only).
-        Interest | FixedTermInterest | Cashback | ExchangeCashback | ReferralBonus | Dividend
-        | TopUpCrypto | TransferFromProWallet => {
+        Interest
+        | FixedTermInterest
+        | Cashback
+        | ExchangeCashback
+        | ReferralBonus
+        | Dividend
+        | TopUpCrypto
+        | TransferFromProWallet => {
             if row.input_amount < 0.0 {
                 row.output_amount
             } else {
@@ -342,8 +356,14 @@ fn convert_row(
         }
     } else {
         match row.kind {
-            Interest | FixedTermInterest | Cashback | ExchangeCashback | ReferralBonus | Dividend
-            | TopUpCrypto | TransferFromProWallet => {
+            Interest
+            | FixedTermInterest
+            | Cashback
+            | ExchangeCashback
+            | ReferralBonus
+            | Dividend
+            | TopUpCrypto
+            | TransferFromProWallet => {
                 // Negative inputs are loan-domain (see is_credit_domain) and
                 // never reach this savings branch.
                 let amount = if row.output_amount == 0.0 {
@@ -353,36 +373,34 @@ fn convert_row(
                 };
                 changes.push((&row.output_currency, amount));
             }
-        DepositToExchange => changes.push((&row.input_currency, row.input_amount)),
-        Exchange
-        | ExchangeDepositedOn
-        | ExchangeCredit
-        | ExchangeToWithdraw
-        | CreditCardFiatExchangeToWithdraw => {
-            changes.push((&row.input_currency, -row.input_amount.abs()));
-            // Void/legacy rows record 0 output for a same-value conversion
-            // (e.g. 2023 fiat top-ups); credit 1:1 instead of nothing.
-            let out = if row.output_amount == 0.0 {
-                row.input_amount.abs()
-            } else {
-                row.output_amount
-            };
-            changes.push((&row.output_currency, out));
-        }
-        Withdrawal
-        | WithdrawExchanged
-        | NexoCardPurchase
-        | NexoCardTransactionFee
-        | CreditCardWithdrawalCredit
-        | TransferToProWallet => {
-            changes.push((&row.input_currency, -row.input_amount.abs()));
-        }
-        // Savings <-> term/credit-wallet moves remain owned by the user. The
-        // export omits wallet IDs, so these have no effect on the aggregate
-        // asset amount (verified: subtracting them breaks ETH/POL/USDT).
-        LockTermDeposit
-        | UnlockTermDeposit
-        | TransferOut => {}
+            DepositToExchange => changes.push((&row.input_currency, row.input_amount)),
+            Exchange
+            | ExchangeDepositedOn
+            | ExchangeCredit
+            | ExchangeToWithdraw
+            | CreditCardFiatExchangeToWithdraw => {
+                changes.push((&row.input_currency, -row.input_amount.abs()));
+                // Void/legacy rows record 0 output for a same-value conversion
+                // (e.g. 2023 fiat top-ups); credit 1:1 instead of nothing.
+                let out = if row.output_amount == 0.0 {
+                    row.input_amount.abs()
+                } else {
+                    row.output_amount
+                };
+                changes.push((&row.output_currency, out));
+            }
+            Withdrawal
+            | WithdrawExchanged
+            | NexoCardPurchase
+            | NexoCardTransactionFee
+            | CreditCardWithdrawalCredit
+            | TransferToProWallet => {
+                changes.push((&row.input_currency, -row.input_amount.abs()));
+            }
+            // Savings <-> term/credit-wallet moves remain owned by the user. The
+            // export omits wallet IDs, so these have no effect on the aggregate
+            // asset amount (verified: subtracting them breaks ETH/POL/USDT).
+            LockTermDeposit | UnlockTermDeposit | TransferOut => {}
         }
     }
 
@@ -447,6 +465,86 @@ mod tests {
         assert!((amounts.remove("ETH").unwrap_or(0.0) - 1.5).abs() < 1e-8);
         assert!((amounts.remove("NEXO").unwrap_or(0.0) - 141.0).abs() < 1e-8);
         assert!(amounts.is_empty(), "unexpected assets: {amounts:?}");
+        Ok(())
+    }
+
+    #[test]
+    fn nexo_card_debt_reduces_net_worth_without_including_binance_counterparties()
+    -> anyhow::Result<()> {
+        let raw_rows = [
+            "cash,Top up Crypto,USDX,100,USDX,100,$100,-,-,deposit,2025-01-01 00:00:00",
+            "draw,Exchange Credit,USDX,-20,xUSD,20,$20,-,-,drawdown,2025-01-02 00:00:00",
+            "duplicate,Credit Card Withdrawal Credit,USDX,-20,xUSD,20,$20,-,-,draw record,2025-01-02 00:00:00",
+            "spend,Nexo Card Purchase,xUSD,-20,xUSD,20,$20,-,-,merchant spend,2025-01-02 00:00:00",
+            "fee,Nexo Card Transaction Fee,USDX,-1,xUSD,1,$1,-,-,card fee,2025-01-03 00:00:00",
+            "interest,Interest,xUSD,-0.5,xUSD,0.5,$0.5,-,-,loan interest,2025-01-04 00:00:00",
+        ];
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("nexo.csv");
+        // Exercise the atomic file import path, not only the row helper.
+        std::fs::write(
+            &path,
+            format!(
+                "Transaction,Type,Input Currency,Input Amount,Output Currency,Output Amount,USD Equivalent,Fee,Fee Currency,Details,Date / Time (UTC)\n{}\n",
+                raw_rows.join("\n")
+            ),
+        )?;
+        let store = Store::in_memory()?;
+        let service = NexoSvc::from_path(&path);
+        assert_eq!(service.import_into(&store)?, NexoImportOutcome::Imported(6));
+        assert_eq!(
+            service.import_into(&store)?,
+            NexoImportOutcome::AlreadyImported
+        );
+        let rows = service.read_rows()?;
+        let start = rows[0].date_time_utc;
+        let end = rows.last().unwrap().date_time_utc;
+        let usd = AssetId::str("USD");
+        for asset in ["USDX", "xUSD"] {
+            store.save_price(&AssetPricePoint {
+                datetime: start,
+                asset_id: AssetId::str(asset),
+                vs_asset_id: usd.clone(),
+                price: 1.0,
+            })?;
+        }
+        let external = PositionId::from("BINANCE:external:fees:xUSD");
+        store.save_position_asset(
+            &external,
+            &AssetId::str("xUSD"),
+            PositionRole::ExternalCounterparty,
+        )?;
+        store.save_transaction(
+            "binance-fees",
+            &Transaction {
+                datetime: end,
+                inputs: vec![],
+                outputs: vec![TxnEffect {
+                    position_id: external,
+                    datetime: end,
+                    amount: 50_000_000_000,
+                }],
+            },
+        )?;
+        assert_eq!(
+            store.asset_amounts_at(end)?,
+            vec![(AssetId::str("USDX"), 100.0)]
+        );
+        assert_eq!(
+            store.credit_units_at(end)?,
+            vec![(AssetId::str("xUSD"), -2_150_000_000)]
+        );
+        let history = store.total_value_history(&usd)?;
+        assert_eq!(
+            history
+                .iter()
+                .map(|(_, amount)| *amount)
+                .collect::<Vec<_>>(),
+            vec![100.0, 80.0, 79.0, 78.5]
+        );
+        let row_store = Store::in_memory()?;
+        import_nexo_rows(&row_store, &rows)?;
+        assert_eq!(row_store.credit_units_at(end)?, store.credit_units_at(end)?);
         Ok(())
     }
 
@@ -621,8 +719,14 @@ mod tests {
                 NexoCardTransactionFee if fiatx.contains(&row.input_currency.as_str()) => {
                     principal += row.input_amount.abs();
                 }
-                Interest | FixedTermInterest | Cashback | ExchangeCashback | ReferralBonus
-                | Dividend | TopUpCrypto | TransferFromProWallet
+                Interest
+                | FixedTermInterest
+                | Cashback
+                | ExchangeCashback
+                | ReferralBonus
+                | Dividend
+                | TopUpCrypto
+                | TransferFromProWallet
                     if row.input_amount < 0.0 =>
                 {
                     loan_interest += row.output_amount;
@@ -631,17 +735,19 @@ mod tests {
             }
         }
         assert!((principal - 1357.92).abs() < 1e-6, "principal {principal}");
-        assert!((loan_interest - 83.64).abs() < 1e-6, "interest {loan_interest}");
+        assert!(
+            (loan_interest - 83.64).abs() < 1e-6,
+            "interest {loan_interest}"
+        );
         let credit_units: BTreeMap<String, i128> = store
             .credit_units_at(end)?
             .into_iter()
             .map(|(asset, n)| (asset.0, n))
             .collect();
-        let expected_credit: BTreeMap<String, i128> =
-            [("xUSD", -144156000000)]
-                .into_iter()
-                .map(|(ticker, units)| (ticker.to_string(), units))
-                .collect();
+        let expected_credit: BTreeMap<String, i128> = [("xUSD", -144156000000)]
+            .into_iter()
+            .map(|(ticker, units)| (ticker.to_string(), units))
+            .collect();
         assert_eq!(credit_units, expected_credit);
         Ok(())
     }
@@ -773,7 +879,7 @@ mod tests {
         let service = NexoSvc::from_path(&csv_path);
         {
             std::fs::create_dir_all(db_path.parent().unwrap())?;
-        let store = Store::open(&db_path)?;
+            let store = Store::open(&db_path)?;
             assert_eq!(service.import_into(&store)?, NexoImportOutcome::Imported(1));
         }
         std::fs::create_dir_all(db_path.parent().unwrap())?;

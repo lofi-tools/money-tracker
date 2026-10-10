@@ -58,7 +58,7 @@ enum AppError {
     FetchCurrentPrices { source: anyhow::Error },
     #[snafu(display("cannot save CoinGecko prices to DuckDB"))]
     SavePrices { source: anyhow::Error },
-    #[snafu(display("cannot read owned asset history from DuckDB"))]
+    #[snafu(display("cannot read portfolio asset and liability history from DuckDB"))]
     ReadAssets { source: anyhow::Error },
     #[snafu(display("cannot plan uncached CoinGecko price ranges"))]
     PlanPrices { source: anyhow::Error },
@@ -126,7 +126,9 @@ async fn run() -> Result<(), AppError> {
         }
     }
 
-    let asset_starts = store.owned_assets_first_seen().context(ReadAssetsSnafu)?;
+    let asset_starts = store
+        .portfolio_assets_first_seen()
+        .context(ReadAssetsSnafu)?;
     let assets: Vec<AssetId> = asset_starts
         .iter()
         .map(|(asset, _)| asset.clone())
@@ -319,7 +321,7 @@ async fn run() -> Result<(), AppError> {
     } else if offline {
         eprintln!("Offline mode: using stored prices only");
     } else {
-        eprintln!("No assets with owned transactions to price");
+        eprintln!("No assets or liabilities with transactions to price");
     }
     if historical_from.is_some() {
         eprintln!("Calculating historical net worth in USD...");

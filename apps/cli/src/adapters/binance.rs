@@ -900,7 +900,7 @@ mod tests {
                         position.clone(),
                         asset.clone(),
                         scales[asset],
-                        mapped.owned.contains(position),
+                        lib_core::PositionRole::from_owned(mapped.owned.contains(position)),
                     )
                 })
                 .collect();

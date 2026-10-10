@@ -276,7 +276,7 @@ fn persist_mapped(
                     .find(|a| a.id == *asset)
                     .unwrap()
                     .decimals,
-                mapped.owned.contains(position),
+                lib_core::PositionRole::from_owned(mapped.owned.contains(position)),
             )
         })
         .collect();

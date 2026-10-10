@@ -9,6 +9,8 @@
 - [x] Track fetched USD price intervals and fill older, newer, and interior gaps
 - [x] Seed conservative coverage for dense legacy price observations
 - [x] Show CLI progress during import and price fetching
+- [x] Persist economic roles, migrate legacy Nexo credit positions, subtract signed liabilities in net worth, exclude external counterparties from credit totals, and include liability-only currencies in price fetching
+- [x] Verify mixed-provider counterparty exclusion, liability pricing/repayment, legacy migration/reopen, and Nexo card debt import with regression tests
 - [x] Deduplicate Nexo CSVs by exact file hash committed atomically with all transactions
 - [x] Fetch older daily closes from Binance Vision, cache traded pairs by month, and derive USD values using USDT as a proxy
 - [x] Keep CoinGecko requests inside its public historical window

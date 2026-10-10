@@ -18,7 +18,7 @@ From the repository root, import `.cache/imports/nexo_transactions_05-10-2026_10
 cargo run -p cli -- --data-dir ./data
 ```
 
-On the first online run, the CLI backfills USD prices from one day before each asset's first owned transaction. It downloads older daily closes from Binance's public [spot archives](https://data.binance.vision/) and recent USD observations from CoinGecko. Later runs fetch only uncovered dates, including earlier dates introduced by another import. To extend the requested history further back and print historical net worth, pass a start date:
+On the first online run, the CLI backfills USD prices from one day before each asset or liability currency's first portfolio transaction. It downloads older daily closes from Binance's public [spot archives](https://data.binance.vision/) and recent USD observations from CoinGecko. Later runs fetch only uncovered dates, including earlier dates introduced by another import. To extend the requested history further back and print historical net worth, pass a start date:
 
 ```sh
 cargo run -p cli -- --data-dir ./data --historical-from 2020-07-26
@@ -32,6 +32,8 @@ Price observations and fetched date ranges are stored in DuckDB per asset and qu
 
 Nexo's `USDX` and `xUSD` are valued at USD 1; `GBPX` and `EURX` follow GBP and EUR, with exchange rates derived from CoinGecko Bitcoin quotes. These are valuation assumptions, not exchange guarantees. The query rejects missing prices for nonzero holdings.
 The Nexo CSV is imported as one aggregate position per asset because the export does not reliably identify individual wallets or products.
+
+Net worth includes user asset balances and subtracts recorded user liabilities. Positions have explicit asset, liability, or external-counterparty roles: Nexo's `NEXO-CREDIT:*` balances are negative liabilities, while Binance's market, reward, and fee counterparties are excluded from both net worth and credit-line reports. Borrowing/interest decrease liability balances; recorded repayments increase them toward zero. The existing Nexo CSV movement mapping is unchanged. Opening an older database migrates its known Nexo credit positions automatically without reimporting files. Liability-only currencies are included in price fetching; offline valuation fails if a nonzero liability has no applicable stored price.
 
 ## Binance account reconciliation
 

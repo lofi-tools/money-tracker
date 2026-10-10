@@ -20,7 +20,7 @@ The system SHALL import Nexo CSV movements into a local ledger using stable tran
 - **THEN** its file hash is not recorded and a later retry can import the file
 
 ### Requirement: CoinGecko price persistence
-The system SHALL persist current and recent historical CoinGecko price observations in DuckDB by asset, quote asset, and timestamp. The CLI SHALL fetch USD-valued prices only for assets that have at least one effect on an owned position, including assets no longer held. The system SHALL track successfully fetched historical intervals per asset and USD quote, and fetch only uncovered intervals on subsequent runs. For older periods outside CoinGecko's public historical window, the system SHALL fetch daily spot closes from Binance Vision monthly archives, use USDT as a USD proxy when no direct USD pair exists, and cache successfully fetched traded pair months in DuckDB.
+The system SHALL persist current and recent historical CoinGecko price observations in DuckDB by asset, quote asset, and timestamp. The CLI SHALL fetch USD-valued prices only for currencies that have at least one effect on a user asset or liability position, including assets no longer held and liabilities already repaid. External-counterparty-only currencies SHALL be excluded. The system SHALL track successfully fetched historical intervals per asset and USD quote, and fetch only uncovered intervals on subsequent runs. For older periods outside CoinGecko's public historical window, the system SHALL fetch daily spot closes from Binance Vision monthly archives, use USDT as a USD proxy when no direct USD pair exists, and cache successfully fetched traded pair months in DuckDB.
 
 #### Scenario: Historical price import
 - **WHEN** a requested range returns price observations
@@ -55,12 +55,30 @@ The system SHALL persist current and recent historical CoinGecko price observati
 - **THEN** the system SHALL use KuCoin daily candles for a supported crypto pair, ECB reference rates for GBP/EUR, or Nexo export-implied USD rates for NEXO, and SHALL surface an error if no price is available
 
 ### Requirement: Historical net worth
-The system SHALL calculate net worth as the sum of each owned asset amount multiplied by its latest available quote price at each historical timestamp.
+The system SHALL calculate net worth as user asset value minus user liabilities at each historical timestamp using the latest available quote prices. User liabilities SHALL use signed balances where borrowing and interest decrease the balance and repayments increase it toward zero. External counterparties SHALL be excluded from net worth and liability totals. Position economic roles SHALL be persisted explicitly; older ownership-only databases SHALL migrate known Nexo credit positions to liabilities without requiring file reimport, while other non-owned positions remain external counterparties.
 
 #### Scenario: Price or balance changes
 - **WHEN** an asset balance or its price changes
 - **THEN** the corresponding net worth point reflects the new amount and applicable price
 
 #### Scenario: Missing price
-- **WHEN** a nonzero owned asset has no applicable price
+- **WHEN** a nonzero user asset or liability currency has no applicable price
 - **THEN** the query fails rather than returning an incomplete total
+
+#### Scenario: Liability and repayment
+- **WHEN** a user holds USD 100 and owes USD 20
+- **THEN** net worth is USD 80
+- **AND** a repayment effect of USD 5 reduces the liability to USD 15, with its funding effects valued separately
+
+#### Scenario: External counterparties
+- **WHEN** Nexo liabilities and Binance market, fee, or reward counterparties coexist in one database
+- **THEN** only user liabilities appear in credit-line totals and reduce net worth
+
+#### Scenario: Existing database
+- **WHEN** an ownership-only database containing Nexo credit positions is opened
+- **THEN** its existing transactions and import markers remain intact
+- **AND** known Nexo credit positions become liabilities and all other non-owned positions remain external counterparties
+
+#### Scenario: Liability-only price history
+- **WHEN** a currency appears only on a user liability with transaction effects
+- **THEN** its historical prices are eligible for fetching from before its earliest liability effect

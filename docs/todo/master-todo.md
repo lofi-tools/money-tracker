@@ -2,7 +2,7 @@
 
 Updated 11 October 2026. This is the single delivery checklist for the product direction established in the [user interview](../findings/user-needs.md) and [product brief](../spec/product-goals.md). It is deliberately broad and provisional: sections express priority/dependencies, not promised release dates. Unchecked means outstanding; inclusion does not imply implementation or approval to publish anything. Suggested engineering work is identified separately below.
 
-The next three work packages, in order, are **data model review → existing-provider documentation → Kraken**. Near-term design-system, homepage/docs, and three-OS CI work follow alongside the foundational work; they should not wait for the distant features.
+The first work packages were **data model review → existing-provider documentation → Kraken**; their implemented foundations are recorded below. Current connector work is EVM live coverage and remaining mappings, then Solana and NEAR. Near-term design-system, homepage/docs, and three-OS CI work follow alongside the foundational work; they should not wait for the distant features.
 
 The product sequence remains **holdings → received/current annual earnings → same-asset opportunity comparisons → withdrawal planning**. Integrations after Nexo/Binance are **Kraken → EVM wallets → Solana → NEAR**. Initial coverage is crypto plus related fiat, with broader financial accounts later. First-version actions are suggestions only. Beyond the first three work packages, sections group workstreams rather than impose a strict waterfall: shared portfolios remain soon after single-user tracking, and near-term web/CI work can run alongside core work.
 
@@ -159,14 +159,26 @@ Assumption for “3 systems”: **Linux, macOS, and Windows**. CPU architecture 
 
 ## 9. Next connectors: EVM wallets, then Solana, then NEAR
 
-- [ ] Implement EVM address coverage for Ethereum, Polygon, BNB Chain, Arbitrum, and zkSync using default public indexers with configurable RPC nodes.
-- [ ] Map native/internal transfers, token events, swaps, gas, failed transactions, and supported protocol events with stable chain/account/event identities.
+- [x] Implement the [EVM native/ERC-20 foundation](../spec/evm-wallets.md) for Ethereum, Polygon, BNB Chain, Arbitrum and zkSync Era: DB-stored accounts, contract-qualified identities, exact amounts, cached replay and pinned independent RPC observations. BNB needs Etherscan chain access or an indexer override.
+- [ ] Complete live reconciliation for the registered wallet on all five chains; see [current contract/source blockers](../findings/evm-contract-resolution.md). Keep exact comparisons with no rounding tolerance or balancing entries.
+- [x] Identify SafePromo and INS Promo; recover canonical historical decimals and retain raw RPC evidence through `evm --resolve-tokens`. INS Promo scale is zero; known destruction still causes a 777-unit ledger discrepancy. SafePromo's fake constant balance and missing scale remain quarantined.
+- [x] Implement optional Blockscout universal API authentication/pacing and configured Etherscan routing for Polygon/Arbitrum. Etherscan history works for both; the supplied Blockscout key accesses Arbitrum but needs a higher plan for Polygon.
+- [x] Select public Polygon dRPC after verifying oldest transaction availability absent from the previous RPC.
+- [ ] Add reviewed nonfinancial contract classifications/tracking exclusions without fabricating decimals; preserve diagnostics and exclude reviewed spam from financial totals/yield.
+- [ ] Model proven destroyed/retired-contract losses with effective timestamps and evidence; preserve historical units instead of inferring a balancing transaction from zero RPC balances.
+- [ ] Obtain exact Classic-era Arbitrum feeStats and map fees; Nitro receipt multiplication and Blockscout's fee field reproduce an approximate value, leaving an 87,468-wei difference in the first capture.
+- [x] Recheck Polygon/Arbitrum metadata at their frozen cutoffs; five Arbitrum contracts and one Polygon contract still have getter execution failures with RPC code 3 (the final Arbitrum pass fails four balance calls and one decimals call). Preserve method-specific failure evidence.
+- [ ] Investigate the four Polygon contract discrepancies (PolyDough, DxDex.io, lookalike UЅDС, Zepe) and the six contracts with reverting getter calls; implement only evidenced protocol/accounting mappings or reviewed tracking classifications. Native Polygon and 41 readable token quantities match.
+- [ ] Add partial-page acquisition resume, Etherscan split-range backfill beyond 10,000 rows, robust reorg rollback and block-aware historical queries.
+- [x] Map native/internal transfers, ERC-20 receipt events and failed-transaction gas with stable chain/account identities; swaps retain actual transfer effects.
+- [ ] Add semantic swap/protocol classification and unsupported token/fee mechanisms.
 - [ ] Discover holdings and DeFi positions automatically; provide spam hiding/tracking exclusions that also affect totals/yield.
 - [ ] Model receipt/share conversions and underlying drill-down; use the Airtable wallets/positions to identify protocol coverage, not to assume every researched offer is held.
 - [ ] Handle pagination/history limits, chain reorgs, indexer/RPC discrepancies, unrecognized contracts, and unresolved positions explicitly.
 - [ ] Implement Solana wallet/token/staking/DeFi acquisition and independent observations, including chain-specific fees and event identities.
 - [ ] Implement NEAR account/token/staking/protocol acquisition and relevant exported wallet/MetaPool evidence.
-- [ ] Add per-chain/provider guides, exact asset-sum diagnostics, anonymized fixtures, and frozen offline reconciliation.
+- [x] Add the EVM provider guide, exact quantity print diagnostic, synthetic account/chain fixtures and frozen offline reconciliation.
+- [ ] Apply those provider guide and diagnostic conventions to Solana and NEAR.
 - [ ] Keep the broader [provider discovery inventory](provider-roadmap.md) as candidates for later demand-driven connectors; no older ranking overrides the confirmed sequence.
 
 ## 10. Opportunities and net earnings comparisons

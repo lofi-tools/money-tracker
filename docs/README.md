@@ -13,6 +13,7 @@ Documentation is organized by purpose. Specifications describe implemented contr
 - [Nexo sources, ledger mapping, balance sums and diagnostics](spec/nexo.md)
 - [Binance sources, ledger mapping, reconciliation and diagnostics](spec/binance.md)
 - [Kraken account-scoped ledger, exact fees, cached replay and reconciliation](spec/kraken.md)
+- [EVM wallet setup, exact ledger mapping and pinned reconciliation](spec/evm-wallets.md)
 - [Historical net worth and pricing](spec/historical-net-worth.md)
 - [Binance account history and rate limiting](spec/binance-account-history.md)
 
@@ -25,6 +26,8 @@ Documentation is organized by purpose. Specifications describe implemented contr
 - [Airtable data model comparison](findings/airtable-model.md)
 - [Binance export and replay guide](findings/binance-history.md)
 - [Kraken connection setup, OAuth evidence and history/export strategy](findings/kraken-connection.md)
+- [Ethereum contract resolution, public indexer access and remaining blockers](findings/evm-contract-resolution.md)
+- [EVM export inventory and live acquisition evidence](findings/evm-wallet-inventory.md)
 - [Shared provider-guide and diagnostic conventions](findings/provider-diagnostics.md)
 - [Consolidated implementation decisions and documentation corrections](findings/implementation-history.md)
 

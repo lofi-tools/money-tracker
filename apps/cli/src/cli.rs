@@ -39,6 +39,40 @@ pub struct Args {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
+    /// Discover/import EVM wallet quantities and reconcile against pinned RPC balances
+    Evm {
+        /// Public wallet address; stored in account metadata (never needs a seed/key)
+        #[arg(long, required_unless_present_any=["account", "list"], conflicts_with="account")]
+        address: Option<String>,
+        /// Select an existing wallet account from the portfolio DB
+        #[arg(long)]
+        account: Option<String>,
+        /// List saved wallet accounts without network acquisition
+        #[arg(long)]
+        list: bool,
+        #[arg(long, value_delimiter = ',', default_value = "1,137,56,42161,324")]
+        chain: Vec<u64>,
+        #[arg(long, default_value=lib_core::DEFAULT_PORTFOLIO)]
+        portfolio: String,
+        /// Register wallet identities without contacting providers
+        #[arg(long)]
+        register_only: bool,
+        /// Recheck unresolved metadata at the frozen snapshot block, without refetching history
+        #[arg(long)]
+        resolve_tokens: bool,
+        /// JSON-RPC override (select one chain when overriding endpoints)
+        #[arg(long)]
+        rpc: Option<String>,
+        /// Compatible Blockscout v2 base URL; BNB otherwise uses Etherscan V2
+        #[arg(long)]
+        indexer: Option<String>,
+        #[arg(long, default_value_t = 64)]
+        confirmations: u64,
+        #[arg(long)]
+        snapshot: Option<PathBuf>,
+        #[arg(long)]
+        refresh: bool,
+    },
     /// Import/replay a Kraken account and print exact reconciled balances
     Kraken {
         /// Stable local account ID; reuse for this account even if API keys change
@@ -111,6 +145,28 @@ mod tests {
         assert!(args.offline);
         assert!(
             matches!(args.command, Some(Command::Kraken { account, portfolio, refresh: false, .. }) if account == "kraken:alice" && portfolio == lib_core::DEFAULT_PORTFOLIO)
+        );
+    }
+    #[test]
+    fn evm_requires_locator_but_saved_accounts_and_list_need_no_address() {
+        assert!(Args::try_parse_from([APP_NAME, "evm"]).is_err());
+        assert!(Args::try_parse_from([APP_NAME, "evm", "--list"]).is_ok());
+        let a = Args::try_parse_from([APP_NAME, "--offline", "evm", "--account", "saved-wallet"])
+            .unwrap();
+        assert!(a.offline);
+        assert!(
+            matches!(a.command, Some(Command::Evm { address: None, account: Some(id), .. }) if id == "saved-wallet")
+        );
+        assert!(
+            Args::try_parse_from([
+                APP_NAME,
+                "evm",
+                "--account",
+                "saved",
+                "--address",
+                "address"
+            ])
+            .is_err()
         );
     }
     static STD_DATA_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::data_dir().unwrap());

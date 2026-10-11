@@ -28,6 +28,7 @@
             h = ''cargo run -p cli'';
             nexo = ''cargo test -p cli adapters::nexo::tests::latest_amount -- --ignored --nocapture'';
             binance = ''cargo test -p cli adapters::binance::statements::tests::latest_amount_after_cached_statement -- --ignored --nocapture'';
+            evm = ''cargo test -p cli adapters::evm::private_tests::latest_amount_after_cached_wallet -- --exact --ignored --nocapture'';
             kraken = ''cargo test -p cli adapters::kraken::tests::latest_amount_after_cached_account -- --exact --ignored --nocapture'';
           };
 

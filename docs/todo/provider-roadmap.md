@@ -1,6 +1,6 @@
 # Provider discovery inventory
 
-Updated 11 October 2026. Delivery priorities and all actionable checklists now live in the [provisional master todo list](master-todo.md). Kraken's [account-scoped Spot foundation](../spec/kraken.md) is implemented alongside Nexo/Binance, with one private account capture reconciled and broader real-account/product coverage still outstanding. Confirmed integration order continues with **EVM wallets → Solana → NEAR**.
+Updated 11 October 2026. Delivery priorities and all actionable checklists now live in the [provisional master todo list](master-todo.md). Kraken's [account-scoped Spot foundation](../spec/kraken.md) is implemented alongside Nexo/Binance, with one private account capture reconciled and broader real-account/product coverage still outstanding. The [EVM native/ERC-20 foundation](../spec/evm-wallets.md) is implemented; complete live five-chain reconciliation and protocol coverage remain outstanding. Integration order continues with **EVM completion → Solana → NEAR**.
 
 Confirmed chains are Ethereum, Polygon, BNB Chain, Arbitrum, zkSync, Solana, and NEAR. Public indexers are the default, with RPC-node overrides. Use the Airtable exports to identify wallets/positions, not to impose their complete data model or treat researched offers as held investments.
 

@@ -6,7 +6,7 @@ The [proposed evolution](data-model-proposal.md) maps confirmed features to futu
 
 ## Identity and metadata
 
-`PortfolioId`, `AccountId`, `AssetId`, `ProviderId`, `PositionId`, `ProductId`, and `TransactionId` wrap strings. Asset IDs are currently often tickers, not chain/contract identities. `Asset` contains ID, decimal scale (`u8`), ticker, and symbol. `ExternalAssetId` associates an external identifier with its issuer; a persistent cross-provider mapping catalogue is not implemented. Its equality and hash both include issuer and external identifier; namespace-aware persistent matching remains future work.
+`PortfolioId`, `AccountId`, `AssetId`, `ProviderId`, `PositionId`, `ProductId`, and `TransactionId` wrap strings. Legacy adapter asset IDs are often tickers. The [EVM adapter](evm-wallets.md) uses explicit chain/native or chain/contract identities; persistent cross-provider equivalence is still future work. `Asset` contains ID, decimal scale (`u8`), ticker, and symbol. `ExternalAssetId` associates an external identifier with its issuer; a persistent cross-provider mapping catalogue is not implemented. Its equality and hash both include issuer and external identifier; namespace-aware persistent matching remains future work.
 
 `UserPosition` references a product and optional start/end dates. `Product` references one asset and an `apy: f64`. Position amounts are derived separately from effects or independent observations, not embedded in `UserPosition`. Portfolio/account metadata and position-account membership persist; full provider/connection/product definitions and held-investment relationships do not yet persist.
 

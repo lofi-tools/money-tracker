@@ -1,6 +1,6 @@
 # CLI configuration
 
-[Args and Config](../../apps/cli/src/cli.rs) use clap for flags, help, and version output. Without a subcommand the CLI runs the Nexo import and valuation path. `kraken --account ID` runs the account-scoped Kraken acquisition/replay and strict balance report in the same portfolio DB; global flags precede the subcommand. See [the Kraken guide](kraken.md) for cache/snapshot, portfolio selection and refresh options. Binance commands and reconciliation are documented in [the repository README](../../README.md).
+[Args and Config](../../apps/cli/src/cli.rs) use clap for flags, help, and version output. Without a subcommand the CLI runs the Nexo import and valuation path. `kraken --account ID` runs the account-scoped Kraken acquisition/replay and strict balance report in the same portfolio DB; global flags precede the subcommand. See [the Kraken guide](kraken.md) for cache/snapshot, portfolio selection and refresh options. `evm` registers/selects persisted public wallet accounts and runs discovery/replay with pinned quantity reconciliation; see [the EVM guide](evm-wallets.md) for chain defaults, endpoint overrides, offline replay and BNB key requirements. Binance commands and reconciliation are documented in [the repository README](../../README.md).
 
 | Option | Behavior |
 | --- | --- |

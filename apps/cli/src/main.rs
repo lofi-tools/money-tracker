@@ -13,6 +13,7 @@ pub mod adapters {
     pub mod binance;
     pub mod binance_vision;
     pub mod coingecko;
+    pub mod evm;
     pub mod fallback_prices;
     pub mod kraken;
     pub mod nexo;
@@ -22,6 +23,8 @@ mod models;
 
 #[derive(Debug, Snafu)]
 enum AppError {
+    #[snafu(display("EVM wallet import or reconciliation failed"))]
+    Evm { source: anyhow::Error },
     #[snafu(display("Kraken import or reconciliation failed"))]
     Kraken { source: anyhow::Error },
     #[snafu(display("invalid UTC date '{input}' (expected YYYY-MM-DD)"))]
@@ -110,6 +113,110 @@ async fn run() -> Result<(), AppError> {
     })?;
     let db_path = config.data_dir.join("portfolio.duckdb");
     let store = Store::open(&db_path).context(OpenDatabaseSnafu { path: db_path })?;
+    if let Some(cli::Command::Evm {
+        address,
+        account,
+        list,
+        chain,
+        portfolio,
+        register_only,
+        resolve_tokens,
+        rpc,
+        indexer,
+        confirmations,
+        snapshot,
+        refresh,
+    }) = &command
+    {
+        return async {
+            if *list {
+                for a in store
+                    .accounts(&portfolio.as_str().into())?
+                    .into_iter()
+                    .filter(|a| a.provider_id.0 == "evm")
+                {
+                    println!("{}: {}", a.id.0, a.label);
+                }
+                return Ok(());
+            }
+            anyhow::ensure!(!chain.is_empty(), "select at least one EVM chain");
+            let accounts = if let Some(id) = account {
+                vec![
+                    store
+                        .accounts(&portfolio.as_str().into())?
+                        .into_iter()
+                        .find(|a| a.id.0 == *id && a.provider_id.0 == "evm")
+                        .ok_or_else(|| anyhow::anyhow!("saved EVM account not found"))?,
+                ]
+            } else {
+                chain
+                    .iter()
+                    .map(|c| {
+                        adapters::evm::account(
+                            *c,
+                            address
+                                .as_deref()
+                                .ok_or_else(|| anyhow::anyhow!("wallet address required"))?,
+                            portfolio,
+                        )
+                    })
+                    .collect::<anyhow::Result<Vec<_>>>()?
+            };
+            anyhow::ensure!(
+                accounts.len() == 1 || (rpc.is_none() && indexer.is_none() && snapshot.is_none()),
+                "select one chain for endpoint/snapshot overrides"
+            );
+            for a in &accounts {
+                adapters::evm::register(&store, a)?;
+            }
+            if *register_only {
+                println!(
+                    "Registered {} EVM chain accounts in the portfolio DB",
+                    accounts.len()
+                );
+                return Ok(());
+            }
+            anyhow::ensure!(
+                !(*resolve_tokens && (offline || *refresh)),
+                "--resolve-tokens requires online cached replay and conflicts with --refresh"
+            );
+            let mut errors = Vec::new();
+            for a in accounts {
+                let path = snapshot.clone().unwrap_or_else(|| {
+                    config.cache_dir.join("evm").join(format!(
+                        "{}.json",
+                        evm_client::fingerprint(a.id.0.as_bytes())
+                    ))
+                });
+                if *resolve_tokens {
+                    if let Err(e) =
+                        evm_client::resolve_cached_tokens(&path, &a.id.0, rpc.as_deref()).await
+                    {
+                        errors.push(format!("{}: {e:#}", a.id.0));
+                        continue;
+                    }
+                }
+                if let Err(e) = adapters::evm::run(
+                    &store,
+                    &a,
+                    &path,
+                    rpc.as_deref(),
+                    indexer.as_deref(),
+                    *confirmations,
+                    offline,
+                    *refresh,
+                )
+                .await
+                {
+                    errors.push(format!("{}: {e:#}", a.id.0));
+                }
+            }
+            anyhow::ensure!(errors.is_empty(), "{}", errors.join("\n"));
+            Ok(())
+        }
+        .await
+        .context(EvmSnafu);
+    }
     if let Some(cli::Command::Kraken {
         account,
         portfolio,

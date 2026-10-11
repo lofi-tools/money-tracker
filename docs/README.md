@@ -5,6 +5,8 @@ Documentation is organized by purpose. Specifications describe implemented contr
 ## Specifications
 
 - [Product questions, pain points, and proposed solutions](spec/product-goals.md)
+- [First desktop app: proposed scope and UI interview](spec/desktop-app.md)
+- [Web design-system package: proposed pnpm/Solid/Panda/Ark plan](spec/web-design-system.md)
 - [Project context and conventions](spec/project.md)
 - [Core data model](spec/data-model.md)
 - [Proposed data model evolution and implementation phases](spec/data-model-proposal.md)

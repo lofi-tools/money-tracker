@@ -2,11 +2,42 @@
 
 Updated 11 October 2026. This is the single delivery checklist for the product direction established in the [user interview](../findings/user-needs.md) and [product brief](../spec/product-goals.md). It is deliberately broad and provisional: sections express priority/dependencies, not promised release dates. Unchecked means outstanding; inclusion does not imply implementation or approval to publish anything. Suggested engineering work is identified separately below.
 
-The first work packages were **data model review → existing-provider documentation → Kraken**; their implemented foundations are recorded below. Current connector work is EVM live coverage and remaining mappings, then Solana and NEAR. Near-term design-system, homepage/docs, and three-OS CI work follow alongside the foundational work; they should not wait for the distant features.
+**Current priority: build the first usable desktop app/UI**, using the existing provider and storage foundations. The selected stack remains Tauri + SolidJS + Panda CSS + Ark UI. Agree the first-build scope through the [desktop spec interview](../spec/desktop-app.md), then implement the shared design-system foundation, desktop shell and real-data views. Supporting CI/build work moves forward with that milestone. Homepage/docs follows the usable app foundation; additional connectors and broad model expansion follow unless a narrowly scoped fix is needed by the app.
 
-The product sequence remains **holdings → received/current annual earnings → same-asset opportunity comparisons → withdrawal planning**. Integrations after Nexo/Binance are **Kraken → EVM wallets → Solana → NEAR**. Initial coverage is crypto plus related fiat, with broader financial accounts later. First-version actions are suggestions only. Beyond the first three work packages, sections group workstreams rather than impose a strict waterfall: shared portfolios remain soon after single-user tracking, and near-term web/CI work can run alongside core work.
+The earlier work packages were **data model review → existing-provider documentation → Kraken**, followed by EVM foundations. Their completed work and remaining limitations stay below. Unreconciled providers must remain clearly labelled in the UI; completing every EVM contract mapping is not a prerequisite for building the app.
 
-## 1. First: data model review and minimum supporting changes
+The product sequence remains **holdings → received/current annual earnings → same-asset opportunity comparisons → withdrawal planning**. Later integration order remains **Solana → NEAR** after existing EVM coverage. Initial coverage is crypto plus related fiat. The UI milestone does not imply that proposed earnings, benchmark or opportunity engines are implemented. Section 0 owns the immediate work; other numbered sections retain stable references and group supporting/later work rather than impose a waterfall.
+
+## 0. Now: first usable desktop app / UI
+
+Deliverable: a running local app displaying balances, allocations and current earnings from the already-imported portfolio DB; account connections, CSV imports and transaction-history UI come later. The first-build scope and acceptance criteria are being agreed in [the proposed desktop spec](../spec/desktop-app.md). Interview questions are asked one at a time and answers recorded there. Exact screen scope is still open.
+
+- [x] Document the first-build UI scope: primary journey, initial screens, setup/import scope, navigation, financial detail, reconciliation states, visual direction and proposed acceptance scenarios. Implementation remains deferred; supporting calculation/configuration choices are tracked separately.
+- [ ] Implement the [planned separate pnpm TypeScript design-system package](../spec/web-design-system.md) at `libs/web-design-system`, with a reproducible workspace/committed lockfile and stable exports; the Solid app consumes it via `workspace:*`. Planning only for now; implementation remains outstanding.
+- [ ] Use the selected SolidJS + Panda CSS + Ark UI stack and define its boundaries with the Rust core/Tauri shell.
+- [ ] Define tokens, typography, colors, spacing, themes, responsive behavior, and accessible focus/keyboard states; use balanced density with compact readable rows and enough padding/whitespace for a polished appearance. Use neutral surfaces/text with one primary accent plus accessible semantic status cues. Support light/dark themes, default to the system preference, and persist a System/Light/Dark override in settings.
+- [ ] Build the first Tauri desktop shell using the shared Solid frontend and typed Rust/frontend contracts.
+- [ ] Implement shared CLI/desktop database configuration: Unix default `~/.data/money-tracker/portfolio.duckdb`, `APP_DATA_DIR` → config `data_dir` → default precedence, and real config-file loading. Specify config format/location and Windows default; preserve databases at previous locations.
+- [ ] Automatically open the resolved database and display one explicitly scoped portfolio without a switcher or cross-portfolio aggregation; when missing, offer copying a selected existing DB into that location or creating a new empty DB. Preserve the source file, run idempotent migrations and show invalid/unreadable DB errors explicitly. Database-file copying is in scope; provider connections/CSV import UI remain deferred.
+- [ ] Display existing account status, verified current balances, provider warning icons, liabilities, and net worth; add left navigation inside the main view with “by asset” / “by provider” grouping controls, defaulting to assets across all accounts. Each asset/provider entry shows name, current value and a smaller current APY; sort both lists by current value, largest first. Add name/ticker search that filters navigation without changing financial totals. Place Overview above the list and select it on launch; its content is total current value and current annual earnings only.
+- [ ] Supply Overview, navigation-summary and allocation-level APY/current annual earnings from evidenced current positions/rates using the agreed calculation contract; expose unavailable/partial coverage instead of fabricated values. Use value-weighted overall current APY including 0% balances (the confirmed ETH example gives 4%); do not treat unknown rates as zero. Label known annual earnings as a partial subtotal where coverage is incomplete, and keep the scope’s overall APY unknown until every included allocation has a rate. Deduct annual borrowing costs as negative earnings once; label net totals partial if borrowing costs are unknown. Calculate overall APY as net annual earnings divided by gross current asset value, including idle assets; debt reduces net worth but not this denominator. Coordinate the minimum supporting model/calculation work with section 8.
+- [ ] Add persisted manual APY entry/overrides per product/subscription and for aggregate provider/asset holdings lacking finer detail; distinguish manual from sourced rates, preserve source evidence and label unknown rates until supplied. Use the latest applicable manual/provider update unless a manual override is pinned; edit APY inline in table rows with a pin/unpin icon and an effective date defaulting to today, allowing earlier dates for corrections; preserve subsequent applicable rate changes, source evidence and update timestamps and do not treat old cache replay as a fresh update. Persist subscription-specific effective-dated rate histories, including evidenced opening rates and later changes; keep advertised product rates separate and derive product summary APY from held subscriptions; prompt review of aggregate overrides when any finer data arrives, even partial. Defer a dedicated rate-history browser/editor; historical achieved yield comes from transactions and capital-time evidence, not entered rates. Do not automatically invalidate pinned overrides. Preserve provenance, allow explicit retention or replacement with detailed rates, avoid double-counted earnings and do not infer remainder rates.
+- [ ] Add clearly labelled partial current-value totals and visible unpriced holdings with warnings; allow manual current-price entry when unknown, with exact asset identity, provenance and preserved source evidence. Use the latest applicable manual/provider price unless the manual price is pinned; preserve timestamps/source evidence, edit current prices inline in table rows with a pin/unpin icon, and do not rewrite historical prices, quantities/scales or source transactions.
+- [ ] Add user dust/spam declarations and restore controls in the first UI, preserving history and strict tracked-asset reconciliation. Extend the account/asset review foundation with exact-asset-wide spam policy covering existing and future accounts, never ticker-based propagation. Dust is provider/asset-specific and stays tracked: include known values/earnings normally and group dust holdings under one Dust navbar entry, preserving individual detail and significant holdings of the same asset elsewhere. Asset navbar/detail totals include their dust holdings across all providers; Dust is a filtered view, not another amount added to portfolio totals. Assign dust automatically below a configurable fiat-value threshold, with persisted manual mark/unmark and reset-to-Auto controls. Default the threshold to USD 1 (strictly below), with unknown dust prices still following partial-valuation rules.
+- [ ] Build the selected asset/provider right pane: current value first, asset quantity as a smaller secondary number, annual earnings, and an expandable allocation table scoped to that selection’s remaining breakdown. Represent accounts as a parent–child tree; show top-level accounts and their immediate children initially, leaving deeper descendants collapsed. Allow local grouping creation and account reparenting within a provider through a “Move to…” action in the details pane or context menu, with a valid-parent selector and cycle prevention; drag-and-drop is not required. Start from provider-specific defaults and preserve user edits on refresh. Allow finer provider/product/subscription detail where it exists; preserve ancestry in asset/provider scoped views and avoid counting parent rollups again with children. Sort sibling rows by current value, largest first, retaining the hierarchy. Reuse the model relationship tasks in section 1; preserve separate subscriptions and avoid double counting grouped totals. Allow persistent local account/subscription display names keyed by stable identity, retain source names/references in details, and allow resetting to the source name without provider refreshes overwriting local labels. Show current holdings only, deferring closed and exact-zero-balance subscriptions to the later history view while preserving their records for audit/reconciliation; retain unpriced nonzero and zero-yield holdings. Use available imported detail only; label missing product/subscription attribution and defer manual allocation splitting. Show subscription lock status, maturity date and auto-renew status when available; distinguish unknown from known non-applicable values. Open scoped details when an account/subscription name is clicked; use a separate arrow for child expansion, independent of inline editing/pinning. Include source references, rate provenance and term metadata in a right-side sliding details panel; keep the allocation table visible and preserve its selection, scroll and expansion state, with accessible close/focus behavior and reduced-motion support. Show debts as clearly marked liability rows, with borrowed amounts and negative annual borrowing-cost earnings separately. Allow inline annual borrowing-rate edits with pin/unpin icons and the same effective-date/provenance/update rules as earning rates; calculate costs from outstanding debt magnitude and applicable rate conventions, deduct once, and retain partial-net-earnings warnings when rates are unknown.
+- [ ] Add Undo for manual rates, local names, grouping and dust/spam changes; capture prior state including override/pin metadata, preserve source/review evidence, validate restoration against current data and recalculate affected figures. Persist an ordered action log with prior/resulting state and undo links, atomically with each change; restore Undo availability after app restart and record validated compensating actions rather than deleting history.
+- [ ] Add clickable provider and affected-row warning icons with scoped details explaining missing/mismatched data and withheld/partial figures; clear warnings resolved by active manual overrides, retain unrelated issues and original evidence, and clear parent warnings when no issues remain.
+- [ ] Keep current observations separate from ledger history; withhold unreconciled historical totals/yield and label reconciled-provider-only historical subtotals.
+- [ ] Implement automatic balance/rate refresh while running, daily by default with the interval in settings. Add a separate refresh-on-open toggle, off by default; show stored data without an ordinary launch refresh unless enabled, but perform one catch-up refresh when scheduled intervals were missed. Persist scheduling state and coalesce catch-up/launch triggers into one refresh. Closing the window or explicit Quit ends the process and refresh work; no tray/background process. Manual refresh belongs only in options; retain cached views and freshness/coverage indicators on failure.
+- [ ] Implement reporting-currency settings (USD default), available alternative currencies, timestamps, stale-source indicators, and offline cached views. Add app-wide privacy modes: hide monetary amounts/asset quantities, or show much lower amounts using one common scale factor while preserving proportions, signs and percentage rates. Cover earnings/costs, warning details and hover/accessibility text; label scaled figures and never alter stored data, financial calculations or dust classification. Default scaled mode to 10% of actual amounts and let users configure and persist the common scale factor.
+- [ ] Add CI build/test lanes for Linux, macOS, and Windows for the existing Rust workspace first.
+- [ ] Resolve the external `typed-ids` sibling-path dependency in `Cargo.toml` so clean checkouts build without the author's local directory tree.
+- [ ] Add TypeScript codegen/typecheck/test/site build lanes when those packages exist; add all-platform Tauri builds when the desktop shell exists.
+- [ ] Validate the agreed UI journey against a deterministic acceptance dataset and the existing local DB; cover empty, loading, offline, missing-price, excluded-token and unreconciled-provider states.
+
+Historical graphs and earnings remain early product goals in section 8. Decide what the first UI milestone can truthfully display before treating those calculation features as ready. General design-system components, website work, packaging and remaining holdings workflow tasks retain their canonical entries below.
+
+## 1. Data model review and supporting changes
 
 Deliverable: a source-grounded proposed design under `docs/spec/`, with a feature-to-model mapping, minimal schema/API changes, phased migrations, and acceptance examples. Start from [current types](../spec/data-model.md) and [persistence](../spec/persistence.md), not the Airtable columns.
 
@@ -15,7 +46,7 @@ Review delivered 11 October 2026 in [proposed data model evolution](../spec/data
 - [x] Map every confirmed user question to the data and queries needed to answer it; separate immediate, next-stage, and later requirements.
 - [x] Inventory current persisted versus transient entities, identifiers, amount types, roles, and evidence; document reusable foundations and actual gaps.
 - [x] Define portfolio/entity ownership and provider/account instances, including multiple accounts at one provider and future family/client portfolios.
-- [ ] Persist the minimum provider/account/product/position relationships, labels, dates, and external references needed for holdings and earnings; define retrieval APIs.
+- [ ] Persist the minimum provider/account/product/position relationships, labels, dates, and external references needed for holdings and earnings; define retrieval APIs. Add the proposed single-parent account tree with grouping nodes, cycle/cross-portfolio validation and unique-position subtree rollups; preserve source identities and independent reconciliation scopes. Add provider-specific default hierarchy mappings with stable grouping identities and persisted user customization, so refreshes seed new/uncustomized records without overwriting edits.
 - [x] Separate held positions/subscriptions from available product offers and researched providers. Do not recreate unused spreadsheet catalogue fields automatically.
 - [x] Define chain-qualified native/token identity and cross-provider asset aliases; distinguish renamed, migrated, wrapped, and receipt assets.
 - [ ] Fix `ExternalAssetId` equality/hash consistency and define persistent source asset mappings.
@@ -28,7 +59,7 @@ Review delivered 11 October 2026 in [proposed data model evolution](../spec/data
 - [x] Implement account/asset reviewed exclusions applying to all historical totals and financial/earnings eligibility; preserve review revisions and raw history. See [the contract](../spec/tracking-exclusions.md).
 - [ ] Extend tracking policy to position/product scopes, composite exposures, user settings and saved-analysis policy binding; enforce it in future earnings attribution.
 - [x] Define reward receipt identity, principal deposits/withdrawals, disposal attribution, realized proceeds, fees, and retained reward quantities.
-- [ ] Model dated rate observations, reward currency, APR/APY semantics, tiers/caps, qualifications, unknown rates, and current annual earning calculations.
+- [ ] Model dated rate observations and subscription-specific rate-change periods separately from advertised product offers; preserve effective versus observed timestamps, corrections and unknown gaps. Support cutoff queries and rate/principal period intersections, reward currency, APR/APY semantics, tiers/caps, qualifications, unknown rates, and current annual earning calculations. See the proposed subscription rate history contract in the data model proposal.
 - [ ] Model composite/share positions and dated underlying conversions without double counting receipt and underlying value.
 - [x] Identify later-compatible boundaries for lock terms, collateral, claims, risk evidence/dependencies, eligibility, and shared access without implementing every later entity now.
 - [x] Define whether source revisions/mapping corrections need an immutable audit trail; current stable-ID effect replacement is not append-only history.
@@ -37,7 +68,7 @@ Review delivered 11 October 2026 in [proposed data model evolution](../spec/data
 
 Implemented foundation: portfolio/account records and scoped import/query APIs; arbitrary-precision units; scale conflict rejection; exact Nexo/Binance parsing; migrations 004/005. Existing provider entry points retain legacy IDs. Remaining work includes connections/catalogue asset mappings, product/held-investment metadata, provenance/reconciliation coverage, account selection in application workflows and deliberate legacy source remapping. Cached Nexo/Binance upgrade checks operate on temporary copies.
 
-## 2. Second: document every existing provider and acquisition source
+## 2. Provider and acquisition-source documentation
 
 Deliverable: a consistent provider/source guide with verified code paths and runnable provider-only commands. These documents describe current behavior and limitations, not planned support as completed.
 
@@ -59,7 +90,7 @@ Deliverable: a consistent provider/source guide with verified code paths and run
 
 Source review findings: Nexo has no independent balance reconciliation and ignores generic CSV fee columns; Binance covers no debt account family. Current print queries are unscoped and rely on separate fixture DBs. The Nexo print test uses a fixed private export and approximate display with legacy expected balances. Binance display success does not assert reconciliation. Both adapters retain legacy provider-wide IDs. These limits are documented in the guides; account-scoped diagnostics, source provenance, reconciliation status and broader product/debt modeling remain covered by the existing model/diagnostic tasks above.
 
-## 3. Third: implement Kraken
+## 3. Kraken foundations and remaining coverage
 
 - [x] Verify official ledger/balance/asset/authentication contracts and read-only permissions for the first default-wallet Spot scope; record explicit Earn suffixes and unsupported account families.
 - [x] Add synthetic ledger/Earn/fee fixtures and separate dated balances, plus signed mock HTTP acquisition/cache tests.
@@ -86,13 +117,14 @@ Implemented Spot foundation uses existing idempotent startup migrations and does
 
 ## 4. Near term: TypeScript design-system package
 
+The package/stack/token foundation is promoted to section 0. These remaining components support the app first, then the public website.
+
+Package design: [proposed Solid/Panda/Ark pnpm plan](../spec/web-design-system.md). No package implementation is complete.
+
 Reference: [Taskstream structure notes](../findings/taskstream-reference.md). Its root package is named `taskstream` at `/Users/me/src/me/todo-lofi`; this is a structure reference, not a runtime dependency on that checkout.
 
-- [ ] Add a standalone TypeScript package, provisionally `libs/web-design-system`, with a reproducible workspace/lockfile and stable exports.
-- [ ] Use the selected SolidJS + Panda CSS + Ark UI stack and define its boundaries with the Rust core/Tauri shell.
-- [ ] Define tokens, typography, colors, spacing, themes, responsive behavior, and accessible focus/keyboard states.
 - [ ] Add reusable controls, tables, filters, settings, navigation, warnings, empty/loading/error states, and public/paid feature indicators.
-- [ ] Add holdings/earnings/price formatting, chart primitives, accessible chart summaries, dates, currencies, signed amounts, and missing-data states.
+- [ ] Add holdings/earnings/price formatting with full currency amounts with thousands separators; USD uses two decimals below $100, whole dollars at $100 or more, and “<$0.01” for positive nonzero sub-cent amounts, preserving signs for costs and exact underlying values; trim token quantity trailing zeros, retain small nonzero quantities and expose exact quantities in details subject to privacy mode. Add chart primitives, accessible chart summaries, dates, currencies, signed amounts, and missing-data states.
 - [ ] Add marketing/docs components, navigation/sidebar/TOC, prose, callouts, code blocks, and shared page layouts.
 - [ ] Provide clean Panda codegen/import conventions usable by the public site, Solid web app, and Tauri frontend; keep generated output reproducible.
 - [ ] Add an isolated showcase/demo plus typechecking and focused component/interaction/accessibility checks.
@@ -113,31 +145,29 @@ Reference: [Taskstream structure notes](../findings/taskstream-reference.md). It
 
 ## 6. Near term: CI and reproducible builds on three systems
 
+Initial build lanes, clean-checkout dependencies and frontend/Tauri build coverage are promoted to section 0. Remaining packaging/release tasks follow as the app becomes distributable.
+
 Assumption for “3 systems”: **Linux, macOS, and Windows**. CPU architecture coverage, packaging formats, and signing policy are separate choices.
 
-- [ ] Add CI build/test lanes for Linux, macOS, and Windows for the existing Rust workspace first.
-- [ ] Resolve the external `typed-ids` sibling-path dependency in `Cargo.toml` so clean checkouts build without the author's local directory tree.
 - [ ] Pin/document toolchains and native DuckDB/C++ dependencies; support Windows-native builds as well as the current Linux/macOS Nix environment.
 - [ ] Cache dependencies/build outputs responsibly and use lockfiles for reproducibility.
 - [ ] Run formatting, appropriate linting, deterministic unit/mapping/storage tests, and documentation checks on pull requests.
 - [ ] Audit existing private/live/cache-first tests, including non-ignored real-account tests; keep ordinary CI free of financial credentials and private fixtures.
 - [ ] Add an explicitly opt-in private/live reconciliation lane with controlled secrets and no publication of private artifacts.
-- [ ] Add TypeScript codegen/typecheck/test/site build lanes when those packages exist; add all-platform Tauri builds when the desktop shell exists.
 - [ ] Publish per-platform build artifacts and smoke-test install/startup/migrations with temporary data; decide release packaging and supported architectures.
 - [ ] Add release tagging, changelog/versioning, checksums, and later signing/notarization/update-delivery decisions before distributing production desktop bundles.
 
 ## 7. Foundations and holdings workflow
 
+The desktop shell and primary holdings/status/refresh/settings views are promoted to section 0. These supporting ingestion/model tasks follow the agreed UI scope.
+
+- [ ] Later, after the existing-data UI: add account connection setup and CSV imports inside the app, reusing provider mappings and reconciliation.
+- [ ] Later, after the balances/allocations/current-earnings UI: add transaction-history views for selected assets/providers with source and reconciliation context.
+- [ ] Later, lower priority: add custom groups spanning providers in the detail view for an asset selected in by-asset navigation. Define asset-scoped presentation memberships without globally reparenting source accounts or double counting holdings; preserve provider-specific trees.
 - [ ] Expose Nexo/Binance/Kraken connection/import/reconcile/query flows in normal CLI commands with account selection and one chosen portfolio DB.
 - [ ] Remove Nexo's dated default export path; support managed selection/import of multiple original files, stable IDs, and hash deduplication.
-- [ ] Resolve the unused config-file flag: implement loading/precedence or remove the option; decide whether automated content input is useful.
-- [ ] Build the first Tauri desktop shell using the shared Solid frontend and typed Rust/frontend contracts.
-- [ ] Add account setup/status, verified current balances, provider warning icons, asset/provider/platform groupings, liabilities, and net worth.
 - [ ] Target history from first platform activity; recover exports/manual evidence only where automatic acquisition cannot fill it.
 - [ ] Recover missing Airtable tables/definitions only where they resolve confirmed wallet/position/term needs; safely preserve unresolved rows/provenance without importing the entire research catalogue as holdings.
-- [ ] Keep current observations separate from ledger history; withhold unreconciled historical totals/yield and label reconciled-provider-only historical subtotals.
-- [ ] Implement automatic balance/rate refresh while running with a configurable interval; manual refresh belongs only in options.
-- [ ] Implement reporting-currency settings (USD default), available alternative currencies, timestamps, stale-source indicators, and offline cached views.
 - [ ] Show failed-platform funds as zero/loss until recovered, retaining claim and distribution evidence rather than invented expected recoveries.
 
 ## 8. Early: received earnings and historical performance
@@ -166,7 +196,7 @@ Assumption for “3 systems”: **Linux, macOS, and Windows**. CPU architecture 
 - [x] Implement optional Blockscout universal API authentication/pacing and configured Etherscan routing for Polygon/Arbitrum. Etherscan history works for both; the supplied Blockscout key accesses Arbitrum but needs a higher plan for Polygon.
 - [x] Select public Polygon dRPC after verifying oldest transaction availability absent from the previous RPC.
 - [x] Implement reviewed SafePromo exclusion without fabricated decimals: persisted account policy, reversible review trail, raw DB snapshots, totals/earnings eligibility filtering and strict tracked-scope reconciliation.
-- [ ] Add further nonfinancial contract reviews only with evidence; build general exclusion settings/UI.
+- [ ] Add further nonfinancial contract reviews only with evidence; user dust/spam declaration UI is promoted to section 0.
 - [ ] Model proven destroyed/retired-contract losses with effective timestamps and evidence; preserve historical units instead of inferring a balancing transaction from zero RPC balances.
 - [ ] Obtain exact Classic-era Arbitrum feeStats and map fees; Nitro receipt multiplication and Blockscout's fee field reproduce an approximate value, leaving an 87,468-wei difference in the first capture.
 - [x] Recheck Polygon/Arbitrum metadata at their frozen cutoffs; five Arbitrum contracts and one Polygon contract still have getter execution failures with RPC code 3 (the final Arbitrum pass fails four balance calls and one decimals call). Preserve method-specific failure evidence.
@@ -226,6 +256,8 @@ Assumption for “3 systems”: **Linux, macOS, and Windows**. CPU architecture 
 - [ ] Later: target-date plans for funds converted and delivered to a chosen wallet/bank account using the router.
 
 ## 13. Soon after single-user tracking: family/client portfolios
+
+- [ ] Add a portfolio switcher alongside family/client tracking; keep the first UI scoped to one portfolio.
 
 - [ ] Add separate portfolio/entity ownership and management views without mixing clients' assets into the manager's personal net worth.
 - [ ] Let a manager add/track a friend/family member's accounts before that person joins.

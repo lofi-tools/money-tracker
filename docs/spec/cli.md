@@ -17,3 +17,5 @@ Directory precedence is explicit CLI flag, then the corresponding environment va
 Acceptance scenarios: CLI paths override environment paths; environment paths override defaults; help/version work; `--data-dir` alone leaves the Nexo export default unchanged. Config-file loading and managed export selection remain [backlog items](../todo/master-todo.md).
 
 Saved EVM accounts support `--exclude-safe-promo` (Ethereum only) and `--restore-token CONTRACT`; both persist reviewed policy revisions. Combine with `--register-only` for a settings-only update, or `--offline` for cached strict replay. See [reviewed exclusions](tracking-exclusions.md).
+
+The [desktop startup decision](desktop-app.md) proposes a shared Unix default of `~/.data/money-tracker/portfolio.duckdb`, environment-before-config overrides and actual config-file loading. This is not implemented yet; the existing `dirs`-based CLI default described above remains current behavior until that task is delivered.

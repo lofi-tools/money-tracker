@@ -2,6 +2,10 @@
 
 Money Tracker aims to provide a local-first view of investments, net worth, yield, revenue, and supporting financial evidence. The current implementation is a Rust CLI and libraries, with DuckDB storage and cached provider data. Desktop/mobile dashboards, broader bank/broker/pension coverage, yield comparisons, and jurisdiction-specific tax reports are future goals.
 
+## Current delivery priority
+
+Build the first usable desktop app/UI next, ahead of further connector expansion. The [desktop scope interview](desktop-app.md) records open decisions and answers; [master todo section 0](../todo/master-todo.md#0-now-first-usable-desktop-app--ui) owns immediate tasks. Existing coverage limitations remain visible. The interface is still proposed; this priority change does not imply that a desktop app or earnings engine has shipped.
+
 ## Selected future interface direction
 
 Confirmed in the [user needs interview](../findings/user-needs.md): the first desktop version will use Tauri, with a SolidJS, Panda CSS, and Ark UI frontend shared with the web version. A later desktop version will use Rust and GPUI. These are planned interfaces, not implemented behavior. Portfolio storage is local first, with a secondary cloud version for users who prefer hosted access. The public opportunity catalogue and paid risk-rating API are separate from personal portfolio storage.

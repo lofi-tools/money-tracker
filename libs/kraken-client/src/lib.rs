@@ -110,8 +110,8 @@ impl Client {
     pub fn from_env() -> Result<Self> {
         Self::new(
             "https://api.kraken.com",
-            std::env::var("KRAKEN_API_KEY")
-                .context("KRAKEN_API_KEY is required for a fresh fetch")?,
+            std::env::var("KRAKEN_API_KEY_ID")
+                .context("KRAKEN_API_KEY_ID is required for a fresh fetch")?,
             &std::env::var("KRAKEN_API_SECRET")
                 .context("KRAKEN_API_SECRET is required for a fresh fetch")?,
         )

@@ -41,7 +41,10 @@ fn precision(value: &str) -> Result<u8> {
 
 /// Only explicitly supported provider aliases/suffixes; never strip X/Z generally.
 fn resolve(snapshot: &Snapshot, code: &str) -> Result<(AssetId, String, u8)> {
+    // Observed Kraken bonded DOT code; preserve the product identity rather
+    // than stripping arbitrary numeric suffixes from provider asset names.
     let (base, bucket) = match code.split_once('.') {
+        Some(("DOT28", "S")) => ("DOT", "staking-bonded-28"),
         None => (code, "spot"),
         Some((base, "S")) => (base, "staking"),
         Some((base, "M")) => (base, "opt-in"),
@@ -411,6 +414,81 @@ mod tests {
                 "reward":{"refid":"r","time":1704067500,"type":"earn","subtype":"reward","aclass":"currency","asset":"XXBT.B","amount":"0.01","fee":"0","balance":"0.21"}},
             "balances":{"XXBT":{"balance":"0.6989","hold_trade":"0.1"},"XXBT.B":{"balance":"0.21"},"ZUSD":{"balance":"3999"}}})).unwrap()
     }
+    #[test]
+    fn all_time_transactions_reconcile_to_independent_balance_at_capture_cutoff() -> Result<()> {
+        let store = Store::in_memory()?;
+        let a = account("alice");
+        let snapshot = sample("alice");
+        let hash = import_snapshot(&store, &a, &snapshot)?;
+        reconcile(&store, &a.id, &snapshot, &hash)?;
+
+        // A newer import must not contaminate a frozen capture's dated query.
+        let mut newer = snapshot.clone();
+        newer.history_cutoff = "2024-01-03T00:00:00Z".parse()?;
+        newer.observed_at = "2024-01-03T00:00:01Z".parse()?;
+        let mut withdrawal = newer.ledger["deposit"].clone();
+        withdrawal.time = "1704240000".into();
+        withdrawal.kind = "withdrawal".into();
+        withdrawal.amount = "-0.1".into();
+        withdrawal.fee = "0.001".into();
+        withdrawal.balance = "0.5979".into();
+        newer.ledger.insert("later-withdrawal".into(), withdrawal);
+        newer.balances.get_mut("XXBT").unwrap().balance = "0.5979".into();
+        let newer_hash = import_snapshot(&store, &a, &newer)?;
+        reconcile(&store, &a.id, &newer, &newer_hash)?;
+        reconcile(&store, &a.id, &snapshot, &hash)?;
+
+        // Both snapshots reconcile against independent observations, not the
+        // ledger's own post-entry balance. Altering that field cannot hide a fee.
+        let mut inconsistent = newer.clone();
+        inconsistent.ledger.get_mut("later-withdrawal").unwrap().fee = "0.002".into();
+        let inconsistent_hash = import_snapshot(&store, &a, &inconsistent)?;
+        assert!(reconcile(&store, &a.id, &inconsistent, &inconsistent_hash).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn bonded_dot_preserves_product_and_counts_underlying_asset_once() -> Result<()> {
+        let mut snapshot = sample("alice");
+        snapshot.assets.insert(
+            "DOT".into(),
+            kraken_client::AssetInfo {
+                altname: "DOT".into(),
+                decimals: 10,
+                aclass: "currency".into(),
+            },
+        );
+        // Each product holds its own quantity; it is not a second economic coin.
+        for code in ["DOT", "DOT.S", "DOT28.S"] {
+            let mut row = snapshot.ledger["deposit"].clone();
+            row.asset = code.into();
+            row.amount = "1.1234567891".into();
+            row.fee = "0.0000000001".into();
+            row.balance = "1.1234567890".into();
+            snapshot.ledger.insert(code.into(), row);
+            snapshot.balances.insert(
+                code.into(),
+                kraken_client::Balance {
+                    balance: "1.1234567890".into(),
+                    credit: "0".into(),
+                    credit_used: "0".into(),
+                    hold_trade: "0".into(),
+                },
+            );
+        }
+        let store = Store::in_memory()?;
+        let a = account("alice");
+        let hash = import_snapshot(&store, &a, &snapshot)?;
+        reconcile(&store, &a.id, &snapshot, &hash)?;
+        let printed = print_balances(&store, &a.id, snapshot.history_cutoff)?;
+        assert!(printed.contains("staking-bonded-28:DOT"));
+        assert!(printed.contains("DOT: 3.3703703670"));
+        assert!(!printed.contains("DOT28.S:"));
+        // Numeric product names are allowlisted, never guessed generically.
+        assert!(resolve(&snapshot, "DOT99.S").is_err());
+        Ok(())
+    }
+
     #[test]
     fn maps_fees_earn_aliases_and_scopes_prints_in_mixed_database() -> Result<()> {
         let store = Store::in_memory()?;

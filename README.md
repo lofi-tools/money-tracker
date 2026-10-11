@@ -37,14 +37,14 @@ Net worth includes user asset balances and subtracts recorded user liabilities. 
 
 ## Kraken account import and reconciliation
 
-Kraken supports account-scoped Spot ledger imports, exact fees and quantities, independent BalanceEx reconciliation, and frozen offline replay in the normal portfolio database. Follow [the connection setup instructions](docs/findings/kraken-connection.md), then set `KRAKEN_API_KEY` and `KRAKEN_API_SECRET` for the first fetch, using Query ledger entries and Query funds permissions:
+Kraken supports account-scoped Spot ledger imports, exact fees and quantities, independent BalanceEx reconciliation, and frozen offline replay in the normal portfolio database. Follow [the connection setup instructions](docs/findings/kraken-connection.md), then set `KRAKEN_API_KEY_ID` and `KRAKEN_API_SECRET` for the first fetch, using Query ledger entries and Query funds permissions:
 
 ```sh
 cargo run -p cli -- --data-dir ./data --cache-dir .cache kraken --account kraken:primary
 cargo run -p cli -- --offline --data-dir ./data --cache-dir .cache kraken --account kraken:primary
 ```
 
-Use `--refresh` after the Kraken subcommand to fetch a new snapshot. `nix run .#kraken` runs the separate cache-first provider-only print test and fails on discrepancies. See [the Kraken guide](docs/spec/kraken.md) for mappings, identities, caches, scope and tests. Margin/credit, tokenized assets, KFEE and unknown mappings are unsupported; live-account verification and broader product coverage remain outstanding.
+Use `--refresh` after the Kraken subcommand to fetch a new snapshot. `nix run .#kraken` runs the separate cache-first provider-only print test and fails on discrepancies. See [the Kraken guide](docs/spec/kraken.md) for mappings, identities, caches, scope and tests. Margin/credit, tokenized assets, KFEE and unknown mappings are unsupported; one private account capture reconciles exactly, while broader account/product coverage remains outstanding.
 
 ## Binance account reconciliation
 

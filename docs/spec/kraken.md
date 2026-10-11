@@ -1,6 +1,6 @@
 # Kraken provider: account-scoped ledger and balance reconciliation
 
-Implemented Spot REST foundation. Acquisition/signing/cache code lives in [kraken-client](../../libs/kraken-client/src/lib.rs); mapping, persistence, reconciliation and print tests live in [the CLI adapter](../../apps/cli/src/adapters/kraken.rs). Checked against official documentation on 2026-10-11. This release is verified with synthetic and mock-server fixtures; a private live-account result has not been established.
+Implemented Spot REST foundation. Acquisition/signing/cache code lives in [kraken-client](../../libs/kraken-client/src/lib.rs); mapping, persistence, reconciliation and print tests live in [the CLI adapter](../../apps/cli/src/adapters/kraken.rs). Checked against official documentation on 2026-10-11. Synthetic/mock-server fixtures and one private account capture have been verified; this is not validation of every Kraken product or account variant.
 
 For user setup, OAuth/localhost evidence, historical coverage and manual-export instructions, see [Connecting Kraken](../findings/kraken-connection.md). API-key acquisition is implemented; Kraken Connect OAuth and CSV ingestion are proposed follow-ups.
 
@@ -16,7 +16,7 @@ Fetch the authenticated user's default Kraken wallet. Stable **local** account s
 
 Kraken documents `ofs` but now prefers cursor pagination; this first adapter uses the documented offset/count contract. It rejects repeated ledger IDs, early empty pages, inconsistent counts, oversized pages and count overruns. Ledger history is the monetary source; trade fills are not imported again. Kraken explains that ledger fees are actual deductions in the entry's asset, while trade-history fees can be estimates: [ledger versus trades](https://support.kraken.com/ca/articles/115000302707-differences-between-ledger-and-trades-history). See [Ledgers](https://docs.kraken.com/api-reference/account-data/get-ledgers-info), [Assets](https://docs.kraken.com/api-reference/market-data/get-asset-info) and [BalanceEx](https://docs.kraken.com/api-reference/account-data/get-extended-balance).
 
-Fresh fetches require `KRAKEN_API_KEY` and `KRAKEN_API_SECRET` (base64-encoded secret). Grant Query ledger entries and Query funds, as required by those endpoints. Signing uses Kraken's documented HMAC-SHA512 construction with a SHA256 payload digest, encoded form body and increasing nonce. Tests use the [official authentication test vector](https://docs.kraken.com/exchange/guides/rest/authentication); no order/transfer execution endpoints are exposed. API-key action 2FA/OTP is not implemented.
+Fresh fetches require `KRAKEN_API_KEY_ID` and `KRAKEN_API_SECRET` (base64-encoded secret). Grant Query ledger entries and Query funds, as required by those endpoints. Signing uses Kraken's documented HMAC-SHA512 construction with a SHA256 payload digest, encoded form body and increasing nonce. Tests use the [official authentication test vector](https://docs.kraken.com/exchange/guides/rest/authentication); no order/transfer execution endpoints are exposed. API-key action 2FA/OTP is not implemented.
 
 Private calls share a process-wide serialization gate, monotonic millisecond nonces and four-second pacing. HTTP 429 honors integer Retry-After seconds; absent/invalid headers use exponential fallback. API rate-limit/throttle errors retry up to five attempts, honoring an explicit throttle timestamp where supplied. Other HTTP/API failures stop acquisition without printing raw provider error contents or signed request headers. This is not Binance's cross-process weighted limiter: avoid concurrently using the same Kraken key from other processes, and use a dedicated key where possible. Public metadata calls have ordinary timeout/status checking rather than private retry handling.
 
@@ -31,8 +31,11 @@ Resolve each source code against Assets keys or altnames, rejecting missing/conf
 | `.M` | opt-in | Same base asset |
 | `.B` | earn | Same base asset |
 | `.F` | rewards | Same base asset |
+| Exact `DOT28.S` | staking-bonded-28 | DOT; explicit product alias, not generic numeric suffix stripping |
 
 Each bucket has its own balance, but portfolio totals sum these distinct quantities only once. `.T` tokenized assets and other suffixes are rejected, not stripped and mistaken for crypto. Suffix meanings follow [Kraken's balance reference](https://docs.kraken.com/api-reference/account-data/get-extended-balance). Individual Earn strategies, allocations, maturity schedules, rates and underlying exposure metadata are not implemented by suffix recognition.
+
+The first private capture included `DOT28.S` metadata and staking/transfer records, while `DOT28` was absent as an economic asset. The mapper now explicitly resolves `DOT28.S` to DOT while keeping a separate bonded position from `DOT.S`. This interpretation is supported by the captured provider evidence and [Kraken's DOT bonded-staking documentation](https://support.kraken.com/articles/360037682011-overview-of-staking-on-kraken); the support page does not itself specify this exact ticker. Other numbered staking codes remain unknown until individually verified. Product timing/withdrawability is not inferred from the code.
 
 Amounts/fees/balances remain plain decimal strings converted directly to arbitrary-precision `Units`, without `f64` or bounded-decimal intermediates. Numeric BalanceEx fields retain their lexical decimal through serde_json arbitrary precision. New scales use the greatest of metadata decimals, significant source precision and 8; existing scales are respected when all source quantities fit, and insufficient precision fails rather than rescaling existing ledger effects. Epoch-second timestamps preserve up to nanosecond precision and fail outside the supported timestamp range.
 
@@ -59,6 +62,8 @@ Raw snapshots retain ledger refid, type/subtype, source asset, fee and reported 
 ## Independent reconciliation and liabilities
 
 BalanceEx `balance` is independently fetched, mapped to owned buckets and persisted atomically with registrations, effects and the account-scoped completed marker. Holds remain part of balance; do not add or subtract `hold_trade` when calculating holdings. Preserve the actual API observation timestamp separately from the earlier history cutoff: these endpoints cannot be captured atomically.
+
+BalanceEx provides **current** balances, with no historical date parameter in [its API contract](https://docs.kraken.com/api-reference/account-data/get-extended-balance). Kraken's website offers [balance exports for a selected date](https://support.kraken.com/articles/download-request-documents), but the documented [AddExport API](https://docs.kraken.com/api-reference/account-data/request-export-report) only exports trades or ledgers. Dated independent balance-export ingestion is future work; do not describe a frozen current observation as a balance fetched retrospectively from the API.
 
 Reconciliation queries only the selected account at the history cutoff and compares exact units with persisted observations over the union of historical/current positions; absent quantities are zero. Closed positions and current assets without history participate. Differences remain visible and cause the CLI/strict print test to fail; no balancing entries are generated. Structurally valid mismatching snapshots are retained for investigation and continue failing on replay.
 
@@ -98,6 +103,10 @@ KRAKEN_ACCOUNT_ID=kraken:primary cargo test -p cli adapters::kraken::tests::late
 ```
 
 The ignored private test defaults to AccountId `kraken:primary` and uses `.cache/test-data/kraken/<account hash>.json` with `.cache/test-data/kraken/kraken.duckdb`. First run can fetch private data; subsequent runs use the frozen snapshot. It fails on discrepancies, unlike Binance's display-only tests. Ordinary deterministic tests never require Kraken credentials.
+
+`all_time_transactions_reconcile_to_independent_balance_at_capture_cutoff` checks the complete synthetic ledger against independent captured quantities, including fees and Earn transfers, then imports newer activity and verifies the older cutoff still reconciles. Changing a fee without changing the independent observation fails even if the ledger's own reported balance is unchanged. This tests dated replay of captured evidence, not an unsupported historical BalanceEx request.
+
+On 2026-10-11 the private test fetched 509 native ledger entries over 11 pages and independent BalanceEx quantities using `KRAKEN_API_KEY_ID`/`KRAKEN_API_SECRET`. Mapping initially exposed the missing `DOT28.S` alias; after that fix, every owned position reconciled exactly. A second run replayed the frozen snapshot without credentials and passed. Private monetary values and source IDs remain only in ignored local caches/DBs. This establishes this account's captured quantity reconciliation, not complete historical earnings semantics or universal provider coverage.
 
 Covered acceptance cases: official signing vector; signed offset pagination and monotonically increasing nonces; cached ledger pages with independent balance fetches; HTTP throttle retry; missing/corrupt/wrong-account offline caches; exact large/numeric quantities; fee charged once; Earn transfers/rewards; repeated/changed snapshot identity; persisted discrepancy across DB reopen; historical positions absent from current references; protected scale/type/asset/debt failures leaving no effects/observations/completed marker; print isolation across two Kraken accounts plus Nexo and Binance in one DB. Loopback mock-server tests require local socket permission in restricted environments.
 

@@ -62,7 +62,8 @@ Source review findings: Nexo has no independent balance reconciliation and ignor
 
 - [x] Verify official ledger/balance/asset/authentication contracts and read-only permissions for the first default-wallet Spot scope; record explicit Earn suffixes and unsupported account families.
 - [x] Add synthetic ledger/Earn/fee fixtures and separate dated balances, plus signed mock HTTP acquisition/cache tests.
-- [ ] Validate against account-appropriate anonymized/private real ledger, balance and Earn/export fixtures; verify region/remote wallet/retention coverage. Synthetic reconciliation is not a live-account result.
+- [x] Validate one private default-wallet account: 509 ledger entries plus independent current balances reconcile exactly after the bonded DOT alias fix; cached replay passes without credentials (2026-10-11).
+- [ ] Broaden real fixture coverage for other regions, remote wallets, products, retention and dated exports; one account's passing capture does not establish universal coverage.
 - [x] Implement the Kraken acquisition client with pagination, serialized signing/nonces, bounded throttle recovery, cached responses and resumable fixed-cutoff history.
 - [ ] Adopt Kraken's preferred cursor pagination and assess cross-process key/nonce coordination; current documented offset pagination and serialization are process-local.
 - [x] Normalize explicit Kraken identifiers/aliases and exact arbitrary-precision decimal quantities while protecting existing asset scales; fail unknown/ambiguous mappings.
@@ -70,6 +71,7 @@ Source review findings: Nexo has no independent balance reconciliation and ignor
 - [ ] Add individual Earn allocation/strategy metadata and supplement with trades/exports only where additional evidence is needed; prevent duplicate economic movements.
 - [x] Fetch independent BalanceEx quantities; reconcile the selected account including historical/current-only and zero positions, without balancing plugs.
 - [ ] Add API-generated export recovery (AddExport/ExportStatus/RetrieveExport), then manual CSV ingestion with native-ID deduplication and independent reconciliation. User export instructions are documented; neither ingestion path is implemented.
+- [ ] Import independent dated balance exports from Kraken's website and reconcile all-time ledger effects through the report's timestamp. BalanceEx has no historical date parameter; the documented export API only supports ledger/trade reports.
 - [ ] Support remote wallet selection and verify recovery of unavailable historical data.
 - [ ] Preflight API-key permissions and history date restrictions using GetApiKeyInfo; surface restricted backfill explicitly.
 - [ ] **Later — optional Kraken OAuth:** contact Kraken about partner approval/app registration; confirm eligibility, costs, public desktop callbacks and PKCE, then implement Connect/Fast API onboarding with minimal permissions. [Manual read-only API keys are the current chosen approach](../findings/kraken-connection.md); OAuth does not block the next tasks.

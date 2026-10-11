@@ -4,7 +4,7 @@ Money Tracker aims to provide a local-first view of investments, net worth, yiel
 
 ## Current delivery priority
 
-Build the first usable desktop app/UI next, ahead of further connector expansion. The [desktop scope interview](desktop-app.md) records open decisions and answers; [master todo section 0](../todo/master-todo.md#0-now-first-usable-desktop-app--ui) owns immediate tasks. Existing coverage limitations remain visible. The interface is still proposed; this priority change does not imply that a desktop app or earnings engine has shipped.
+Build the first usable desktop app/UI next, ahead of further connector expansion. The [desktop scope interview](desktop-app.md) records confirmed scope and acceptance scenarios; the [ordered implementation plan](../todo/first-ui-implementation-plan.md) sequences the minimum model/query, design-system and desktop work; [master todo section 0](../todo/master-todo.md#0-now-first-usable-desktop-app--ui) owns immediate tasks. Existing coverage limitations remain visible. The interface is still proposed; this priority change does not imply that a desktop app or earnings engine has shipped.
 
 ## Selected future interface direction
 

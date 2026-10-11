@@ -37,6 +37,7 @@ Documentation is organized by purpose. Specifications describe implemented contr
 ## Todos
 
 - [Provisional master todo list and delivery priorities](todo/master-todo.md)
+- [First UI: ordered implementation plan and dependencies](todo/first-ui-implementation-plan.md)
 - [Provider discovery inventory and source research](todo/provider-roadmap.md)
 - [Implementation design notes from earlier proposals](todo/implementation-gaps.md)
 

@@ -59,6 +59,8 @@ Support unknown values, partial subtotals, signed costs and reporting-currency l
 
 ## Implementation sequence and acceptance
 
+The [first-UI implementation plan](../todo/first-ui-implementation-plan.md) places this package alongside backend contract work and defines the full app dependency order. The sequence below is local to the package; completion status remains in the master todo.
+
 1. Add the pnpm/TypeScript package boundary, lockfile, documented exports and reproducible Panda codegen/build commands.
 2. Define theme tokens and implement the minimum controls/navigation/table/details primitives above.
 3. Add an isolated showcase with explicitly synthetic examples covering themes, missing values, warnings, editing/pinning and privacy presentation.

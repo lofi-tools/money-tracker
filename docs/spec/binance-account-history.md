@@ -1,6 +1,6 @@
 # Binance account history
 
-Implemented behavior. Remaining expansion work is tracked in [the roadmap](../todo/provider-roadmap.md).
+Implemented behavior. Remaining expansion work is tracked in [the master todo list](../todo/master-todo.md).
 
 ## Requirements
 

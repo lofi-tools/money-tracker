@@ -16,7 +16,9 @@
 | `balance_observations` | Independent source/hash/position/timestamp/amount evidence |
 | `imported_files` | Source/content hash, transaction count, completion time; unique per source/hash |
 
-There is no full `accounts` metadata table. Account/product/position metadata persistence and retrieval remain [future work](../todo/implementation-gaps.md). Transactions and effects support stable-ID replacement and retrieval. Inputs persist negatively and outputs positively. An import marker must commit atomically with its ledger and related registrations/observations; a failed import leaves no successful marker. Independent balance observations are comparison evidence, never synthetic ledger effects.
+There is no full `accounts` metadata table. Account/product/position metadata persistence and retrieval remain [future work](../todo/master-todo.md). Transactions and effects support stable-ID replacement and retrieval. Inputs persist negatively and outputs positively. An import marker must commit atomically with its ledger and related registrations/observations; a failed import leaves no successful marker. Independent balance observations are comparison evidence, never synthetic ledger effects.
+
+The [data model proposal](data-model-proposal.md) describes account-scoped identities, event/provenance revisions, exact quantities and scoped reconciliation as future changes. The table inventory and migration registry below remain the implemented contract.
 
 ## Ordered idempotent startup migrations
 

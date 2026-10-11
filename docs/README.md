@@ -4,8 +4,10 @@ Documentation is organized by purpose. Specifications describe implemented contr
 
 ## Specifications
 
+- [Product questions, pain points, and proposed solutions](spec/product-goals.md)
 - [Project context and conventions](spec/project.md)
 - [Core data model](spec/data-model.md)
+- [Proposed data model evolution and implementation phases](spec/data-model-proposal.md)
 - [Persistence and ordered startup migrations](spec/persistence.md)
 - [CLI configuration](spec/cli.md)
 - [Nexo CSV ingestion](spec/nexo.md)
@@ -14,14 +16,21 @@ Documentation is organized by purpose. Specifications describe implemented contr
 
 ## Findings
 
+- [User needs interview and confirmed portfolio questions](findings/user-needs.md)
+- [Older product draft: comparison and follow-up decisions](findings/older-spec-comparison.md)
+- [Taskstream design-system and homepage/docs structure reference](findings/taskstream-reference.md)
+- [Risk measurement research and proposed opportunity comparisons](findings/risk-comparison.md)
 - [Airtable data model comparison](findings/airtable-model.md)
 - [Binance export and replay guide](findings/binance-history.md)
 - [Consolidated implementation decisions and documentation corrections](findings/implementation-history.md)
 
 ## Todos
 
-- [Goals and provider roadmap, in descending priority](todo/provider-roadmap.md)
-- [Remaining implementation details from earlier proposals](todo/implementation-gaps.md)
+- [Provisional master todo list and delivery priorities](todo/master-todo.md)
+- [Provider discovery inventory and source research](todo/provider-roadmap.md)
+- [Implementation design notes from earlier proposals](todo/implementation-gaps.md)
+
+The master todo list owns delivery status. Provider discovery tables and implementation notes are supporting references, not competing ranked checklists.
 
 ## Maintenance workflow
 

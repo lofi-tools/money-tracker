@@ -1,40 +1,10 @@
-# Provider implementation goals and todo list
+# Provider discovery inventory
 
-Reviewed 10 October 2026. Prioritize replacement of the user's existing spreadsheet workflow, then broader coverage. The recommended next providers are **Crypto.com, EVM wallets, Kraken, and OKX**, alongside a generic history/claims import path. Coinbase already appears in the exports. Major omissions worth adding include **Aave, Uniswap, Morpho, Bybit, Bitget, KuCoin, Gate, and Bitstamp**, plus Bitcoin and Solana wallet coverage. These are integration priorities, not recommendations to move funds or use any financial product.
+Updated 11 October 2026. Delivery priorities and all actionable checklists now live in the [provisional master todo list](master-todo.md). Confirmed next integrations are **Kraken → EVM wallets → Solana → NEAR**, after existing Nexo/Binance support.
 
-Read [the model findings](../findings/airtable-model.md) first. A provider catalogue, an account connector, a chain reader, a DeFi decoder, and a price feed serve different purposes and should not be counted as equivalent integrations.
+Confirmed chains are Ethereum, Polygon, BNB Chain, Arbitrum, zkSync, Solana, and NEAR. Public indexers are the default, with RPC-node overrides. Use the Airtable exports to identify wallets/positions, not to impose their complete data model or treat researched offers as held investments.
 
-## Goals and completion criteria
-
-| Order | Goal | Done when |
-| --- | --- | --- |
-| 1 | Preserve the existing portfolio without waiting for every API connector | Every meaningful export row is mapped or explicitly unresolved; linked APY/subscription tables are recovered or marked unavailable; manual historical observations can be retained with provenance. |
-| 2 | Report accurate assets, liabilities, and accessible value | User debt reduces net worth; external counterparties do not; locked, frozen, and pending value are visible; nested products and receipt tokens are not counted twice. |
-| 3 | Replace the highest-value personal tracking workflows | Crypto.com surfaces, relevant wallet chains, Kraken, and OKX import history and independent balances with documented scope and reconciliation at a known cutoff. |
-| 4 | Restore yield and income tracking | Rate tiers and subscription terms survive storage/reload; unknown rates are explicit; expected income and actual rewards are separate; locked terms and withdrawal availability are visible. |
-| 5 | Expand to reusable market coverage | Additional exchange and protocol adapters reuse the same account, identity, provenance, precision, and completeness contracts. |
-
-Priority reflects exported evidence of use, breadth unlocked, data accessibility, and prerequisites. Historic fiat amounts are not used as current portfolio weights. Reorder a connector upward when current holdings, missing history, or an unresolved recovery make it more valuable.
-
-## Immediate todos in descending order
-
-- [ ] **1. Recover missing Airtable inputs.** Obtain `APYs`, `individual_subs`, and any currency/provider tables or formula definitions. Preserve original exports locally. Record the snapshot date and fiat reporting currency if known.
-- [ ] **2. Define and persist provider/account/product/position relationships.** Extend the existing ledger persistence; support multiple account instances, nested products, aliases, and subscription IDs. Add catalogue-only products with unknown assets/terms where appropriate.
-- [ ] **3. Complete liability and claim tracking.** Basic asset/liability/counterparty roles, legacy Nexo migration, signed liability valuation, and liability pricing are implemented. Remaining work: broader loan repayment mapping/metadata and claims/recovery evidence; retain owned collateral as an asset.
-- [ ] **4. Add safe Airtable/manual import.** Preserve row provenance, old/new fields, unresolved links, and independent observations. Require dated evidence for opening checkpoints. Report duplicates and formula uncertainty instead of silently merging.
-- [ ] **5. Finish a normal multi-provider application workflow.** Expose existing Nexo/Binance imports and reconciliation through ordinary CLI commands into a chosen portfolio database. Support account selection, offline replay, incremental sync, retained errors, and provider coverage reports.
-- [ ] **6. Make identity, exact amounts, and provenance reusable.** Fix `ExternalAssetId` equality/hash, persist provider asset mappings, define chain-qualified tokens and exact wide amounts, remove floating-point ingestion from Nexo, and enforce stable scale semantics. Scope transaction IDs and file deduplication by provider plus account instance.
-- [ ] **7. Implement Crypto.com App CSV ingestion.** Start with token wallet, cash wallet, and card exports; retain event categories and account separation. Identify whether Earn and staking transfers are fully represented before declaring those positions reconciled.
-- [ ] **8. Implement EVM address coverage.** Ethereum, BNB Smart Chain, and Polygon first; Cronos for Crypto.com on-chain holdings; then Arbitrum and zkSync as demonstrated by the catalogue. Add Base and Optimism for broader reuse. Include native transfers, internal value movements, token events, gas, failed/reverted transactions, block identity, and rollback of reorged observations.
-- [ ] **9. Implement Kraken, then OKX.** Use account ledgers and independent snapshots, with trades/rewards/product detail as needed. Add CSV/archive ingestion for historical gaps rather than claiming that recent API history is complete.
-- [ ] **10. Add legacy history and claims tracking.** Import retained statements, balances, claim evidence, distributions, and impairment decisions for historical lenders/exchanges. Promote above live connectors when the user has an unresolved claim or unexplained loss.
-- [ ] **11. Restore offer rates, subscriptions, and liquidity state.** Distinguish APR/APY, tiers, reward currency, fixed term, renewal, unbonding, and withdrawable amount. Store unknown rates as unknown; replace Binance's placeholder APY only when a real rate source exists.
-- [ ] **12. Implement remaining Crypto.com surfaces and relevant DeFi.** Exchange API/CSV is a separate adapter; on-chain wallet coverage is a chain/protocol path. Decode QuickSwap pools, Lido, and Rocket Pool after composite/share accounting; add Aave and Uniswap for wider coverage.
-- [ ] **13. Implement YouHodler, CoinList, SwissBorg, HTX, and Uphold as justified by current use.** Start with verified user statement formats where account-history API access is not yet established. Follow with remaining native chains and the smaller personal providers below.
-- [ ] **14. Implement Coinbase, then the missing major exchange batch.** Coinbase is registered in the export but has no exported nonzero product total. Raise it if currently used. Default expansion order: Bybit, Bitget, KuCoin, Gate, Bitstamp; see scope constraints below.
-- [ ] **15. Restore reports and follow-up work.** Provider/product/asset rollups, expected and realized annual income, liquidity timeline, transfer matching, unresolved movements, and archived/researched account views.
-- [ ] **16. Add fiat accounts, performance, and tax evidence.** Monzo first, then Wise/Revolut/N26 and other used banks; explicit reporting currency and FX; cost-basis lots, disposals, fees, cashflow-aware returns, and supporting records. Country-specific tax calculations require a separate jurisdiction decision and specification.
-- [ ] **17. Add advanced structured products and remaining market coverage.** Dual-currency settlement, options/derivatives, vaults, additional DEXs, and long-tail exchanges only after core accounting and personal coverage are reliable.
+The tables below retain discovery evidence and access-source research from 10 October 2026. Their numeric ranks reflect the older export-based shortlist, **not current implementation order**. Recheck API, service, region, and history facts when implementing a connector. No bespoke connector is required merely because a provider appears in an export.
 
 ## Providers already represented in the exports
 
@@ -104,33 +74,6 @@ Some of these names are legacy labels. Preserve them as aliases; do not silently
 
 Ledger, Trezor, and Phantom are also absent by name, but should usually be supported through their chain accounts rather than bespoke balance-provider integrations. Base and Optimism are useful missing EVM networks, distinct from financial providers. A portfolio indexer can accelerate discovery, but should be optional and replaceable: storing results locally does not prevent a remote service from learning queried addresses.
 
-## Requirements for every implemented connector
+## Connector completion criteria
 
-- [ ] Declare supported account types, products, regions, history boundaries, and unavailable records. A balance-only connector is valid if labelled as such.
-- [ ] Use account-scoped stable record IDs, preserve raw evidence locally, and version parsing/mapping. Keep original file formats and UTC/source timezone information.
-- [ ] Parse amounts exactly, preserve asset scale and chain identity, and distinguish fees/rewards/interest/transfers from principal movements.
-- [ ] Persist source event semantics, external references, and import provenance alongside the normalized ledger; a generic amount alone cannot reconstruct income or tax meaning.
-- [ ] Resume pagination and incremental sync with overlap; reconcile duplicate API/CSV views while preserving legitimately repeated identical movements.
-- [ ] Fetch independent balances/positions at a stated cutoff and retain discrepancies. Mark unmatched or partially decoded events unresolved rather than inventing balancing entries.
-- [ ] Match transfers between owned accounts without creating income or counting both as fresh deposits. Keep network/withdrawal fees and pending bridge movements explicit.
-- [ ] Support offline replay and rate-limit recovery. Share provider pacing where needed; keep credentials out of fixtures, logs, and documents.
-- [ ] Verify meaningful fixtures: overlapping reimport, history gaps, same-asset positions, multiple account instances, fees in another asset, rewards, locked balances, and negative liabilities where applicable.
-
-## Other work in descending priority
-
-1. **Coverage and reconciliation reports:** identify complete/partial/current-only accounts and dated unresolved differences. This determines whether any portfolio number is trustworthy.
-2. **Yield and liquidity reporting:** expected income by currency, realized rewards, net yield after fees, maturity/unbonding timeline, and accessible cash. Historic APYs cannot be presented as current offers.
-3. **Transfer follow-up and recovery notes:** replace spreadsheet notes with linked evidence and resolution status; preserve claims and distributions without classifying recoveries automatically as ordinary yield.
-4. **Valuation provenance and reporting currency:** configurable GBP/EUR/USD; price quality/staleness, missing-price state, FX evidence, and disclosed stablecoin/receipt valuation assumptions.
-5. **Cashflow-aware performance:** distinguish deposits/withdrawals from returns, capital gains, and income before offering performance comparisons.
-6. **Tax evidence:** retain acquisition/disposal lots and source records; select jurisdiction and accounting rules before implementing tax-specific calculations.
-7. **Broader financial accounts and UI:** bank/broker/pension/debt models and a persistent account dashboard once the core account workflow is usable.
-8. **Yield discovery and comparisons:** refresh offer data with timestamps, eligibility, liquidity, and risk context. Prioritize tracking held products before recommendations or catalogue scraping.
-
-## Implementation preparation
-
-- [ ] Consult [current specifications](../README.md) and [remaining implementation gaps](implementation-gaps.md) before creating overlapping work.
-- [ ] Write focused design and acceptance criteria for account metadata/manual migration, composite valuation, yield/subscription terms, chain identity/amounts, and each connector batch under `docs/spec/`; track delivery under `docs/todo/`.
-- [ ] Define connector acceptance criteria and collect anonymized format fixtures before implementing. A provider present only as a research entry needs no live connector until it solves a real coverage gap.
-
-API and export facts above were checked against official sources on 10 October 2026. Unverified long-tail providers remain discovery tasks; regional permissions and exact account-generation coverage should be checked when their implementation starts.
+Use the existing-provider documentation and Kraken sections of the [master checklist](master-todo.md), then apply the same evidence, mapping, exact-amount, import/replay, independent-balance, and provider-only diagnostic requirements to each connector. Pricing support alone does not establish account-history support.

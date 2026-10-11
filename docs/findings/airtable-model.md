@@ -1,6 +1,6 @@
 # Airtable data model comparison
 
-Reviewed 10 October 2026. The spreadsheet tracked a portfolio of providers, products, yield offers, and subscriptions, with manual balances and follow-up notes. The current application has a useful transaction ledger and historical valuation foundation, but cannot yet preserve most of those relationships. Restore account and product metadata, yield terms, liquidity state, and broader loan/claim metadata before expanding connector coverage widely. See [the prioritized roadmap](../todo/provider-roadmap.md) for goals and implementation todos.
+Reviewed 10 October 2026. The spreadsheet tracked a portfolio of providers, products, yield offers, and subscriptions, with manual balances and follow-up notes. The current application has a useful transaction ledger and historical valuation foundation, but cannot yet preserve most of those relationships. Restore account and product metadata, yield terms, liquidity state, and broader loan/claim metadata before expanding connector coverage widely. See [the master todo list](../todo/master-todo.md) for goals and implementation todos.
 
 ## Export evidence and limits
 
@@ -83,7 +83,7 @@ Transfers alone are insufficient for yield-bearing positions. Lido distinguishes
 - [Persistence](../spec/persistence.md) already stores ledger movements, economic roles, prices, and import evidence. Extend it with provider/account/product/position metadata.
 - [Historical valuation](../spec/historical-net-worth.md) already subtracts liabilities and excludes external counterparties. Composite-position valuation and broader loan/claim metadata remain outstanding.
 - [Binance account history](../spec/binance-account-history.md) includes independent reconciliation and statement/API replay. Prioritize a normal application import/sync workflow and explicit coverage.
-- [Nexo ingestion](../spec/nexo.md) already supports configurable paths and atomic file-hash deduplication. Managed uploads and discovery remain future work in [the implementation backlog](../todo/implementation-gaps.md).
+- [Nexo ingestion](../spec/nexo.md) already supports configurable paths and atomic file-hash deduplication. Managed uploads and discovery remain future work in [the implementation planning notes](../todo/implementation-gaps.md).
 - [Core domain types](../spec/data-model.md) describe the implemented model; the earlier enum IDs, Decimal effects, and embedded position amounts have been superseded.
 
 This comparison records export evidence and gaps. The [prioritized roadmap](../todo/provider-roadmap.md) owns implementation ordering.

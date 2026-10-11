@@ -60,6 +60,12 @@ pub enum Command {
         /// Recheck unresolved metadata at the frozen snapshot block, without refetching history
         #[arg(long)]
         resolve_tokens: bool,
+        /// Apply the reviewed Ethereum SafePromo spam exclusion to this saved account
+        #[arg(long, requires = "account", conflicts_with = "restore_token")]
+        exclude_safe_promo: bool,
+        /// Restore tracking for this exact ERC20 contract (retains review history)
+        #[arg(long, requires = "account")]
+        restore_token: Option<String>,
         /// JSON-RPC override (select one chain when overriding endpoints)
         #[arg(long)]
         rpc: Option<String>,

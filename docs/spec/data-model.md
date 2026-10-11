@@ -41,3 +41,7 @@ Persist `PositionRole::Asset`, `Liability`, or `ExternalCounterparty` explicitly
 Liability balances are signed: borrowing/interest decrease them and repayment increases them toward zero. Net worth sums signed asset and liability values. Holding USD 100 and owing USD 20 gives USD 80; a USD 5 repayment moves debt to USD 15, while its asset funding effects are counted separately. Moving assets into collateral or a locked wallet does not create another liability or remove their economic ownership.
 
 See [historical valuation](historical-net-worth.md) for price selection and [Airtable findings](../findings/airtable-model.md) for missing account, yield, subscription, composite-position, and claim relationships.
+
+## Reviewed tracking exclusions
+
+[Account-scoped asset reviews](tracking-exclusions.md) now filter financial totals/history and pricing eligibility, preserve audit effects and raw EVM snapshots, and expose a shared earnings-eligibility check. Unknown contracts need no fabricated scale. Liabilities retain their economic role and remain visible. Full position/product policy and earnings attribution remain proposed.

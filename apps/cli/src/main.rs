@@ -121,6 +121,8 @@ async fn run() -> Result<(), AppError> {
         portfolio,
         register_only,
         resolve_tokens,
+        exclude_safe_promo,
+        restore_token,
         rpc,
         indexer,
         confirmations,
@@ -168,6 +170,25 @@ async fn run() -> Result<(), AppError> {
             );
             for a in &accounts {
                 adapters::evm::register(&store, a)?;
+                if *exclude_safe_promo {
+                    adapters::evm::exclude_safe_promo(&store, a)?;
+                }
+                if let Some(contract) = restore_token {
+                    let contract = evm_client::address(contract)?;
+                    let chain: u64 =
+                        a.id.0
+                            .split(':')
+                            .nth(1)
+                            .ok_or_else(|| anyhow::anyhow!("invalid EVM identity"))?
+                            .parse()?;
+                    store.review_asset_tracking(
+                        &a.id,
+                        &lib_core::AssetId::str(&format!("eip155:{chain}/erc20:{contract}")),
+                        false,
+                        "User restored token tracking",
+                        "Explicit --restore-token command",
+                    )?;
+                }
             }
             if *register_only {
                 println!(

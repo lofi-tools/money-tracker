@@ -12,6 +12,18 @@ use std::{
 };
 pub const SOURCE: &str = "evm-wallet-v1";
 
+/// Reviewed by the project against verified source and deployed runtime, not ticker heuristics.
+pub const SAFE_PROMO: &str = "0x31a240648e2baf4f9f17225987f6f53fceb1699a";
+pub fn exclude_safe_promo(store: &Store, account: &Account) -> Result<()> {
+    ensure!(
+        account.provider_id.0 == "evm" && account.id.0.starts_with("eip155:1:"),
+        "SafePromo review applies only to Ethereum accounts"
+    );
+    store.review_asset_tracking(&account.id, &asset(1, Some(SAFE_PROMO)), true,
+        "Reviewed spam: constant balanceOf=777 for every address; transfers disabled; no trustworthy decimals",
+        "Project review, 2026-10-11; https://eth.blockscout.com/api/v2/smart-contracts/0x31a240648e2baf4f9f17225987f6f53fceb1699a; runtime SHA256 87b628c1cc1a0456d1ffb1b84ef5832ad1640dcb91f631a893cd6ac180be754f; source SHA256 278d2cb99679df3e3bdb3daad2a889a598259daed8898aa82a03dd25bbf6fc8c")
+}
+
 pub fn account(chain: u64, wallet: &str, portfolio: &str) -> Result<Account> {
     let wallet = address(wallet)?;
     evm_client::defaults(chain)?;
@@ -123,8 +135,10 @@ pub fn import(store: &Store, a: &Account, s: &Snapshot) -> Result<String> {
     );
     evm_client::hash(&s.block_hash)?;
     register(store, a)?;
-    let digest = evm_client::fingerprint(&serde_json::to_vec(s)?);
+    let payload = serde_json::to_string(s)?;
+    let digest = evm_client::fingerprint(payload.as_bytes());
     if store.has_account_imported_file(&a.id, SOURCE, &digest)? {
+        store.save_account_source_snapshot(&a.id, SOURCE, &digest, &payload)?;
         return Ok(digest);
     }
     let native = asset(s.chain, None);
@@ -349,6 +363,7 @@ pub fn import(store: &Store, a: &Account, s: &Snapshot) -> Result<String> {
             .collect::<Vec<_>>(),
         &observations,
     )?;
+    store.save_account_source_snapshot(&a.id, SOURCE, &digest, &payload)?;
     Ok(digest)
 }
 pub fn reconcile(store: &Store, a: &AccountId, s: &Snapshot, digest: &str) -> Result<String> {
@@ -366,12 +381,20 @@ pub fn reconcile(store: &Store, a: &AccountId, s: &Snapshot, digest: &str) -> Re
         sums.entry(b.position_id.0).or_default().0 += b.amount;
     }
     for b in store.account_balance_observations(a, SOURCE, digest)? {
+        if !store.position_is_tracked(&b.position_id)? {
+            continue;
+        }
         sums.entry(b.position_id.0).or_default().1 += b.amount;
     }
     let mut report = format!(
         "EVM chain {} at block {} ({})\n",
         s.chain, s.block, s.block_hash
     );
+    for contract in s.tokens.keys().chain(s.unresolved_tokens.keys()) {
+        if store.asset_is_excluded(a, &asset(s.chain, Some(contract)))? {
+            report.push_str(&format!("Excluded reviewed asset {contract}: raw history preserved; outside tracked reconciliation scope\n"));
+        }
+    }
     let mut mismatch = false;
     for (p, (ledger, rpc)) in sums {
         report.push_str(&format!(
@@ -395,10 +418,16 @@ pub fn reconcile(store: &Store, a: &AccountId, s: &Snapshot, digest: &str) -> Re
                 && integer(&s.receipts[h]["blockNumber"]).is_ok_and(|block| block < 22_207_818))),
         "Arbitrum Classic feeStats mapping is required for exact fee coverage, even if aggregate quantities match:\n{report}"
     );
+    let mut unresolved = 0;
+    for contract in s.unresolved_tokens.keys() {
+        if !store.asset_is_excluded(a, &asset(s.chain, Some(contract)))? {
+            unresolved += 1;
+        }
+    }
     ensure!(
-        s.unresolved_tokens.is_empty(),
+        unresolved == 0,
         "EVM coverage is partial: {} unresolved token contracts; verified position comparison follows:\n{report}",
-        s.unresolved_tokens.len()
+        unresolved
     );
     Ok(report)
 }
@@ -433,7 +462,13 @@ pub async fn run(
     .await?;
     let digest = import(store, a, &snapshot)?;
     for (contract, reason) in &snapshot.unresolved_tokens {
-        eprintln!("Unresolved token {contract}: {reason}");
+        if store.asset_is_excluded(&a.id, &asset(snapshot.chain, Some(contract)))? {
+            eprintln!(
+                "Reviewed exclusion {contract}: financial mapping withheld; raw history preserved"
+            );
+        } else {
+            eprintln!("Unresolved token {contract}: {reason}");
+        }
     }
     for warning in &snapshot.warnings {
         eprintln!("Warning: {warning}");
@@ -495,6 +530,85 @@ mod tests {
             token_evidence: BTreeMap::new(),
         }
     }
+    #[test]
+    fn reviewed_unknown_spam_keeps_raw_logs_and_strict_tracked_reconciliation() -> Result<()> {
+        let store = Store::in_memory()?;
+        let w = wallet();
+        let a = account(1, &w, lib_core::DEFAULT_PORTFOLIO)?;
+        let mut s = fixture(1, &w);
+        let h = s.receipts.keys().next().unwrap().clone();
+        let mut log = s.receipts[&h]["logs"][0].clone();
+        log["address"] = serde_json::json!(SAFE_PROMO);
+        log["logIndex"] = serde_json::json!("0x4");
+        s.receipts.get_mut(&h).unwrap()["logs"]
+            .as_array_mut()
+            .unwrap()
+            .push(log);
+        s.unresolved_tokens
+            .insert(SAFE_PROMO.into(), "no trustworthy scale".into());
+        let d = import(&store, &a, &s)?;
+        assert!(reconcile(&store, &a.id, &s, &d).is_err());
+        exclude_safe_promo(&store, &a)?;
+        assert!(reconcile(&store, &a.id, &s, &d)?.contains("Excluded reviewed asset"));
+        assert!(
+            store
+                .account_source_snapshot(&a.id, SOURCE, &d)?
+                .unwrap()
+                .contains(SAFE_PROMO)
+        );
+        assert!(store.asset_scale(&asset(1, Some(SAFE_PROMO))).is_err());
+        assert_eq!(import(&store, &a, &s)?, d);
+        let mut bad = s.clone();
+        bad.native_balance = 16.into();
+        let db = import(&store, &a, &bad)?;
+        assert!(
+            reconcile(&store, &a.id, &bad, &db)
+                .unwrap_err()
+                .to_string()
+                .contains("reconciliation failed")
+        );
+        store.review_asset_tracking(
+            &a.id,
+            &asset(1, Some(SAFE_PROMO)),
+            false,
+            "restore",
+            "user review",
+        )?;
+        assert!(reconcile(&store, &a.id, &s, &d).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn resolved_exclusion_skips_both_sides_but_preserves_effects() -> Result<()> {
+        let store = Store::in_memory()?;
+        let w = wallet();
+        let a = account(1, &w, lib_core::DEFAULT_PORTFOLIO)?;
+        let mut s = fixture(1, &w);
+        let contract = s.tokens.keys().next().unwrap().clone();
+        s.tokens.get_mut(&contract).unwrap().balance = 0.into();
+        let d = import(&store, &a, &s)?;
+        assert!(reconcile(&store, &a.id, &s, &d).is_err());
+        store.review_asset_tracking(
+            &a.id,
+            &asset(1, Some(&contract)),
+            true,
+            "fixture review",
+            "source",
+        )?;
+        reconcile(&store, &a.id, &s, &d)?;
+        assert_eq!(store.account_balances_at(&a.id, s.timestamp)?.len(), 1);
+        assert_eq!(
+            store.account_audit_balances_at(&a.id, s.timestamp)?.len(),
+            2
+        );
+        assert_eq!(
+            store.account_balance_observations(&a.id, SOURCE, &d)?.len(),
+            2
+        );
+        assert_eq!(store.account_balances_at(&a.id, s.timestamp)?[0].amount, 15);
+        Ok(())
+    }
+
     #[test]
     fn exact_receipt_logs_failed_gas_internal_dedup_and_mixed_accounts() -> Result<()> {
         let store = Store::in_memory()?;

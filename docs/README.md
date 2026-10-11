@@ -14,6 +14,7 @@ Documentation is organized by purpose. Specifications describe implemented contr
 - [Binance sources, ledger mapping, reconciliation and diagnostics](spec/binance.md)
 - [Kraken account-scoped ledger, exact fees, cached replay and reconciliation](spec/kraken.md)
 - [EVM wallet setup, exact ledger mapping and pinned reconciliation](spec/evm-wallets.md)
+- [Reviewed asset exclusions and preserved audit history](spec/tracking-exclusions.md)
 - [Historical net worth and pricing](spec/historical-net-worth.md)
 - [Binance account history and rate limiting](spec/binance-account-history.md)
 

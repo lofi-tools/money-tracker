@@ -1,6 +1,6 @@
 # EVM wallet quantities and reconciliation
 
-Implemented foundation: [acquisition client](../../libs/evm-client/src/lib.rs), [ledger adapter](../../apps/cli/src/adapters/evm.rs), and `evm` CLI command. It tracks native currency and discovered ERC-20 contracts. Protocol position interpretation, underlying exposures, pricing aliases, spam exclusions and yield classification are still proposed work in [the master todo](../todo/master-todo.md#9-next-connectors-evm-wallets-then-solana-then-near).
+Implemented foundation: [acquisition client](../../libs/evm-client/src/lib.rs), [ledger adapter](../../apps/cli/src/adapters/evm.rs), and `evm` CLI command. It tracks native currency and discovered ERC-20 contracts. Protocol position interpretation, underlying exposures, pricing aliases and yield classification are still proposed work in [the master todo](../todo/master-todo.md#9-next-connectors-evm-wallets-then-solana-then-near).
 
 ## Connecting a wallet
 
@@ -74,3 +74,7 @@ Synthetic tests verify values above i128, failed gas, internal/root deduplicatio
 See [the contract-resolution findings](../findings/evm-contract-resolution.md) for SafePromo, destroyed INS Promo, provider access and Arbitrum Classic fee blockers.
 
 Known limitations: indexer omissions can prevent discovery entirely; receipt verification cannot discover a contract the indexer never mentions. Rebasing/reflection tokens, protocol accounting, NFTs, unusual fee/payment schemes and special chain effects can require additional mappings. There is no automatic reorg rollback: refreshing does not delete disappeared old transactions. The core history query is timestamp-based, so multiple L2 blocks sharing a timestamp are not an exact arbitrary historical block boundary after later imports. Public RPCs must serve historical transactions and state; throttling, missing archive data and errors are visible failures. Confirmations reduce reorg exposure but are not a finality guarantee. No main portfolio price/net-worth integration is claimed until contract-qualified pricing mappings and coverage rules are added.
+
+## Reviewed spam exclusions
+
+[Tracking exclusions](tracking-exclusions.md) implements persisted account/asset review decisions and the explicit `--exclude-safe-promo` / `--restore-token CONTRACT` commands. Raw frozen history remains in the cache and DB. Totals omit reviewed assets; reconciliation filters both ledger and observation sides and labels excluded contracts. Unreviewed unknowns, tracked mismatches and Classic fee gaps remain strict failures. Full earnings calculations are still future work and must use the shared tracking eligibility policy.

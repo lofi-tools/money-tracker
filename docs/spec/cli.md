@@ -15,3 +15,5 @@
 Directory precedence is explicit CLI flag, then the corresponding environment variable, then the OS directory from `dirs` joined with `money-tracker`. Cache and data have separate defaults. Fallbacks use home `.cache/money-tracker` and `.data/money-tracker`, then relative directories. DuckDB is `portfolio.duckdb` under the data directory. Changing the data directory does not change the Nexo export path.
 
 Acceptance scenarios: CLI paths override environment paths; environment paths override defaults; help/version work; `--data-dir` alone leaves the Nexo export default unchanged. Config-file loading and managed export selection remain [backlog items](../todo/master-todo.md).
+
+Saved EVM accounts support `--exclude-safe-promo` (Ethereum only) and `--restore-token CONTRACT`; both persist reviewed policy revisions. Combine with `--register-only` for a settings-only update, or `--offline` for cached strict replay. See [reviewed exclusions](tracking-exclusions.md).

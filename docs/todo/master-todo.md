@@ -25,7 +25,8 @@ Review delivered 11 October 2026 in [proposed data model evolution](../spec/data
 - [ ] Scope source transaction identities and import hashes by connection/account; preserve repeated identical legitimate events and deduplicate overlapping API/CSV records.
 - [x] Define source/import/mapping provenance, UTC/source timezones, original amounts, parser versions, and reproducible normalized records.
 - [ ] Model independent current balance observations, dated coverage boundaries, reconciliation status/issues, and warnings separately from ledger movements.
-- [ ] Model tracked/excluded assets and positions so hidden spam never changes totals or yield; decide how exclusion changes apply to historical views.
+- [x] Implement account/asset reviewed exclusions applying to all historical totals and financial/earnings eligibility; preserve review revisions and raw history. See [the contract](../spec/tracking-exclusions.md).
+- [ ] Extend tracking policy to position/product scopes, composite exposures, user settings and saved-analysis policy binding; enforce it in future earnings attribution.
 - [x] Define reward receipt identity, principal deposits/withdrawals, disposal attribution, realized proceeds, fees, and retained reward quantities.
 - [ ] Model dated rate observations, reward currency, APR/APY semantics, tiers/caps, qualifications, unknown rates, and current annual earning calculations.
 - [ ] Model composite/share positions and dated underlying conversions without double counting receipt and underlying value.
@@ -161,10 +162,11 @@ Assumption for “3 systems”: **Linux, macOS, and Windows**. CPU architecture 
 
 - [x] Implement the [EVM native/ERC-20 foundation](../spec/evm-wallets.md) for Ethereum, Polygon, BNB Chain, Arbitrum and zkSync Era: DB-stored accounts, contract-qualified identities, exact amounts, cached replay and pinned independent RPC observations. BNB needs Etherscan chain access or an indexer override.
 - [ ] Complete live reconciliation for the registered wallet on all five chains; see [current contract/source blockers](../findings/evm-contract-resolution.md). Keep exact comparisons with no rounding tolerance or balancing entries.
-- [x] Identify SafePromo and INS Promo; recover canonical historical decimals and retain raw RPC evidence through `evm --resolve-tokens`. INS Promo scale is zero; known destruction still causes a 777-unit ledger discrepancy. SafePromo's fake constant balance and missing scale remain quarantined.
+- [x] Identify SafePromo and INS Promo; recover canonical historical decimals and retain raw RPC evidence through `evm --resolve-tokens`. INS Promo scale is zero; known destruction still causes a 777-unit ledger discrepancy. SafePromo's fake constant balance and missing scale remain unnormalized, with an explicit reviewed exclusion now available.
 - [x] Implement optional Blockscout universal API authentication/pacing and configured Etherscan routing for Polygon/Arbitrum. Etherscan history works for both; the supplied Blockscout key accesses Arbitrum but needs a higher plan for Polygon.
 - [x] Select public Polygon dRPC after verifying oldest transaction availability absent from the previous RPC.
-- [ ] Add reviewed nonfinancial contract classifications/tracking exclusions without fabricating decimals; preserve diagnostics and exclude reviewed spam from financial totals/yield.
+- [x] Implement reviewed SafePromo exclusion without fabricated decimals: persisted account policy, reversible review trail, raw DB snapshots, totals/earnings eligibility filtering and strict tracked-scope reconciliation.
+- [ ] Add further nonfinancial contract reviews only with evidence; build general exclusion settings/UI.
 - [ ] Model proven destroyed/retired-contract losses with effective timestamps and evidence; preserve historical units instead of inferring a balancing transaction from zero RPC balances.
 - [ ] Obtain exact Classic-era Arbitrum feeStats and map fees; Nitro receipt multiplication and Blockscout's fee field reproduce an approximate value, leaving an 87,468-wei difference in the first capture.
 - [x] Recheck Polygon/Arbitrum metadata at their frozen cutoffs; five Arbitrum contracts and one Polygon contract still have getter execution failures with RPC code 3 (the final Arbitrum pass fails four balance calls and one decimals call). Preserve method-specific failure evidence.
@@ -172,7 +174,7 @@ Assumption for “3 systems”: **Linux, macOS, and Windows**. CPU architecture 
 - [ ] Add partial-page acquisition resume, Etherscan split-range backfill beyond 10,000 rows, robust reorg rollback and block-aware historical queries.
 - [x] Map native/internal transfers, ERC-20 receipt events and failed-transaction gas with stable chain/account identities; swaps retain actual transfer effects.
 - [ ] Add semantic swap/protocol classification and unsupported token/fee mechanisms.
-- [ ] Discover holdings and DeFi positions automatically; provide spam hiding/tracking exclusions that also affect totals/yield.
+- [ ] Discover holdings and DeFi positions automatically; extend the implemented reviewed exclusion foundation with user-facing spam hiding and position/exposure/earnings filtering.
 - [ ] Model receipt/share conversions and underlying drill-down; use the Airtable wallets/positions to identify protocol coverage, not to assume every researched offer is held.
 - [ ] Handle pagination/history limits, chain reorgs, indexer/RPC discrepancies, unrecognized contracts, and unresolved positions explicitly.
 - [ ] Implement Solana wallet/token/staking/DeFi acquisition and independent observations, including chain-specific fees and event identities.

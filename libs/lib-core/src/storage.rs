@@ -44,6 +44,90 @@ impl Store {
         Ok(Self { connection })
     }
 
+    /// Append a reviewed decision. Current policy applies to all financial periods;
+    /// restoring tracking appends a revision and never deletes the review trail.
+    pub fn review_asset_tracking(
+        &self,
+        account: &AccountId,
+        asset: &AssetId,
+        excluded: bool,
+        reason: &str,
+        evidence: &str,
+    ) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            !asset.0.trim().is_empty() && !reason.trim().is_empty() && !evidence.trim().is_empty(),
+            "review requires asset, reason and evidence"
+        );
+        let exists: bool = self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM accounts WHERE id=?)",
+            [&account.0],
+            |r| r.get(0),
+        )?;
+        anyhow::ensure!(exists, "unknown review account");
+        self.connection.execute("INSERT INTO asset_tracking_reviews
+            SELECT ?, ?, COALESCE(MAX(revision),0)+1, ?, ?, ?, current_timestamp
+            FROM asset_tracking_reviews WHERE account_id=? AND asset_id=?
+            HAVING NOT EXISTS(SELECT 1 FROM asset_tracking_reviews r
+                WHERE r.account_id=? AND r.asset_id=? AND r.excluded=? AND r.reason=? AND r.evidence=?
+                AND r.revision=(SELECT MAX(revision) FROM asset_tracking_reviews WHERE account_id=? AND asset_id=?))",
+            params![account.0, asset.0, excluded, reason, evidence, account.0, asset.0,
+                account.0, asset.0, excluded, reason, evidence, account.0, asset.0])?;
+        Ok(())
+    }
+
+    pub fn asset_is_excluded(&self, account: &AccountId, asset: &AssetId) -> anyhow::Result<bool> {
+        Ok(self.connection.query_row("SELECT EXISTS(SELECT 1 FROM active_asset_exclusions WHERE account_id=? AND asset_id=?)",
+            params![account.0, asset.0], |r| r.get(0))?)
+    }
+
+    /// Financial/earnings eligibility. Audit metadata and raw effects remain available.
+    /// Liabilities are never hidden by a spam-token asset decision.
+    pub fn position_is_tracked(&self, position: &PositionId) -> anyhow::Result<bool> {
+        Ok(self.connection.query_row("SELECT p.role IN ('asset','liability') AND
+            (p.role='liability' OR NOT EXISTS(SELECT 1 FROM active_asset_exclusions x
+                WHERE x.account_id=p.account_id AND x.asset_id=p.asset_id)) FROM positions p WHERE position_id=?",
+            [&position.0], |r| r.get(0))?)
+    }
+
+    /// Preserve provider history independently of normalized financial amounts/scales.
+    /// Existing content-addressed evidence must never be silently replaced.
+    pub fn save_account_source_snapshot(
+        &self,
+        account: &AccountId,
+        source: &str,
+        hash: &str,
+        payload: &str,
+    ) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.has_account_imported_file(account, source, hash)?,
+            "snapshot must belong to completed import"
+        );
+        self.connection.execute(
+            "INSERT OR IGNORE INTO account_source_snapshots VALUES (?, ?, ?, ?)",
+            params![account.0, source, hash, payload],
+        )?;
+        anyhow::ensure!(
+            self.account_source_snapshot(account, source, hash)?
+                .as_deref()
+                == Some(payload),
+            "source evidence conflict"
+        );
+        Ok(())
+    }
+
+    pub fn account_source_snapshot(
+        &self,
+        account: &AccountId,
+        source: &str,
+        hash: &str,
+    ) -> anyhow::Result<Option<String>> {
+        let mut statement=self.connection.prepare("SELECT payload FROM account_source_snapshots WHERE account_id=? AND source=? AND content_hash=?")?;
+        Ok(statement
+            .query_map(params![account.0, source, hash], |r| r.get(0))?
+            .next()
+            .transpose()?)
+    }
+
     /// Register a position's currency and economic role. The legacy ownership
     /// column is retained for database compatibility; queries use the role.
     pub fn save_position_asset(
@@ -681,7 +765,7 @@ impl Store {
     }
 
     pub fn balances_at(&self, datetime: DateTime<Utc>) -> anyhow::Result<Vec<PositionBalance>> {
-        self.position_balances_at(datetime, None, None)
+        self.position_balances_at(datetime, None, None, false)
     }
 
     pub fn portfolio_balances_at(
@@ -689,7 +773,7 @@ impl Store {
         portfolio: &PortfolioId,
         datetime: DateTime<Utc>,
     ) -> anyhow::Result<Vec<PositionBalance>> {
-        self.position_balances_at(datetime, Some(portfolio), None)
+        self.position_balances_at(datetime, Some(portfolio), None, false)
     }
 
     /// Signed asset and liability buckets for one account; counterparties are excluded.
@@ -698,7 +782,16 @@ impl Store {
         account: &AccountId,
         datetime: DateTime<Utc>,
     ) -> anyhow::Result<Vec<PositionBalance>> {
-        self.position_balances_at(datetime, None, Some(account))
+        self.position_balances_at(datetime, None, Some(account), false)
+    }
+
+    /// Unfiltered audit quantities, including excluded assets; never use for totals.
+    pub fn account_audit_balances_at(
+        &self,
+        account: &AccountId,
+        datetime: DateTime<Utc>,
+    ) -> anyhow::Result<Vec<PositionBalance>> {
+        self.position_balances_at(datetime, None, Some(account), true)
     }
 
     fn position_balances_at(
@@ -706,8 +799,9 @@ impl Store {
         datetime: DateTime<Utc>,
         portfolio: Option<&PortfolioId>,
         account: Option<&AccountId>,
+        include_excluded: bool,
     ) -> anyhow::Result<Vec<PositionBalance>> {
-        let mut statement = self.connection.prepare("SELECT e.position_id, e.amount FROM transaction_effects e JOIN transactions t ON t.id=e.transaction_id JOIN positions p ON p.position_id=e.position_id LEFT JOIN accounts a ON a.id=p.account_id WHERE t.datetime<=? AND p.role IN ('asset','liability') AND (? IS NOT NULL OR p.role='asset') AND (? IS NULL OR a.portfolio_id=?) AND (? IS NULL OR p.account_id=?) ORDER BY e.position_id")?;
+        let mut statement = self.connection.prepare("SELECT e.position_id, e.amount FROM transaction_effects e JOIN transactions t ON t.id=e.transaction_id JOIN positions p ON p.position_id=e.position_id LEFT JOIN accounts a ON a.id=p.account_id WHERE t.datetime<=? AND p.role IN ('asset','liability') AND (? IS NOT NULL OR p.role='asset') AND (? IS NULL OR a.portfolio_id=?) AND (? IS NULL OR p.account_id=?) AND (? OR (p.role='liability' OR NOT EXISTS(SELECT 1 FROM active_asset_exclusions x WHERE x.account_id=p.account_id AND x.asset_id=p.asset_id))) ORDER BY e.position_id")?;
         let filter = portfolio.map(|p| p.0.as_str());
         let account_filter = account.map(|a| a.0.as_str());
         let rows = statement.query_map(
@@ -717,7 +811,8 @@ impl Store {
                 filter,
                 filter,
                 account_filter,
-                account_filter
+                account_filter,
+                include_excluded
             ],
             |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
         )?;
@@ -841,7 +936,7 @@ impl Store {
         role: PositionRole,
         portfolio: Option<&PortfolioId>,
     ) -> anyhow::Result<Vec<(AssetId, Units)>> {
-        let mut statement = self.connection.prepare("SELECT p.asset_id, e.amount FROM transaction_effects e JOIN transactions t ON t.id=e.transaction_id JOIN positions p ON p.position_id=e.position_id LEFT JOIN accounts a ON a.id=p.account_id WHERE p.role=? AND t.datetime<=? AND (? IS NULL OR a.portfolio_id=?) ORDER BY p.asset_id")?;
+        let mut statement = self.connection.prepare("SELECT p.asset_id, e.amount FROM transaction_effects e JOIN transactions t ON t.id=e.transaction_id JOIN positions p ON p.position_id=e.position_id LEFT JOIN accounts a ON a.id=p.account_id WHERE p.role=? AND t.datetime<=? AND (? IS NULL OR a.portfolio_id=?) AND (p.role='liability' OR NOT EXISTS(SELECT 1 FROM active_asset_exclusions x WHERE x.account_id=p.account_id AND x.asset_id=p.asset_id)) ORDER BY p.asset_id")?;
         let filter = portfolio.map(|p| p.0.as_str());
         let rows = statement.query_map(
             params![role.as_str(), datetime.naive_utc(), filter, filter],
@@ -860,7 +955,7 @@ impl Store {
 
     pub fn owned_asset_ids(&self) -> anyhow::Result<Vec<AssetId>> {
         let mut statement = self.connection.prepare(
-            "SELECT DISTINCT asset_id FROM positions WHERE role = 'asset' ORDER BY asset_id",
+            "SELECT DISTINCT p.asset_id FROM positions p WHERE role = 'asset' AND (p.role='liability' OR NOT EXISTS(SELECT 1 FROM active_asset_exclusions x WHERE x.account_id=p.account_id AND x.asset_id=p.asset_id)) ORDER BY p.asset_id",
         )?;
         let rows = statement.query_map([], |row| {
             let name: String = row.get(0)?;
@@ -885,7 +980,7 @@ impl Store {
             "SELECT p.asset_id, MIN(t.datetime) FROM transaction_effects e \
              JOIN transactions t ON t.id=e.transaction_id \
              JOIN positions p ON p.position_id=e.position_id \
-             WHERE {predicate} GROUP BY p.asset_id ORDER BY p.asset_id"
+             WHERE {predicate} AND (p.role='liability' OR NOT EXISTS(SELECT 1 FROM active_asset_exclusions x WHERE x.account_id=p.account_id AND x.asset_id=p.asset_id)) GROUP BY p.asset_id ORDER BY p.asset_id"
         ))?;
         let rows = statement.query_map([], |row| {
             let asset: String = row.get(0)?;
@@ -922,7 +1017,7 @@ impl Store {
         portfolio: Option<&PortfolioId>,
     ) -> anyhow::Result<Vec<(DateTime<Utc>, f64)>> {
         let filter = portfolio.map(|p| p.0.as_str());
-        let mut statement = self.connection.prepare("SELECT t.datetime, p.asset_id, e.amount FROM transactions t JOIN transaction_effects e ON e.transaction_id=t.id JOIN positions p ON p.position_id=e.position_id LEFT JOIN accounts a ON a.id=p.account_id WHERE p.role IN ('asset','liability') AND (? IS NULL OR a.portfolio_id=?) ORDER BY t.datetime")?;
+        let mut statement = self.connection.prepare("SELECT t.datetime, p.asset_id, e.amount FROM transactions t JOIN transaction_effects e ON e.transaction_id=t.id JOIN positions p ON p.position_id=e.position_id LEFT JOIN accounts a ON a.id=p.account_id WHERE p.role IN ('asset','liability') AND (? IS NULL OR a.portfolio_id=?) AND (p.role='liability' OR NOT EXISTS(SELECT 1 FROM active_asset_exclusions x WHERE x.account_id=p.account_id AND x.asset_id=p.asset_id)) ORDER BY t.datetime")?;
         let rows = statement.query_map(params![filter, filter], |r| {
             Ok((
                 r.get::<_, NaiveDateTime>(0)?,
@@ -1086,6 +1181,165 @@ mod tests {
                 vec![effect(output)]
             },
         }
+    }
+
+    #[test]
+    fn reviewed_exclusions_preserve_history_scope_debt_and_restore_on_reopen() -> anyhow::Result<()>
+    {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("tracking.duckdb");
+        let token = AssetId::str("USD");
+        let position = PositionId::from("token");
+        let debt = PositionId::from("debt");
+        let account = Account {
+            id: "review-a".into(),
+            portfolio_id: crate::DEFAULT_PORTFOLIO.into(),
+            provider_id: "test".into(),
+            label: "A".into(),
+            source_reference: None,
+        };
+        let mut other = account.clone();
+        other.id = "review-b".into();
+        {
+            let store = Store::open(&path)?;
+            for a in [&account, &other] {
+                store.save_account(a)?;
+                store.save_account_import(
+                    &a.id,
+                    "test",
+                    "batch",
+                    &[
+                        (position.clone(), token.clone(), 2, PositionRole::Asset),
+                        (debt.clone(), token.clone(), 2, PositionRole::Liability),
+                    ],
+                    &[
+                        ("deposit".into(), transaction(time(1), &position, 0, 100)),
+                        ("reward".into(), transaction(time(2), &position, 0, 50)),
+                        ("loan".into(), transaction(time(1), &debt, 25, 0)),
+                    ],
+                    &[],
+                )?;
+            }
+            store.save_account_source_snapshot(
+                &account.id,
+                "test",
+                "batch",
+                "raw reward history",
+            )?;
+            for _ in 0..3 {
+                store.review_asset_tracking(
+                    &account.id,
+                    &token,
+                    true,
+                    "reviewed spam",
+                    "verified source",
+                )?;
+            }
+            assert_eq!(
+                store.connection.query_row(
+                    "SELECT count(*) FROM asset_tracking_reviews",
+                    [],
+                    |r| r.get::<_, i64>(0)
+                )?,
+                1
+            );
+            assert_eq!(
+                store.account_audit_balances_at(&account.id, time(2))?.len(),
+                2
+            );
+            assert_eq!(store.account_balances_at(&account.id, time(2))?.len(), 1);
+            assert!(
+                !store.position_is_tracked(&Store::account_position_id(&account.id, &position))?
+            );
+            assert!(store.position_is_tracked(&Store::account_position_id(&account.id, &debt))?);
+            assert_eq!(
+                store.asset_units_at(time(2))?,
+                vec![(token.clone(), 150.into())]
+            );
+            assert_eq!(
+                store.credit_units_at(time(2))?,
+                vec![(token.clone(), (-50).into())]
+            );
+            assert_eq!(
+                store.total_value_history(&token)?,
+                vec![(time(1), 0.5), (time(2), 1.0)]
+            );
+            // Unknown scale/identity needs no invented registration to be excluded.
+            store.review_asset_tracking(
+                &account.id,
+                &AssetId::str("unknown-contract"),
+                true,
+                "spam",
+                "review",
+            )?;
+            assert!(
+                store
+                    .asset_scale(&AssetId::str("unknown-contract"))
+                    .is_err()
+            );
+            // Excluding the other account removes pricing/earnings asset eligibility too.
+            store.review_asset_tracking(
+                &other.id,
+                &token,
+                true,
+                "reviewed spam",
+                "verified source",
+            )?;
+            assert!(store.owned_asset_ids()?.is_empty());
+            assert!(store.owned_assets_first_seen()?.is_empty());
+            assert_eq!(
+                store.portfolio_assets_first_seen()?,
+                vec![(token.clone(), time(1))]
+            ); // debt stays priced
+            assert!(
+                store
+                    .portfolio_balances_at(&account.portfolio_id, time(2))?
+                    .is_empty()
+            ); // asset-only API
+            assert_eq!(
+                store.portfolio_units_at(&account.portfolio_id, time(2), PositionRole::Asset)?,
+                vec![]
+            );
+            assert_eq!(
+                store.total_value_history(&token)?,
+                vec![(time(1), -0.5), (time(2), -0.5)]
+            );
+        }
+        for _ in 0..3 {
+            drop(Store::open(&path)?);
+        }
+        let store = Store::open(&path)?;
+        assert!(store.asset_is_excluded(&account.id, &token)?);
+        assert_eq!(
+            store
+                .account_source_snapshot(&account.id, "test", "batch")?
+                .as_deref(),
+            Some("raw reward history")
+        );
+        store.review_asset_tracking(
+            &account.id,
+            &token,
+            false,
+            "restored",
+            "explicit user decision",
+        )?;
+        assert_eq!(store.asset_units_at(time(2))?, vec![(token, 150.into())]);
+        assert_eq!(
+            store
+                .connection
+                .query_row("SELECT count(*) FROM transaction_effects", [], |r| r
+                    .get::<_, i64>(0))?,
+            6
+        );
+        assert_eq!(
+            store.connection.query_row(
+                "SELECT count(*) FROM asset_tracking_reviews WHERE account_id=? AND asset_id='USD'",
+                [&account.id.0],
+                |r| r.get::<_, i64>(0)
+            )?,
+            2
+        );
+        Ok(())
     }
 
     #[test]

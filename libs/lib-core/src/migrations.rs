@@ -34,6 +34,10 @@ const MIGRATIONS: &[Migration] = &[
         name: "005_portfolio_accounts",
         apply: portfolio_accounts,
     },
+    Migration {
+        name: "006_tracking_reviews",
+        apply: tracking_reviews,
+    },
 ];
 
 /// Run every migration in order before the Store becomes available. Each step
@@ -190,6 +194,24 @@ fn portfolio_accounts(connection: &Connection) -> anyhow::Result<()> {
             params![account.id.0, position],
         )?;
     }
+    Ok(())
+}
+
+// 006: Decisions are independent of asset scales, so unresolved tokens can be reviewed.
+fn tracking_reviews(connection: &Connection) -> anyhow::Result<()> {
+    connection.execute_batch(
+        "CREATE TABLE IF NOT EXISTS asset_tracking_reviews (
+        account_id VARCHAR NOT NULL, asset_id VARCHAR NOT NULL, revision BIGINT NOT NULL,
+        excluded BOOLEAN NOT NULL, reason VARCHAR NOT NULL, evidence VARCHAR NOT NULL,
+        reviewed_at TIMESTAMP NOT NULL, PRIMARY KEY(account_id, asset_id, revision));
+        CREATE VIEW IF NOT EXISTS active_asset_exclusions AS
+        SELECT account_id, asset_id FROM asset_tracking_reviews r WHERE excluded
+        AND revision=(SELECT MAX(revision) FROM asset_tracking_reviews latest
+            WHERE latest.account_id=r.account_id AND latest.asset_id=r.asset_id);
+        CREATE TABLE IF NOT EXISTS account_source_snapshots (
+            account_id VARCHAR NOT NULL, source VARCHAR NOT NULL, content_hash VARCHAR NOT NULL,
+            payload VARCHAR NOT NULL, PRIMARY KEY(account_id, source, content_hash));",
+    )?;
     Ok(())
 }
 

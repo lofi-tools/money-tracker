@@ -35,6 +35,17 @@ The Nexo CSV is imported as one aggregate position per asset because the export 
 
 Net worth includes user asset balances and subtracts recorded user liabilities. Positions have explicit asset, liability, or external-counterparty roles: Nexo's `NEXO-CREDIT:*` balances are negative liabilities, while Binance's market, reward, and fee counterparties are excluded from both net worth and credit-line reports. Borrowing/interest decrease liability balances; recorded repayments increase them toward zero. The existing Nexo CSV movement mapping is unchanged. Opening an older database migrates its known Nexo credit positions automatically without reimporting files. Liability-only currencies are included in price fetching; offline valuation fails if a nonzero liability has no applicable stored price.
 
+## Kraken account import and reconciliation
+
+Kraken supports account-scoped Spot ledger imports, exact fees and quantities, independent BalanceEx reconciliation, and frozen offline replay in the normal portfolio database. Follow [the connection setup instructions](docs/findings/kraken-connection.md), then set `KRAKEN_API_KEY` and `KRAKEN_API_SECRET` for the first fetch, using Query ledger entries and Query funds permissions:
+
+```sh
+cargo run -p cli -- --data-dir ./data --cache-dir .cache kraken --account kraken:primary
+cargo run -p cli -- --offline --data-dir ./data --cache-dir .cache kraken --account kraken:primary
+```
+
+Use `--refresh` after the Kraken subcommand to fetch a new snapshot. `nix run .#kraken` runs the separate cache-first provider-only print test and fails on discrepancies. See [the Kraken guide](docs/spec/kraken.md) for mappings, identities, caches, scope and tests. Margin/credit, tokenized assets, KFEE and unknown mappings are unsupported; live-account verification and broader product coverage remain outstanding.
+
 ## Binance account reconciliation
 
 See the source-grounded [Nexo](docs/spec/nexo.md) and [Binance](docs/spec/binance.md) provider guides for ledger mappings, asset/liability sums, coverage and exact diagnostic commands. [Shared conventions](docs/findings/provider-diagnostics.md) distinguish independent reconciliation from fixture consistency checks. [Exporting historical Binance transactions](docs/findings/binance-history.md) covers the website steps and replay workflow.

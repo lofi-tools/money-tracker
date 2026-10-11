@@ -40,6 +40,7 @@ derive_more = "^0.99"
 # own libs, patches
 lib-core = { path="./libs/lib-core" }
 binance-client = { path="./libs/binance-client" }
+kraken-client = { path="./libs/kraken-client" }
 coingecko-client = { path="./libs/coingecko-client" }
 nexo-csv = { path="./libs/nexo-csv" }
 # api-client-utils = { path="./libs/api-client-utils" }

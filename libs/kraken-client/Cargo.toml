@@ -1,0 +1,17 @@
+[package]
+name = "kraken-client"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["arbitrary_precision"] }
+tokio.workspace = true
+base64 = "0.22"
+ring = "0.17"
+url = "2"
+tempfile = "3"
+

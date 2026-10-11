@@ -18,7 +18,7 @@ Local tracking and earnings analysis must remain usable without a subscription. 
 
 - `libs/lib-core`: shared domain types, provider traits, balance history, DuckDB storage, and migrations.
 - `apps/cli`: CLI configuration, provider adapters, imports, pricing orchestration, and reconciliation fixtures.
-- `libs/binance-client`, `libs/coingecko-client`, `libs/nexo-csv`: source-specific acquisition and parsing; adapters own conversion into domain types.
+- `libs/binance-client`, `libs/kraken-client`, `libs/coingecko-client`, `libs/nexo-csv`: source-specific acquisition and parsing; adapters own conversion into domain types.
 - Rust, Tokio, Reqwest, Serde, Chrono, and DuckDB underpin the application. Nix and Direnv provide the development environment. Use rustfmt and scoped Cargo tests; consult the repository README for commands and cached/live integration workflows.
 
 ## Requirements and constraints
@@ -27,4 +27,4 @@ Store financial records locally and support offline replay. Preserve source evid
 
 Financial movements require stable identities, exact source amount handling, independent reconciliation, and explicit coverage limits. Reimports can replace effects under stable transaction IDs; the present ledger is not an immutable append-only audit log. Do not manufacture balancing entries from snapshots or hide missing prices. Net worth is assets minus liabilities, excluding external counterparties.
 
-Binance and Nexo have account-history adapters. CoinGecko, Binance Vision, KuCoin candles, and ECB rates provide valuation inputs; pricing support does not imply account support. Coinbase, Kraken, other exchanges, Open Banking, and invoicing evidence (including the earlier ZUGFeRD idea) belong to future work in [the master todo list](../todo/master-todo.md).
+Binance and Nexo have account-history adapters; Kraken now has an account-scoped Spot ledger/BalanceEx adapter and CLI replay/reconciliation command. CoinGecko, Binance Vision, KuCoin candles, and ECB rates provide valuation inputs; pricing support does not imply account support. Broader Kraken account/product coverage, Coinbase, other exchanges, Open Banking, and invoicing evidence (including the earlier ZUGFeRD idea) belong to future work in [the master todo list](../todo/master-todo.md).

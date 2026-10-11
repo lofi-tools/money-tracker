@@ -6,7 +6,7 @@ Status: **partially implemented: A1 portfolio/account identity, exact units and 
 
 Keep the signed movement ledger and explicit asset/liability/external roles. Add account-scoped identity, exact amounts, economic event meaning, source evidence, and reconciliation boundaries first. Persist actual held positions separately from public products and rate observations. Earnings analysis needs these foundations before opportunity optimization or withdrawal planning can be reliable.
 
-Implement this incrementally. Kraken should use the same ingestion contract as Nexo/Binance after the minimum foundation changes; it need not wait for shared accounts, the risk service, or a complete DeFi ontology. Do not translate all Airtable tables into database tables. The [interview](../findings/user-needs.md) and [product questions](product-goals.md) determine requirements; [Airtable findings](../findings/airtable-model.md) identify evidence and candidate holdings.
+Implement this incrementally. [Kraken's Spot foundation](kraken.md) now uses the account-scoped import contract with exact quantities and independent observations; Nexo/Binance retain their legacy import identities until deliberately transitioned. Connectors need not wait for shared accounts, the risk service, or a complete DeFi ontology. Do not translate all Airtable tables into database tables. The [interview](../findings/user-needs.md) and [product questions](product-goals.md) determine requirements; [Airtable findings](../findings/airtable-model.md) identify evidence and candidate holdings.
 
 ## Implemented foundation after the review
 
@@ -240,7 +240,7 @@ Broader financial instruments can add instrument metadata, ownership shares, cor
 | D/E | Catalogue/risk schemas and scenarios, term/constraint/notification records. | Independent catalogue and private settings; net opportunity and liquidity examples pass. |
 | F | Sharing/sync and broader services/instruments when scheduled. | Separate reviewed contracts; no local-first/subscription-free regression. |
 
-The initial A1 portfolio/account, quantity and scale slice is implemented. Next implement the remaining identity/ingestion integration and minimal A2 event/evidence/reconciliation contract used by existing adapters and Kraken. Do not implement phase B calculations as part of the connector. Provider documentation should explain old and new mapping behavior as adapters transition.
+The initial A1 portfolio/account, quantity and scale slice is implemented. Kraken now exercises it through scoped native ledger IDs, effects, snapshot markers, independent observations and account-only reconciliation/printing. Its raw snapshot preserves source evidence, but a normalized event/provenance model and persisted verification status remain proposed A2 work, as does transitioning legacy Nexo/Binance entry points. Do not implement phase B calculations as part of the connector. Provider documentation explains old and new mapping behavior as adapters transition.
 
 Append migration steps to the existing registry without changing the first three or introducing an applied-version gate. Step numbers/names should be assigned when patches are ready, not reserved for this entire proposal. Every new step reruns on every open and checks current schema/data. Use per-step transactionality, explicit insert columns and deterministic upsert/backfill keys. Never rerun destructive rebuilds on already-upgraded tables or overwrite user labels, mappings, policy, explicit roles or evidence.
 

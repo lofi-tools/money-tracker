@@ -51,7 +51,7 @@ Deliverable: a consistent provider/source guide with verified code paths and run
 - [x] Record which balance checks are independent and which merely confirm source-to-ledger consistency; do not label CSV self-comparison as independent reconciliation.
 - [x] Inventory existing provider-only print tests and Nix wrappers. Nexo has `latest_amount_after_cached_export`; Binance has `latest_amount_after_cached_account` and the statement display path used by `nix run .#binance`.
 - [ ] Standardize a provider-only diagnostic/print workflow: provider/account selection, exact balances, liability totals, cutoff, reconciliation warnings, import/cache progress, and offline replay.
-- [ ] Ensure provider diagnostics remain scoped to that provider in a mixed database; add meaningful multi-provider isolation verification.
+- [ ] Extend Kraken's account-scoped diagnostic isolation to Nexo/Binance. Kraken now has meaningful mixed-database verification; legacy diagnostics still rely on separate fixture DBs.
 - [x] Document commands, initial API-key/CSV prerequisites, persisted fixture DBs, frozen observations, ignored/live test behavior, and synthetic/private fixture boundaries for Nexo and Binance.
 - [ ] Link directly to export pages when verified, with format/date-range/timezone guidance and account coverage limitations.
 - [ ] Add the same guide and diagnostics to every new connector as part of its completion criteria.
@@ -60,18 +60,26 @@ Source review findings: Nexo has no independent balance reconciliation and ignor
 
 ## 3. Third: implement Kraken
 
-- [ ] Verify current official API/export coverage, read-only permissions, region/account variants, pagination, retention, and Earn/staking representations before finalizing scope.
-- [ ] Collect account-appropriate anonymized ledger/trade/Earn/export fixtures and an independent dated balance snapshot.
-- [ ] Implement the Kraken acquisition client with account-scoped keys, pagination, rate-limit recovery, cached responses, and resumable history from first activity where available.
-- [ ] Normalize Kraken asset identifiers/aliases and exact decimal strings into stable core assets and scales.
-- [ ] Map ledger amounts, fees, deposits/withdrawals, trades, transfers, rewards, and supported Earn/staking movements to product-aware positions and signed effects.
-- [ ] Supplement ledger history with trades/allocations/exports only where needed; prevent duplicate economic events across sources.
-- [ ] Fetch independent balances and supported allocations; reconcile at a stated cutoff including closed/zero positions and unresolved history.
-- [ ] Add CSV/export fallback and verified export-page links for unavailable API history.
-- [ ] Import atomically with stable identities and completed markers; verify overlapping reimport, fee precision, internal transfers, rewards, and offline replay.
-- [ ] Add Kraken-only balance print diagnostics and frozen-cache reconciliation tests using the same conventions as Nexo/Binance.
-- [ ] Expose Kraken through the ordinary multi-provider application workflow, not solely through an integration test.
-- [ ] Write the Kraken provider guide, supported coverage, mappings, commands, and known limitations before marking the integration complete.
+- [x] Verify official ledger/balance/asset/authentication contracts and read-only permissions for the first default-wallet Spot scope; record explicit Earn suffixes and unsupported account families.
+- [x] Add synthetic ledger/Earn/fee fixtures and separate dated balances, plus signed mock HTTP acquisition/cache tests.
+- [ ] Validate against account-appropriate anonymized/private real ledger, balance and Earn/export fixtures; verify region/remote wallet/retention coverage. Synthetic reconciliation is not a live-account result.
+- [x] Implement the Kraken acquisition client with pagination, serialized signing/nonces, bounded throttle recovery, cached responses and resumable fixed-cutoff history.
+- [ ] Adopt Kraken's preferred cursor pagination and assess cross-process key/nonce coordination; current documented offset pagination and serialization are process-local.
+- [x] Normalize explicit Kraken identifiers/aliases and exact arbitrary-precision decimal quantities while protecting existing asset scales; fail unknown/ambiguous mappings.
+- [x] Map ledger amounts, actual fees, funding/trades/rewards and supported Earn bucket movements to account-scoped signed effects; preserve aggregate ownership across represented transfers.
+- [ ] Add individual Earn allocation/strategy metadata and supplement with trades/exports only where additional evidence is needed; prevent duplicate economic movements.
+- [x] Fetch independent BalanceEx quantities; reconcile the selected account including historical/current-only and zero positions, without balancing plugs.
+- [ ] Add API-generated export recovery (AddExport/ExportStatus/RetrieveExport), then manual CSV ingestion with native-ID deduplication and independent reconciliation. User export instructions are documented; neither ingestion path is implemented.
+- [ ] Support remote wallet selection and verify recovery of unavailable historical data.
+- [ ] Preflight API-key permissions and history date restrictions using GetApiKeyInfo; surface restricted backfill explicitly.
+- [ ] **Later — optional Kraken OAuth:** contact Kraken about partner approval/app registration; confirm eligibility, costs, public desktop callbacks and PKCE, then implement Connect/Fast API onboarding with minimal permissions. [Manual read-only API keys are the current chosen approach](../findings/kraken-connection.md); OAuth does not block the next tasks.
+- [x] Import effects/registrations/independent observations/markers atomically under stable account and native ledger identities; test replay, changed snapshots, fees, precision, transfers, rewards and failure rollback.
+- [x] Add Kraken-only exact balance print and strict frozen-cache reconciliation tests with mixed-provider/account isolation.
+- [x] Expose Kraken in the ordinary CLI portfolio DB via `kraken --account ID`, with cache/portfolio selection, offline replay and explicit refresh.
+- [x] Write [the Kraken provider guide](../spec/kraken.md), source-backed mappings, commands, coverage and limitations.
+- [x] Document [user connection instructions and acquisition strategy](../findings/kraken-connection.md), including OAuth availability, unverified localhost support and API/manual export boundaries.
+
+Implemented Spot foundation uses existing idempotent startup migrations and does not modify legacy Nexo/Binance IDs. Margin/credit/derivatives, tokenized assets, KFEE credits, unsupported ledger types and unknown mappings fail explicitly rather than silently overstating coverage. Full provider metadata, reconciliation status and historical earnings classification remain model work.
 
 ## 4. Near term: TypeScript design-system package
 

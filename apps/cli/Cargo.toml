@@ -32,6 +32,7 @@ itertools = "^0.10"
 lib-core.workspace = true
 utils.workspace = true
 binance-client.workspace = true
+kraken-client.workspace = true
 coingecko-client.workspace = true
 nexo-csv.workspace = true
 miette = "7.2.0"

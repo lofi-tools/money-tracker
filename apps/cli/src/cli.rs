@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 static APP_NAME: &str = "money-tracker";
@@ -6,6 +6,8 @@ static APP_NAME: &str = "money-tracker";
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
+    #[command(subcommand)]
+    pub command: Option<Command>,
     /// Optional custom config path
     #[arg(short, long)]
     pub config_path: Option<PathBuf>,
@@ -30,9 +32,27 @@ pub struct Args {
     #[arg(long)]
     pub historical_to: Option<String>,
 
-    /// Import the CSV and query stored prices without contacting price providers
+    /// Use local inputs/caches without contacting provider or price APIs
     #[arg(long)]
     pub offline: bool,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Command {
+    /// Import/replay a Kraken account and print exact reconciled balances
+    Kraken {
+        /// Stable local account ID; reuse for this account even if API keys change
+        #[arg(long)]
+        account: String,
+        #[arg(long, default_value = lib_core::DEFAULT_PORTFOLIO)]
+        portfolio: String,
+        /// Frozen JSON snapshot; defaults to an account-specific cache path
+        #[arg(long)]
+        snapshot: Option<PathBuf>,
+        /// Explicitly replace the frozen snapshot with a fresh API fetch
+        #[arg(long)]
+        refresh: bool,
+    },
 }
 
 pub struct Config {
@@ -74,6 +94,25 @@ mod tests {
 
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
     static STD_CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::cache_dir().unwrap());
+
+    #[test]
+    fn kraken_command_requires_account_and_accepts_offline_replay() {
+        assert!(Args::try_parse_from([APP_NAME, "kraken"]).is_err());
+        let args = Args::try_parse_from([
+            APP_NAME,
+            "--offline",
+            "kraken",
+            "--account",
+            "kraken:alice",
+            "--snapshot",
+            "frozen.json",
+        ])
+        .unwrap();
+        assert!(args.offline);
+        assert!(
+            matches!(args.command, Some(Command::Kraken { account, portfolio, refresh: false, .. }) if account == "kraken:alice" && portfolio == lib_core::DEFAULT_PORTFOLIO)
+        );
+    }
     static STD_DATA_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::data_dir().unwrap());
 
     #[test]

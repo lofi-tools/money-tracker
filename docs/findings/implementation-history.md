@@ -12,6 +12,7 @@ Documentation reconciled with source on 10 October 2026. Earlier proposal/checkl
 | Historical net worth | Atomic Nexo file imports, cached price coverage, older-price fallbacks, and signed asset/liability valuation. See [Nexo](../spec/nexo.md) and [valuation](../spec/historical-net-worth.md). |
 | Improve Nexo file handling | Configurable paths and hash deduplication implemented; managed uploads/content abstraction/setup remain future choices. See [remaining gaps](../todo/implementation-gaps.md). |
 | Complete Binance account history | Exact ledger mapping, independent balances, statement/API replay, legacy Savings evidence, and shared adaptive rate limiting. See [Binance](../spec/binance-account-history.md). |
+| Kraken Spot foundation (11 October 2026) | Use account-scoped native ledger IDs and independent BalanceEx observations, exact arbitrary-precision amounts, separate actual fees, protected scales and cached replay in the ordinary CLI DB. Tests cover mixed-provider isolation, signed HTTP acquisition, persisted discrepancies and failure rollback. No new migration or legacy provider-ID rewrite. See [Kraken scope and commands](../spec/kraken.md); private live-account verification remains outstanding. |
 
 ## Corrections made during consolidation
 

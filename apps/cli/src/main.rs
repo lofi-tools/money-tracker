@@ -14,6 +14,7 @@ pub mod adapters {
     pub mod binance_vision;
     pub mod coingecko;
     pub mod fallback_prices;
+    pub mod kraken;
     pub mod nexo;
 }
 mod cli;
@@ -21,6 +22,8 @@ mod models;
 
 #[derive(Debug, Snafu)]
 enum AppError {
+    #[snafu(display("Kraken import or reconciliation failed"))]
+    Kraken { source: anyhow::Error },
     #[snafu(display("invalid UTC date '{input}' (expected YYYY-MM-DD)"))]
     Date {
         input: String,
@@ -82,7 +85,8 @@ async fn main() -> snafu::Report<AppError> {
 }
 
 async fn run() -> Result<(), AppError> {
-    let args = Args::parse();
+    let mut args = Args::parse();
+    let command = args.command.take();
     let historical_from = args
         .historical_from
         .as_deref()
@@ -106,6 +110,30 @@ async fn run() -> Result<(), AppError> {
     })?;
     let db_path = config.data_dir.join("portfolio.duckdb");
     let store = Store::open(&db_path).context(OpenDatabaseSnafu { path: db_path })?;
+    if let Some(cli::Command::Kraken {
+        account,
+        portfolio,
+        snapshot,
+        refresh,
+    }) = command
+    {
+        let account = lib_core::Account {
+            id: account.into(),
+            portfolio_id: portfolio.into(),
+            provider_id: lib_core::ProviderId::from("kraken"),
+            label: "Kraken account".into(),
+            source_reference: None,
+        };
+        let path = snapshot.unwrap_or_else(|| {
+            config.cache_dir.join("kraken").join(format!(
+                "{}.json",
+                kraken_client::fingerprint(account.id.0.as_bytes())
+            ))
+        });
+        return adapters::kraken::run(&store, &account, &path, offline, refresh)
+            .await
+            .context(KrakenSnafu);
+    }
     eprintln!(
         "Checking Nexo transactions from {}...",
         config.nexo_csv_path.display()

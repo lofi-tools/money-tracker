@@ -1,6 +1,6 @@
 # First UI — ordered implementation plan
 
-Status: **stage 1 implemented; stages 2–9 remain proposed and deferred**. The user authorized stage 1 separately; inclusion here does not authorize the remaining stages. Grounded in repository source on 11 October 2026. The [master todo](master-todo.md#0-now-first-usable-desktop-app--ui) remains the canonical completion checklist. This document sequences its existing tasks and defines dependencies and completion evidence; it is not a second backlog.
+Status: **stages 1–2 implemented; stages 3–9 remain proposed and deferred**. The user authorized stages 1 and 2 separately; inclusion here does not authorize the remaining stages. Grounded in repository source on 11 October 2026. The [master todo](master-todo.md#0-now-first-usable-desktop-app--ui) remains the canonical completion checklist. This document sequences its existing tasks and defines dependencies and completion evidence; it is not a second backlog.
 
 The master todo covers the agreed feature scope. What it lacked was an explicit implementation order, a minimum schema/query slice, and intermediate working milestones. Follow the [desktop contract and acceptance scenarios](../spec/desktop-app.md), [design-system package plan](../spec/web-design-system.md), and [data-model proposal](../spec/data-model-proposal.md).
 
@@ -36,6 +36,8 @@ Completion evidence: documented service/DTO contracts, existing Rust checks pres
 ## 2. Make database opening and settings reliable
 
 Canonical tasks: master todo section 0 database/configuration/startup entries.
+
+Implemented: [shared configuration, database startup and settings contract](../spec/database-startup.md). JSON path/preferences loading, legacy-location detection, explicit copy/new actions, source-preserving validated installation, portfolio selection and a dedicated serialized DB worker are delivered. CLI configuration uses the shared resolver; the future Tauri screens remain stage 6, and refresh execution/scheduling remain stage 8. Settings live in the local config file; DB-backed action/scheduling state remains later work. Validation passed: 138 deterministic workspace tests, an offline preservation check on temporary copies of all three cached Nexo/Binance DBs, formatting, metadata and CLI help. Native Windows runtime checks remain for the cross-platform lane.
 
 Implement shared path/config resolution: Unix `~/.data/money-tracker/portfolio.duckdb`; desktop `APP_DATA_DIR` → config `data_dir` → default, while retaining explicit CLI flags as its highest priority. Specify config format/location and a native Windows default. Detect and explain the previous location; opening or copying an existing DB is an explicit choice, never a silent empty replacement.
 

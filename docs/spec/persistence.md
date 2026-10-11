@@ -2,6 +2,8 @@
 
 [Store](../../libs/lib-core/src/storage.rs) encapsulates DuckDB reads and writes. [migrations.rs](../../libs/lib-core/src/migrations.rs) owns the ordered migration registry and schema/data changes.
 
+[Managed application startup](database-startup.md) adds explicit missing/copy/new actions, source-preserving installation, single-portfolio selection and a serialized DB worker around this Store. Local preferences are stored in JSON configuration; stage 2 adds no database migration or financial-table changes.
+
 ## Implemented tables
 
 | Table | Stored information |

@@ -1688,6 +1688,8 @@ dependencies = [
  "chrono",
  "coingecko-client",
  "csv",
+ "dirs",
+ "duckdb",
  "evm-client",
  "kraken-client",
  "lib-core",

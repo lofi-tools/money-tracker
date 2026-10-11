@@ -1,6 +1,6 @@
 # Project context
 
-Money Tracker aims to provide a local-first view of investments, net worth, yield, revenue, and supporting financial evidence. The current implementation is a Rust CLI and libraries, with DuckDB storage and cached provider data. [First-UI stage 1](application-services.md) adds shared application services and exact JSON DTOs; no frontend exists yet. Desktop/mobile dashboards, broader bank/broker/pension coverage, yield comparisons, and jurisdiction-specific tax reports are future goals.
+Money Tracker aims to provide a local-first view of investments, net worth, yield, revenue, and supporting financial evidence. The current implementation is a Rust CLI and libraries, with DuckDB storage and cached provider data. [First-UI stage 1](application-services.md) adds shared application services and exact JSON DTOs; [stage 2](database-startup.md) adds shared configuration, safe database startup, local settings and a dedicated DB worker. No frontend exists yet. Desktop/mobile dashboards, broader bank/broker/pension coverage, yield comparisons, and jurisdiction-specific tax reports are future goals.
 
 ## Current delivery priority
 

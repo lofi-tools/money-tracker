@@ -10,12 +10,14 @@
 | `--historical-from` | Extend price history from a UTC `YYYY-MM-DD` date and print net worth |
 | `--historical-to` | Historical end date; defaults to now |
 | `--offline` | Import CSV and query cached prices without contacting price providers |
-| `--config-path` / `-c` | Parsed option; configuration-file loading is not wired up |
+| `--config-path` / `-c` | Select a required JSON config file; otherwise load the native default config when present |
 
-Directory precedence is explicit CLI flag, then the corresponding environment variable, then the OS directory from `dirs` joined with `money-tracker`. Cache and data have separate defaults. Fallbacks use home `.cache/money-tracker` and `.data/money-tracker`, then relative directories. DuckDB is `portfolio.duckdb` under the data directory. Changing the data directory does not change the Nexo export path.
+Directory precedence is explicit CLI flag → environment variable → config `data_dir` → native default. Unix data defaults to `~/.data/money-tracker`; Windows defaults to `%LOCALAPPDATA%/money-tracker`. DuckDB is `portfolio.duckdb` under that directory. [Shared startup/configuration](database-startup.md) specifies JSON format/location, settings, validation and previous-location detection. Cache resolution still uses `APP_CACHE_DIR`/OS cache defaults, independent of config `data_dir`; changing the data directory does not change the Nexo export path.
 
-Acceptance scenarios: CLI paths override environment paths; environment paths override defaults; help/version work; `--data-dir` alone leaves the Nexo export default unchanged. Config-file loading and managed export selection remain [backlog items](../todo/master-todo.md).
+When the selected database is missing and the previous OS data-directory DB exists, the CLI stops with guidance to select it using `--data-dir` or copy it explicitly. It does not silently start an empty replacement. Without that conflict, existing CLI import/create behavior remains. Malformed/explicitly missing config files fail before provider work.
+
+Acceptance scenarios: CLI paths override environment paths; environment paths override config/defaults; config loading succeeds; help/version work; `--data-dir` alone leaves the Nexo export default unchanged. Database onboarding controls and managed export selection in the UI remain later stages.
 
 Saved EVM accounts support `--exclude-safe-promo` (Ethereum only) and `--restore-token CONTRACT`; both persist reviewed policy revisions. Combine with `--register-only` for a settings-only update, or `--offline` for cached strict replay. See [reviewed exclusions](tracking-exclusions.md).
 
-The [desktop startup decision](desktop-app.md) proposes a shared Unix default of `~/.data/money-tracker/portfolio.duckdb`, environment-before-config overrides and actual config-file loading. This is not implemented yet; the existing `dirs`-based CLI default described above remains current behavior until that task is delivered.
+The shared resolver is implemented. The managed desktop DB worker and copy/new actions are available in Rust; their Tauri UI remains deferred.

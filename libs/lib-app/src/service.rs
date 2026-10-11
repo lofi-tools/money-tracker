@@ -4,8 +4,8 @@ use lib_core::{PositionRole, Store};
 use std::{collections::BTreeMap, path::Path};
 
 /// Host-independent application state. Hosts choose paths and serialize access.
-/// Opening preserves Store's existing behavior; missing-DB onboarding/config and
-/// a background DB worker are later stages, not implicit behavior here.
+/// Opening preserves Store's existing behavior. Desktop hosts use DatabaseWorker
+/// for explicit startup policy and serialized access on a dedicated thread.
 pub struct Application {
     store: Store,
 }

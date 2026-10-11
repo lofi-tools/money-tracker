@@ -101,8 +101,19 @@ pub struct Config {
     pub nexo_csv_path: PathBuf,
 }
 impl Config {
-    pub fn from_env(args: Args) -> Self {
-        Self {
+    pub fn from_env(args: Args) -> anyhow::Result<Self> {
+        let resolved = lib_app::config::ResolvedConfig::system(args.config_path, args.data_dir)?;
+        if !resolved.database.try_exists()? {
+            if let Some(legacy) = &resolved.legacy_database {
+                anyhow::ensure!(
+                    !legacy.try_exists()?,
+                    "previous database exists at {}; select it explicitly with --data-dir or copy it to {} before continuing",
+                    legacy.display(),
+                    resolved.database.display()
+                );
+            }
+        }
+        Ok(Self {
             nexo_csv_path: args.nexo_csv.unwrap_or_else(|| {
                 PathBuf::from(".cache/imports/nexo_transactions_05-10-2026_10-36-53.csv")
             }),
@@ -115,15 +126,12 @@ impl Config {
                         .unwrap_or_else(|| PathBuf::from("./.cache").join(APP_NAME))
                 }),
 
-            data_dir: args
-                .data_dir
-                .or_else(|| dirs::data_dir().map(|p| p.join(APP_NAME)))
-                .unwrap_or_else(|| {
-                    dirs::home_dir()
-                        .map(|p| p.join(".data").join(APP_NAME))
-                        .unwrap_or_else(|| PathBuf::from("./.data").join(APP_NAME))
-                }),
-        }
+            data_dir: resolved
+                .database
+                .parent()
+                .expect("resolved database has a parent")
+                .to_path_buf(),
+        })
     }
 }
 
@@ -134,6 +142,52 @@ mod tests {
 
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
     static STD_CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::cache_dir().unwrap());
+
+    #[test]
+    fn config_file_loads_and_env_and_flags_take_precedence() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        lib_app::config::AppConfig {
+            data_dir: Some(dir.path().join("configured")),
+            ..Default::default()
+        }
+        .save(&path)
+        .unwrap();
+        temp_env::with_var("APP_DATA_DIR", None::<&str>, || {
+            let args = Args::parse_from([APP_NAME, "--config-path", path.to_str().unwrap()]);
+            assert_eq!(
+                Config::from_env(args).unwrap().data_dir,
+                dir.path().join("configured")
+            );
+        });
+        temp_env::with_var(
+            "APP_DATA_DIR",
+            Some(dir.path().join("env").to_str().unwrap()),
+            || {
+                let args = Args::parse_from([APP_NAME, "--config-path", path.to_str().unwrap()]);
+                assert_eq!(
+                    Config::from_env(args).unwrap().data_dir,
+                    dir.path().join("env")
+                );
+                let flag = dir.path().join("flag");
+                let args = Args::parse_from([
+                    APP_NAME,
+                    "--config-path",
+                    path.to_str().unwrap(),
+                    "--data-dir",
+                    flag.to_str().unwrap(),
+                ]);
+                assert_eq!(Config::from_env(args).unwrap().data_dir, flag);
+            },
+        );
+        let args = Args::parse_from([
+            APP_NAME,
+            "--config-path",
+            dir.path().join("missing.json").to_str().unwrap(),
+        ]);
+        assert!(Config::from_env(args).is_err());
+    }
 
     #[test]
     fn kraken_command_requires_account_and_accepts_offline_replay() {
@@ -175,7 +229,11 @@ mod tests {
             .is_err()
         );
     }
-    static STD_DATA_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::data_dir().unwrap());
+    static STD_DATA_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+        lib_app::config::Locations::system()
+            .unwrap()
+            .default_data_dir
+    });
 
     #[test]
     fn test_env_var_parsing() {
@@ -238,9 +296,9 @@ mod tests {
             ],
             || {
                 let args = Args::parse_from(vec![APP_NAME]);
-                let config = Config::from_env(args);
+                let config = Config::from_env(args).unwrap();
                 assert_eq!(config.cache_dir, STD_CACHE_DIR.join(APP_NAME));
-                assert_eq!(config.data_dir, STD_DATA_DIR.join(APP_NAME));
+                assert_eq!(config.data_dir, *STD_DATA_DIR);
             },
         );
     }
@@ -256,12 +314,12 @@ mod tests {
             ],
             || {
                 let args = Args::parse_from(vec![APP_NAME, "--cache-dir", "/tmp/cli_cache"]);
-                let config = Config::from_env(args);
+                let config = Config::from_env(args).unwrap();
                 assert_eq!(config.cache_dir, PathBuf::from("/tmp/cli_cache"));
-                assert_eq!(config.data_dir, STD_DATA_DIR.join(APP_NAME));
+                assert_eq!(config.data_dir, *STD_DATA_DIR);
 
                 let args = Args::parse_from(vec![APP_NAME, "--data-dir", "/tmp/cli_data"]);
-                let config = Config::from_env(args);
+                let config = Config::from_env(args).unwrap();
                 assert_eq!(config.cache_dir, STD_CACHE_DIR.join(APP_NAME));
                 assert_eq!(config.data_dir, PathBuf::from("/tmp/cli_data"));
             },
@@ -290,7 +348,7 @@ mod tests {
                 assert_eq!(args.cache_dir, Some(PathBuf::from("/tmp/cli_cache")));
                 assert_eq!(args.data_dir, Some(PathBuf::from("/tmp/cli_data")));
 
-                let config = Config::from_env(args);
+                let config = Config::from_env(args).unwrap();
                 assert_eq!(config.cache_dir, PathBuf::from("/tmp/cli_cache"));
                 assert_eq!(config.data_dir, PathBuf::from("/tmp/cli_data"));
             },
@@ -301,7 +359,7 @@ mod tests {
     fn nexo_csv_defaults_to_repo_cache_independent_of_data_dir() {
         let _guard = ENV_MUTEX.lock().unwrap();
         let args = Args::parse_from([APP_NAME, "--data-dir", ".cache/data"]);
-        let config = Config::from_env(args);
+        let config = Config::from_env(args).unwrap();
         assert_eq!(
             config.nexo_csv_path,
             PathBuf::from(".cache/imports/nexo_transactions_05-10-2026_10-36-53.csv")
@@ -314,7 +372,7 @@ mod tests {
             "--nexo-csv",
             "exports/nexo.csv",
         ]);
-        let config = Config::from_env(args);
+        let config = Config::from_env(args).unwrap();
         assert_eq!(config.nexo_csv_path, PathBuf::from("exports/nexo.csv"));
     }
 }

@@ -8,6 +8,8 @@ Estimate historical value and current revenue.
 
 The CLI consumes shared provider/application services from `libs/lib-app`; see [the service/DTO contract](docs/spec/application-services.md). Provider tests moved to `-p lib-app`, while CLI configuration tests remain in `-p cli`. The tracked Cargo lockfile and explicit Rust workspace require no external sibling checkout.
 
+Shared [database startup/settings](docs/spec/database-startup.md) now uses `~/.data/money-tracker/portfolio.duckdb` on Unix, with CLI flag → `APP_DATA_DIR` → JSON `data_dir` precedence. `--config-path` loads a JSON config; an existing DB at the previous OS location is detected before creating a replacement.
+
 Setup deps using `direnv allow` (needs Nix and nix-direnv), then:
 
 - Run unit tests: `utest`

@@ -14,6 +14,8 @@ mod cli;
 
 #[derive(Debug, Snafu)]
 enum AppError {
+    #[snafu(display("invalid local configuration"))]
+    Configuration { source: anyhow::Error },
     #[snafu(display("EVM wallet import or reconciliation failed"))]
     Evm { source: anyhow::Error },
     #[snafu(display("Kraken import or reconciliation failed"))]
@@ -94,7 +96,7 @@ async fn run() -> Result<(), AppError> {
         .unwrap_or_else(Utc::now);
     let fetch_current = args.historical_to.is_none();
     let offline = args.offline;
-    let config = Config::from_env(args);
+    let config = Config::from_env(args).context(ConfigurationSnafu)?;
     eprintln!(
         "Opening DuckDB at {}",
         config.data_dir.join("portfolio.duckdb").display()

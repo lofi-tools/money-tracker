@@ -137,6 +137,38 @@ impl DatabaseWorker {
         })
         .await
     }
+    pub async fn ui_metadata(&self) -> Result<crate::dto::UiMetadataDto> {
+        let portfolio = self.portfolio_id.clone();
+        self.request(move |app, _| app.ui_metadata(&portfolio))
+            .await
+    }
+    pub async fn manual_actions(&self) -> Result<Vec<lib_core::ui_metadata::ManualAction>> {
+        let portfolio = self.portfolio_id.clone();
+        self.request(move |app, _| app.store().manual_actions(&portfolio))
+            .await
+    }
+    /// Low-level typed local mutation; host controls/commands belong to stage 7.
+    pub async fn apply_manual_change(
+        &self,
+        target: lib_core::ui_metadata::LocalTarget,
+        expected_revision: i64,
+        value: Option<lib_core::ui_metadata::LocalValue>,
+    ) -> Result<lib_core::ui_metadata::ManualAction> {
+        let portfolio = self.portfolio_id.clone();
+        self.request(move |app, _| {
+            app.store()
+                .apply_manual_change(&portfolio, &target, expected_revision, value)
+        })
+        .await
+    }
+    pub async fn undo_manual_action(
+        &self,
+        id: String,
+    ) -> Result<lib_core::ui_metadata::ManualAction> {
+        let portfolio = self.portfolio_id.clone();
+        self.request(move |app, _| app.store().undo_manual_action(&portfolio, &id))
+            .await
+    }
     pub async fn settings(&self) -> Result<Settings> {
         self.request(|_, resolved| Ok(resolved.config.settings.clone()))
             .await

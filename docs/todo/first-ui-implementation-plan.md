@@ -1,6 +1,6 @@
 # First UI — ordered implementation plan
 
-Status: **stages 1–2 implemented; stages 3–9 remain proposed and deferred**. The user authorized stages 1 and 2 separately; inclusion here does not authorize the remaining stages. Grounded in repository source on 11 October 2026. The [master todo](master-todo.md#0-now-first-usable-desktop-app--ui) remains the canonical completion checklist. This document sequences its existing tasks and defines dependencies and completion evidence; it is not a second backlog.
+Status: **stages 1–3 implemented; stages 4–9 remain proposed and deferred**. The user authorized stages 1, 2 and 3 separately; inclusion here does not authorize the remaining stages. Grounded in repository source on 11 October 2026. The [master todo](master-todo.md#0-now-first-usable-desktop-app--ui) remains the canonical completion checklist. This document sequences its existing tasks and defines dependencies and completion evidence; it is not a second backlog.
 
 The master todo covers the agreed feature scope. What it lacked was an explicit implementation order, a minimum schema/query slice, and intermediate working milestones. Follow the [desktop contract and acceptance scenarios](../spec/desktop-app.md), [design-system package plan](../spec/web-design-system.md), and [data-model proposal](../spec/data-model-proposal.md).
 
@@ -49,7 +49,9 @@ Completion evidence: path precedence tests, temporary-file copy/new/error scenar
 
 ## 3. Persist the minimum UI metadata and action model
 
-Canonical tasks: master todo sections 0 and 1; detailed entity rules in the data-model proposal. Append small ordered migrations in [migrations.rs](../../libs/lib-core/src/migrations.rs), rerun each at every open and keep changes transactional. Names below are logical proposals, not approved SQL already in source.
+Implemented: [minimum UI metadata and action contract](../spec/ui-metadata.md), migrations 007–009, conservative bootstrap and immutable evidence/typed local-state APIs. The managed worker exposes scoped metadata and atomic action/Undo primitives. Existing providers retain financial identities/data; the EVM snapshot supplies evidenced display locators/tickers. Settings remain in the stage-2 JSON file; refresh scheduling state is now persisted separately in DB. Full financial projections, provider rate/verification population and editing controls remain later stages. Validation passed: 149 deterministic workspace tests, an offline preservation check on temporary copies of all three cached Nexo/Binance databases, formatting, locked metadata and CLI help.
+
+Canonical tasks: master todo sections 0 and 1; detailed entity rules in the data-model proposal. Append small ordered migrations in [migrations.rs](../../libs/lib-core/src/migrations.rs), rerun each at every open and keep changes transactional. The table below describes logical responsibilities; the linked implemented contract lists the actual tables and current boundaries.
 
 | Proposed records/extensions | Required behavior |
 | --- | --- |

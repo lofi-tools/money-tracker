@@ -13,7 +13,7 @@ use duckdb::{Connection, params};
 
 /// Local DuckDB persistence for transactions, position ownership/currency, and prices.
 pub struct Store {
-    connection: Connection,
+    pub(crate) connection: Connection,
 }
 
 /// A half-open interval of historical prices: [from, to).
@@ -58,13 +58,14 @@ impl Store {
             !asset.0.trim().is_empty() && !reason.trim().is_empty() && !evidence.trim().is_empty(),
             "review requires asset, reason and evidence"
         );
-        let exists: bool = self.connection.query_row(
+        let tx = self.connection.unchecked_transaction()?;
+        let exists: bool = tx.query_row(
             "SELECT EXISTS(SELECT 1 FROM accounts WHERE id=?)",
             [&account.0],
             |r| r.get(0),
         )?;
         anyhow::ensure!(exists, "unknown review account");
-        self.connection.execute("INSERT INTO asset_tracking_reviews
+        let changed = tx.execute("INSERT INTO asset_tracking_reviews
             SELECT ?, ?, COALESCE(MAX(revision),0)+1, ?, ?, ?, current_timestamp
             FROM asset_tracking_reviews WHERE account_id=? AND asset_id=?
             HAVING NOT EXISTS(SELECT 1 FROM asset_tracking_reviews r
@@ -72,6 +73,15 @@ impl Store {
                 AND r.revision=(SELECT MAX(revision) FROM asset_tracking_reviews WHERE account_id=? AND asset_id=?))",
             params![account.0, asset.0, excluded, reason, evidence, account.0, asset.0,
                 account.0, asset.0, excluded, reason, evidence, account.0, asset.0])?;
+        if changed > 0 {
+            let portfolio: String = tx.query_row(
+                "SELECT portfolio_id FROM accounts WHERE id=?",
+                [&account.0],
+                |r| r.get(0),
+            )?;
+            crate::ui_metadata::bump_revision(&tx, &portfolio.into(), "policy")?;
+        }
+        tx.commit()?;
         Ok(())
     }
 
@@ -191,12 +201,14 @@ impl Store {
         };
         connection.execute("INSERT INTO positions (position_id, asset_id, owned, role, account_id) VALUES (?, ?, ?, ?, ?)",
             params![position.0, asset.0, role == PositionRole::Asset, role.as_str(), account_id])?;
+        crate::migrations::seed_ui_metadata(connection)?;
         Ok(())
     }
 
     /// Repeat registrations are safe; changing scale requires a separate explicit conversion.
     pub fn save_asset_scale(&self, asset_id: &AssetId, decimals: u8) -> anyhow::Result<()> {
-        Self::register_scale(&self.connection, asset_id, decimals)
+        Self::register_scale(&self.connection, asset_id, decimals)?;
+        crate::migrations::seed_ui_metadata(&self.connection)
     }
 
     fn register_scale(connection: &Connection, asset: &AssetId, scale: u8) -> anyhow::Result<()> {
@@ -265,6 +277,7 @@ impl Store {
             "UPDATE accounts SET label=?, source_reference=? WHERE id=?",
             params![account.label, account.source_reference, account.id.0],
         )?;
+        crate::migrations::seed_ui_metadata(&tx)?;
         tx.commit()?;
         Ok(())
     }
@@ -482,6 +495,7 @@ impl Store {
             "INSERT INTO imported_files (source, content_hash, transaction_count, completed_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
             params![source, content_hash, i64::try_from(transactions.len())?],
         )?;
+        crate::migrations::seed_ui_metadata(&tx)?;
         tx.commit()?;
         Ok(true)
     }
@@ -540,7 +554,11 @@ impl Store {
         transactions: &[(String, Transaction)],
         on_progress: &mut impl FnMut(usize, usize),
     ) -> anyhow::Result<()> {
+        let mut affected_portfolios = std::collections::BTreeSet::new();
         for (index, (id, transaction)) in transactions.iter().enumerate() {
+            let old_portfolios = tx.prepare("SELECT DISTINCT a.portfolio_id FROM transaction_effects e JOIN positions p ON p.position_id=e.position_id JOIN accounts a ON a.id=p.account_id WHERE e.transaction_id=?")?
+                .query_map([id],|r| r.get::<_,String>(0))?.collect::<Result<Vec<_>,_>>()?;
+            affected_portfolios.extend(old_portfolios);
             tx.execute(
                 "INSERT OR REPLACE INTO transactions (id, datetime) VALUES (?, ?)",
                 params![id, transaction.datetime.naive_utc()],
@@ -566,6 +584,10 @@ impl Store {
                     |r| r.get(0),
                 )?;
                 anyhow::ensure!(exists, "unknown effect position {}", effect.position_id.0);
+                let owner: Option<String> = tx.query_row("SELECT a.portfolio_id FROM positions p LEFT JOIN accounts a ON a.id=p.account_id WHERE p.position_id=?",[&effect.position_id.0],|r|r.get(0))?;
+                if let Some(owner) = owner {
+                    affected_portfolios.insert(owner);
+                }
                 let amount = (&effect.amount * sign).to_string();
                 tx.execute(
                     "INSERT INTO transaction_effects (transaction_id, position_id, amount, effect_order) VALUES (?, ?, ?, ?)",
@@ -576,6 +598,9 @@ impl Store {
             if done % 1_000 == 0 || done == transactions.len() {
                 on_progress(done, transactions.len());
             }
+        }
+        for portfolio in affected_portfolios {
+            crate::ui_metadata::bump_revision(tx, &portfolio.into(), "ledger")?;
         }
         Ok(())
     }

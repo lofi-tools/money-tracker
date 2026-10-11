@@ -86,3 +86,68 @@ impl Application {
         Ok(response)
     }
 }
+
+impl Application {
+    pub fn ui_metadata(&self, portfolio: &lib_core::PortfolioId) -> Result<UiMetadataDto> {
+        let revisions = self.store.revisions(portfolio)?;
+        self.store.validate_account_tree(portfolio)?;
+        let mut accounts = Vec::new();
+        let mut provider_ids = std::collections::BTreeSet::new();
+        let mut asset_ids = std::collections::BTreeSet::new();
+        for account in self.store.accounts(portfolio)? {
+            provider_ids.insert(account.provider_id.0.clone());
+            for (_, asset, _, _) in self.store.account_position_metadata(&account.id)? {
+                asset_ids.insert(asset.0);
+            }
+            let structure = self.store.account_structure(&account.id)?;
+            let parent = self.store.account_parent(&account.id)?;
+            accounts.push(UiAccountDto {
+                account: AccountDto {
+                    id: account.id,
+                    provider_id: account.provider_id,
+                    label: account.label,
+                    source_reference: account.source_reference,
+                },
+                structure,
+                parent,
+            });
+        }
+        let subscriptions = self.store.subscriptions(portfolio)?;
+        let product_ids: std::collections::BTreeSet<_> = subscriptions
+            .iter()
+            .map(|s| s.product_id.0.clone())
+            .collect();
+        let providers = provider_ids
+            .into_iter()
+            .map(|id| self.store.provider_display(&lib_core::ProviderId(id)))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+        let assets = asset_ids
+            .into_iter()
+            .map(|id| self.store.asset_display(&lib_core::AssetId::str(&id)))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+        let products = product_ids
+            .into_iter()
+            .map(|id| self.store.product_template(&id.into()))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+        Ok(UiMetadataDto {
+            contract_version: CONTRACT_VERSION,
+            portfolio_id: portfolio.clone(),
+            revisions,
+            accounts,
+            providers,
+            assets,
+            products,
+            subscriptions,
+            local_state: self.store.local_records(portfolio)?,
+        })
+    }
+}

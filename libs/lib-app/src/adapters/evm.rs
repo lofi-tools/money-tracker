@@ -139,6 +139,7 @@ pub fn import(store: &Store, a: &Account, s: &Snapshot) -> Result<String> {
     let digest = evm_client::fingerprint(payload.as_bytes());
     if store.has_account_imported_file(&a.id, SOURCE, &digest)? {
         store.save_account_source_snapshot(&a.id, SOURCE, &digest, &payload)?;
+        persist_display_metadata(store, s, &digest)?;
         return Ok(digest);
     }
     let native = asset(s.chain, None);
@@ -364,8 +365,42 @@ pub fn import(store: &Store, a: &Account, s: &Snapshot) -> Result<String> {
         &observations,
     )?;
     store.save_account_source_snapshot(&a.id, SOURCE, &digest, &payload)?;
+    persist_display_metadata(store, s, &digest)?;
     Ok(digest)
 }
+fn persist_display_metadata(store: &Store, s: &Snapshot, digest: &str) -> Result<()> {
+    use lib_core::ui_metadata::{AssetAlias, AssetDisplay, ProviderDisplay};
+    store.save_provider_display(&ProviderDisplay {
+        id: "evm".into(),
+        name: Some("EVM wallets".into()),
+        evidence: format!("{SOURCE}:{digest}"),
+    })?;
+    for contract in s.tokens.keys().chain(s.unresolved_tokens.keys()) {
+        let token = s.tokens.get(contract);
+        let asset_id = asset(s.chain, Some(contract));
+        store.save_asset_display(&AssetDisplay {
+            id: asset_id.clone(),
+            name: None,
+            ticker: token.map(|t| t.symbol.clone()).filter(|t| !t.is_empty()),
+            chain: Some(format!("eip155:{}", s.chain)),
+            contract: Some(contract.clone()),
+            unresolved_label: s
+                .unresolved_tokens
+                .get(contract)
+                .map(|reason| format!("{contract}: {reason}")),
+            evidence: format!("{SOURCE}:{digest}"),
+        })?;
+        store.save_asset_alias(&AssetAlias {
+            provider: "evm".into(),
+            namespace: format!("eip155:{}:erc20", s.chain),
+            external_id: contract.clone(),
+            asset_id,
+            evidence: format!("{SOURCE}:{digest}"),
+        })?;
+    }
+    Ok(())
+}
+
 pub fn reconcile(store: &Store, a: &AccountId, s: &Snapshot, digest: &str) -> Result<String> {
     ensure!(
         digest == evm_client::fingerprint(&serde_json::to_vec(s)?)
@@ -618,7 +653,21 @@ mod tests {
         let d = import(&store, &a, &s)?;
         let result = reconcile(&store, &a.id, &s, &d)?;
         assert!(result.contains("ledger=15 RPC=15"));
+        let revision = store.revisions(&a.portfolio_id)?;
         assert_eq!(import(&store, &a, &s)?, d);
+        assert_eq!(store.revisions(&a.portfolio_id)?, revision);
+        let contract = s.tokens.keys().next().unwrap();
+        let display = store.asset_display(&asset(1, Some(contract)))?.unwrap();
+        assert_eq!(display.ticker.as_deref(), Some("SAME"));
+        assert_eq!(display.chain.as_deref(), Some("eip155:1"));
+        assert_eq!(display.contract.as_deref(), Some(contract.as_str()));
+        assert_eq!(
+            store
+                .asset_aliases(&"evm".into(), "eip155:1:erc20", contract)?
+                .len(),
+            1
+        );
+
         reconcile(&store, &a.id, &s, &d)?;
         // Identical transaction hashes on another chain/wallet must never collide.
         let b = account(137, &w, lib_core::DEFAULT_PORTFOLIO)?;

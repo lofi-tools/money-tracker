@@ -38,6 +38,18 @@ const MIGRATIONS: &[Migration] = &[
         name: "006_tracking_reviews",
         apply: tracking_reviews,
     },
+    Migration {
+        name: "007_ui_catalogue_hierarchy",
+        apply: ui_catalogue_hierarchy,
+    },
+    Migration {
+        name: "008_ui_evidence",
+        apply: ui_evidence,
+    },
+    Migration {
+        name: "009_ui_actions_policy_refresh",
+        apply: ui_actions_policy_refresh,
+    },
 ];
 
 /// Run every migration in order before the Store becomes available. Each step
@@ -215,6 +227,88 @@ fn tracking_reviews(connection: &Connection) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn ui_catalogue_hierarchy(c: &Connection) -> anyhow::Result<()> {
+    c.execute_batch("CREATE TABLE IF NOT EXISTS ui_account_structure (id VARCHAR PRIMARY KEY, payload VARCHAR NOT NULL);
+        CREATE TABLE IF NOT EXISTS ui_provider_display (id VARCHAR PRIMARY KEY, payload VARCHAR NOT NULL);
+        CREATE TABLE IF NOT EXISTS ui_asset_display (id VARCHAR PRIMARY KEY, payload VARCHAR NOT NULL);
+        CREATE TABLE IF NOT EXISTS ui_asset_aliases (provider VARCHAR NOT NULL, namespace VARCHAR NOT NULL, external_id VARCHAR NOT NULL, asset_id VARCHAR NOT NULL, payload VARCHAR NOT NULL, PRIMARY KEY(provider, namespace, external_id, asset_id));
+        CREATE TABLE IF NOT EXISTS ui_products (id VARCHAR PRIMARY KEY, payload VARCHAR NOT NULL);
+        CREATE TABLE IF NOT EXISTS ui_subscriptions (id VARCHAR PRIMARY KEY, portfolio_id VARCHAR NOT NULL, payload VARCHAR NOT NULL);
+        CREATE TABLE IF NOT EXISTS ui_subscription_positions (position_id VARCHAR PRIMARY KEY, subscription_id VARCHAR NOT NULL);")?;
+    seed_ui_metadata(c)
+}
+
+pub(crate) fn seed_ui_metadata(c: &Connection) -> anyhow::Result<()> {
+    use crate::ui_metadata::{AccountStructure, AssetDisplay, NodeKind, ProviderDisplay};
+    let accounts = c.prepare("SELECT id FROM accounts a WHERE NOT EXISTS(SELECT 1 FROM ui_account_structure u WHERE u.id=a.id)")?
+        .query_map([], |r|r.get::<_,String>(0))?.collect::<Result<Vec<_>,_>>()?;
+    for id in accounts {
+        let value = AccountStructure {
+            account_id: id.as_str().into(),
+            kind: NodeKind::Source,
+            source_parent: None,
+            mapping_version: 0,
+        };
+        c.execute(
+            "INSERT OR IGNORE INTO ui_account_structure VALUES (?,?)",
+            params![id, serde_json::to_string(&value)?],
+        )?;
+    }
+    let providers = c.prepare("SELECT DISTINCT provider_id FROM accounts a WHERE NOT EXISTS(SELECT 1 FROM ui_provider_display u WHERE u.id=a.provider_id)")?
+        .query_map([], |r|r.get::<_,String>(0))?.collect::<Result<Vec<_>,_>>()?;
+    for id in providers {
+        let value = ProviderDisplay {
+            id: crate::ProviderId(id.clone()),
+            name: None,
+            evidence: "stored account provider ID; display name unavailable".into(),
+        };
+        c.execute(
+            "INSERT OR IGNORE INTO ui_provider_display VALUES (?,?)",
+            params![id, serde_json::to_string(&value)?],
+        )?;
+    }
+    let assets = c.prepare("SELECT asset_id FROM asset_scales a WHERE NOT EXISTS(SELECT 1 FROM ui_asset_display u WHERE u.id=a.asset_id)")?
+        .query_map([], |r|r.get::<_,String>(0))?.collect::<Result<Vec<_>,_>>()?;
+    for id in assets {
+        let value = AssetDisplay {
+            id: crate::AssetId::str(&id),
+            name: None,
+            ticker: None,
+            chain: None,
+            contract: None,
+            unresolved_label: Some(id.clone()),
+            evidence: "stored ledger asset ID; display metadata unavailable".into(),
+        };
+        c.execute(
+            "INSERT OR IGNORE INTO ui_asset_display VALUES (?,?)",
+            params![id, serde_json::to_string(&value)?],
+        )?;
+    }
+    Ok(())
+}
+
+fn ui_evidence(c: &Connection) -> anyhow::Result<()> {
+    c.execute_batch("CREATE TABLE IF NOT EXISTS ui_rate_evidence (id VARCHAR PRIMARY KEY, payload VARCHAR NOT NULL);
+        CREATE TABLE IF NOT EXISTS ui_price_evidence (id VARCHAR PRIMARY KEY, payload VARCHAR NOT NULL);
+        CREATE TABLE IF NOT EXISTS ui_balance_evidence (id VARCHAR PRIMARY KEY, payload VARCHAR NOT NULL);
+        CREATE TABLE IF NOT EXISTS ui_verifications (id VARCHAR PRIMARY KEY, payload VARCHAR NOT NULL);")?;
+    Ok(())
+}
+
+fn ui_actions_policy_refresh(c: &Connection) -> anyhow::Result<()> {
+    c.execute_batch("CREATE TABLE IF NOT EXISTS ui_local_state (portfolio_id VARCHAR NOT NULL, target VARCHAR NOT NULL, revision BIGINT NOT NULL, payload VARCHAR, PRIMARY KEY(portfolio_id,target));
+        CREATE TABLE IF NOT EXISTS ui_manual_actions (id VARCHAR PRIMARY KEY, sequence BIGINT NOT NULL UNIQUE, portfolio_id VARCHAR NOT NULL, target VARCHAR NOT NULL, undo_of VARCHAR UNIQUE, payload VARCHAR NOT NULL);
+        CREATE TABLE IF NOT EXISTS ui_asset_spam (portfolio_id VARCHAR NOT NULL, asset_id VARCHAR NOT NULL, excluded BOOLEAN NOT NULL, PRIMARY KEY(portfolio_id,asset_id));
+        CREATE TABLE IF NOT EXISTS ui_portfolio_revisions (portfolio_id VARCHAR PRIMARY KEY, ledger BIGINT NOT NULL, policy BIGINT NOT NULL, metadata BIGINT NOT NULL);
+        INSERT OR IGNORE INTO ui_portfolio_revisions SELECT id,0,0,0 FROM portfolios;
+        CREATE TABLE IF NOT EXISTS ui_refresh_state (portfolio_id VARCHAR NOT NULL, source VARCHAR NOT NULL, payload VARCHAR NOT NULL, PRIMARY KEY(portfolio_id,source));
+        CREATE OR REPLACE VIEW active_asset_exclusions AS
+        SELECT account_id,asset_id FROM asset_tracking_reviews r WHERE excluded
+            AND revision=(SELECT MAX(revision) FROM asset_tracking_reviews latest WHERE latest.account_id=r.account_id AND latest.asset_id=r.asset_id)
+        UNION SELECT a.id,s.asset_id FROM accounts a JOIN ui_asset_spam s ON a.portfolio_id=s.portfolio_id WHERE s.excluded;")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -259,6 +353,31 @@ mod tests {
         assert_eq!(counts, (1, 4, 2, 1));
         let role: String = connection.query_row("SELECT role FROM positions", [], |r| r.get(0))?;
         assert_eq!(role, "external");
+        Ok(())
+    }
+
+    #[test]
+    fn ui_migration_failure_rolls_back_seed_and_retries_offline() -> anyhow::Result<()> {
+        let c = Connection::open_in_memory()?;
+        for migration in &MIGRATIONS[..6] {
+            (migration.apply)(&c)?;
+        }
+        c.execute_batch("INSERT INTO positions (position_id,asset_id,owned,role,account_id) VALUES ('NEXO:USD','USD',true,'asset',NULL);
+            INSERT INTO asset_scales VALUES ('USD',2);
+            CREATE TABLE ui_provider_display (wrong_column VARCHAR);")?;
+        let error = run(&c).unwrap_err();
+        assert!(error.to_string().contains("007_ui_catalogue_hierarchy"));
+        let count:i64=c.query_row("SELECT COUNT(*) FROM information_schema.tables WHERE table_name='ui_account_structure'",[],|r|r.get(0))?;
+        assert_eq!(count, 0);
+        c.execute_batch("DROP TABLE ui_provider_display")?;
+        run(&c)?;
+        run(&c)?;
+        let count: i64 = c.query_row("SELECT COUNT(*) FROM ui_account_structure", [], |r| {
+            r.get(0)
+        })?;
+        assert_eq!(count, 1);
+        let positions: i64 = c.query_row("SELECT COUNT(*) FROM positions", [], |r| r.get(0))?;
+        assert_eq!(positions, 1);
         Ok(())
     }
 

@@ -3,7 +3,10 @@
 //! This library provides the foundational domain models and abstractions used
 //! across all provider adapters and client libraries.
 
+pub mod decimal;
+pub use decimal::ExactDecimal;
 pub mod amount;
+pub mod ui_metadata;
 pub use amount::Units;
 pub mod identity;
 pub use identity::*;

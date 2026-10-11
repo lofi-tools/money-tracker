@@ -1,55 +1,11 @@
 //! Version 1 JSON contracts. Financial quantities/rates are strings, never floats.
-use anyhow::Result;
 use chrono::{DateTime, Utc};
 use lib_core::{AccountId, AssetId, PortfolioId, PositionId, PositionRole, ProviderId, Units};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::{fmt, str::FromStr};
+use serde::{Deserialize, Serialize};
 
 pub const CONTRACT_VERSION: u32 = 1;
 
-/// Validated plain decimal, serialized as a canonical string. No exponents,
-/// NaN, rounding or fixed-width integer/decimal range restriction.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ExactDecimal(String);
-
-impl ExactDecimal {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-impl FromStr for ExactDecimal {
-    type Err = anyhow::Error;
-    fn from_str(value: &str) -> Result<Self> {
-        let scale = value.split_once('.').map_or(0, |(_, f)| f.len());
-        let scale = u8::try_from(scale)?;
-        let units = Units::from_decimal(value, scale)?;
-        let mut canonical = units.decimal_string(scale);
-        if scale > 0 {
-            canonical = canonical
-                .trim_end_matches('0')
-                .trim_end_matches('.')
-                .to_owned();
-        }
-        Ok(Self(canonical))
-    }
-}
-impl fmt::Display for ExactDecimal {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-impl Serialize for ExactDecimal {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-impl<'de> Deserialize<'de> for ExactDecimal {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(serde::de::Error::custom)
-    }
-}
+pub use lib_core::ExactDecimal;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReadContext {
@@ -208,6 +164,7 @@ pub struct LedgerBalancesDto {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
     fn exact_wire_values_reject_numbers_and_lossy_formats() -> Result<()> {
@@ -236,4 +193,27 @@ mod tests {
         assert_ne!(serde_json::to_value(unknown)?, serde_json::to_value(zero)?);
         Ok(())
     }
+}
+
+/// Stage-3 metadata only; this is not the current-value/annual-earnings projection.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiAccountDto {
+    pub account: AccountDto,
+    pub structure: lib_core::ui_metadata::AccountStructure,
+    pub parent: Option<AccountId>,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiMetadataDto {
+    pub contract_version: u32,
+    pub portfolio_id: PortfolioId,
+    pub revisions: lib_core::ui_metadata::PortfolioRevisions,
+    pub accounts: Vec<UiAccountDto>,
+    pub providers: Vec<lib_core::ui_metadata::ProviderDisplay>,
+    pub assets: Vec<lib_core::ui_metadata::AssetDisplay>,
+    pub products: Vec<lib_core::ui_metadata::ProductTemplate>,
+    pub subscriptions: Vec<lib_core::ui_metadata::Subscription>,
+    pub local_state: Vec<(
+        lib_core::ui_metadata::LocalTarget,
+        lib_core::ui_metadata::LocalRecord,
+    )>,
 }

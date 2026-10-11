@@ -26,6 +26,8 @@ Portfolio/account persistence and scoped queries are implemented as described in
 
 The [data model proposal](data-model-proposal.md) records the implemented account/quantity foundation and proposed event/provenance revisions, matching registries and reconciliation extensions. The table inventory and migration registry below remain the implemented contract.
 
+Stage 3 additionally persists the `ui_*` metadata/evidence/local-action/revision/refresh tables listed in [UI metadata](ui-metadata.md), without rebuilding financial tables. Exact JSON payloads use Rust Serde, not a DuckDB extension.
+
 ## Ordered idempotent startup migrations
 
 Every `Store::open` and `Store::in_memory` must run **all** migrations in explicit registry order before returning a usable store. There is no applied-version gate. Append new steps without reordering existing ones; make every step idempotent against current schema/data.
@@ -37,6 +39,10 @@ Every `Store::open` and `Store::in_memory` must run **all** migrations in explic
 5. `005_portfolio_accounts`: create portfolio/account tables and add position membership if missing; insert the default portfolio and deterministic legacy accounts without overwriting metadata; backfill only user positions with absent membership. External counterparties remain outside owned accounts.
 
 6. `006_tracking_reviews`: create review revisions, active-exclusion view and raw source snapshots if missing. Preserve all financial records and previous decisions. See [tracking exclusions](tracking-exclusions.md).
+
+7. `007_ui_catalogue_hierarchy`: seed missing conservative display/hierarchy records; create separate products/subscriptions and unique position links.
+8. `008_ui_evidence`: create immutable exact rate/price/balance/verification payload stores without converting old prices or inferring rates.
+9. `009_ui_actions_policy_refresh`: create revisioned local state/actions, exact-asset spam, portfolio revisions and source refresh state; union global spam with existing account reviews.
 
 Each step runs in its own transaction. Failure rolls back that step, stops startup, and reports its name. Earlier committed steps must remain safe to rerun on retry.
 

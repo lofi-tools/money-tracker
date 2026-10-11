@@ -78,3 +78,5 @@ Known limitations: indexer omissions can prevent discovery entirely; receipt ver
 ## Reviewed spam exclusions
 
 [Tracking exclusions](tracking-exclusions.md) implements persisted account/asset review decisions and the explicit `--exclude-safe-promo` / `--restore-token CONTRACT` commands. Raw frozen history remains in the cache and DB. Totals omit reviewed assets; reconciliation filters both ledger and observation sides and labels excluded contracts. Unreviewed unknowns, tracked mismatches and Classic fee gaps remain strict failures. Full earnings calculations are still future work and must use the shared tracking eligibility policy.
+
+Stage 3 persists source-reported token tickers, exact chain/contract locators, unresolved labels and namespace-qualified alias candidates from imported/cached snapshots, retaining their hash as evidence. Cached replay fills this display metadata without changing ledger revisions, import hashes or balances. See [UI metadata](ui-metadata.md). These aliases do not establish economic equivalence or pricing mappings.

@@ -12,6 +12,7 @@ Documentation is organized by purpose. Specifications describe implemented contr
 - [Shared Rust application services and exact DTOs](spec/application-services.md)
 - [Proposed data model evolution and implementation phases](spec/data-model-proposal.md)
 - [Persistence and ordered startup migrations](spec/persistence.md)
+- [Persistent UI metadata and manual actions](spec/ui-metadata.md)
 - [Database startup and local settings](spec/database-startup.md)
 - [CLI configuration](spec/cli.md)
 - [Nexo sources, ledger mapping, balance sums and diagnostics](spec/nexo.md)

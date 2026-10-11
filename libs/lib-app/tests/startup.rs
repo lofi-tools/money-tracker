@@ -385,3 +385,47 @@ async fn copied_legacy_ledger_migrates_idempotently_without_touching_source() ->
     assert_eq!(std::fs::read(source)?, bytes);
     Ok(())
 }
+
+#[tokio::test]
+async fn metadata_and_local_actions_use_the_selected_worker_portfolio_after_restart() -> Result<()>
+{
+    use lib_core::ui_metadata::*;
+    let dir = TempDir::new()?;
+    let resolved = resolve(&dir)?;
+    std::fs::create_dir_all(resolved.database.parent().unwrap())?;
+    {
+        let store = Store::open(&resolved.database)?;
+        store.save_account(&Account {
+            id: "visible".into(),
+            portfolio_id: DEFAULT_PORTFOLIO.into(),
+            provider_id: "nexo".into(),
+            label: "Provider name".into(),
+            source_reference: Some("provider-reference".into()),
+        })?;
+    }
+    let worker = ready(resolved.clone(), OpenAction::OpenExisting).await?;
+    let target = LocalTarget::Account {
+        id: "visible".into(),
+    };
+    let action = worker
+        .apply_manual_change(
+            target.clone(),
+            0,
+            Some(LocalValue::Account(AccountCustomization {
+                local_label: Some("Local name".into()),
+                ..Default::default()
+            })),
+        )
+        .await?;
+    let metadata = worker.ui_metadata().await?;
+    assert_eq!(metadata.accounts[0].account.label, "Provider name");
+    assert_eq!(metadata.local_state[0].1, action.after);
+    assert!(metadata.subscriptions.is_empty() && metadata.products.is_empty());
+    worker.close().await?;
+    let worker = ready(resolved, OpenAction::OpenExisting).await?;
+    assert_eq!(worker.manual_actions().await?, vec![action.clone()]);
+    let undo = worker.undo_manual_action(action.id).await?;
+    assert_eq!(worker.ui_metadata().await?.local_state[0].1, undo.after);
+    worker.close().await?;
+    Ok(())
+}

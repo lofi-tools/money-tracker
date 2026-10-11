@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 use chrono::{DateTime, Utc};
 use models::AssetPricePoint;
 use payloads::{CurrentPriceReq, CurrentPriceResp};
-use serde::de::DeserializeOwned;
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use utils::prelude::*;
 
 const USER_AGENT: &str = concat!(
@@ -158,10 +158,7 @@ impl CoingeckoClient {
         let mut attempt: u32 = 0;
         loop {
             self.rate.acquire().await;
-            let request = self
-                .get(path)
-                .query(query)
-                .timeout(Duration::from_secs(30));
+            let request = self.get(path).query(query).timeout(Duration::from_secs(30));
             let (client, req) = request.build_split();
             let req = req?;
             let method = req.method().clone();
@@ -177,7 +174,9 @@ impl CoingeckoClient {
 
             if status.is_success() {
                 let parsed: D = serde_json::from_str(&body).map_err(|e| {
-                    anyhow::anyhow!("failed deserializing CoinGecko response from {url}: {e}\nbody: {body}")
+                    anyhow::anyhow!(
+                        "failed deserializing CoinGecko response from {url}: {e}\nbody: {body}"
+                    )
                 })?;
                 return Ok(parsed);
             }
@@ -240,7 +239,11 @@ impl RateLimiter {
             let wait = {
                 let mut state = self.state.lock().expect("rate state poisoned");
                 let now = Instant::now();
-                while state.calls.front().is_some_and(|t| now - *t > Duration::from_secs(60)) {
+                while state
+                    .calls
+                    .front()
+                    .is_some_and(|t| now - *t > Duration::from_secs(60))
+                {
                     state.calls.pop_front();
                 }
                 let mut wait = Duration::ZERO;
@@ -261,7 +264,10 @@ impl RateLimiter {
                     state.calls.push_back(Instant::now());
                     state.last_start = Some(Instant::now());
                     // Decay penalty on successful admission so we speed back up.
-                    state.penalty = state.penalty.checked_sub(Duration::from_millis(500)).unwrap_or(Duration::ZERO);
+                    state.penalty = state
+                        .penalty
+                        .checked_sub(Duration::from_millis(500))
+                        .unwrap_or(Duration::ZERO);
                     return;
                 }
                 wait
@@ -278,7 +284,10 @@ impl RateLimiter {
     }
 
     fn backoff_for(&self, attempt: u32) -> Duration {
-        let exp = self.base_backoff.checked_mul(2_u32.pow(attempt)).unwrap_or(Duration::from_secs(60));
+        let exp = self
+            .base_backoff
+            .checked_mul(2_u32.pow(attempt))
+            .unwrap_or(Duration::from_secs(60));
         (exp + Duration::from_millis((attempt as u64 * 137) % 500)).min(Duration::from_secs(60))
     }
 }

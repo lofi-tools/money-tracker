@@ -4,7 +4,7 @@ Implemented behavior, checked against source on 2026-10-11. See [shared provider
 
 ## Data source and import identity
 
-[CSV reading](../../libs/nexo-csv/src/lib.rs) owns parsing and exact-byte SHA-256 file identity. [The adapter](../../apps/cli/src/adapters/nexo.rs) owns transaction semantics, conversion to domain types, position registration, and import orchestration.
+[CSV reading](../../libs/nexo-csv/src/lib.rs) owns parsing and exact-byte SHA-256 file identity. [The adapter](../../libs/lib-app/src/adapters/nexo.rs) owns transaction semantics, conversion to domain types, position registration, and import orchestration.
 
 The adapter accepts a configurable CSV path via [CLI configuration](cli.md). It checks a completed file hash before parsing/mapping. Register assets, effects, and the hash atomically; skip identical successfully imported bytes even at a different path. Changed bytes reuse stable `NEXO:` transaction IDs to replace effects. A failed import records no completed hash and can be retried.
 
@@ -52,9 +52,9 @@ Run from the repository root:
 # Nix wrapper, also available as `nexo` in the dev shell:
 nix run .#nexo
 # Exact test selected by that wrapper:
-cargo test -p cli adapters::nexo::tests::latest_amount_after_cached_export -- --exact --ignored --nocapture
+cargo test -p lib-app adapters::nexo::tests::latest_amount_after_cached_export -- --exact --ignored --nocapture
 # Synthetic/import regression tests; ignored private print test stays skipped:
-cargo test -p cli adapters::nexo::tests::
+cargo test -p lib-app adapters::nexo::tests::
 cargo test -p nexo-csv
 ```
 

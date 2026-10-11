@@ -1,6 +1,6 @@
 # Binance provider: sources, ledger mapping and diagnostics
 
-Implemented behavior, checked against source on 2026-10-11. Acquisition is in [account.rs](../../libs/binance-client/src/account.rs), parsing in [statement.rs](../../libs/binance-client/src/statement.rs), semantics in [the adapter](../../apps/cli/src/adapters/binance.rs), and statement persistence/fixtures in [statements.rs](../../apps/cli/src/adapters/binance/statements.rs). [Account-history acceptance contracts](binance-account-history.md) cover pagination, caching and backpressure; [the export guide](../findings/binance-history.md) covers obtaining reports. [Shared conventions](../findings/provider-diagnostics.md) explain sums and test isolation.
+Implemented behavior, checked against source on 2026-10-11. Acquisition is in [account.rs](../../libs/binance-client/src/account.rs), parsing in [statement.rs](../../libs/binance-client/src/statement.rs), semantics in [the adapter](../../libs/lib-app/src/adapters/binance.rs), and statement persistence/fixtures in [statements.rs](../../libs/lib-app/src/adapters/binance/statements.rs). [Account-history acceptance contracts](binance-account-history.md) cover pagination, caching and backpressure; [the export guide](../findings/binance-history.md) covers obtaining reports. [Shared conventions](../findings/provider-diagnostics.md) explain sums and test isolation.
 
 ## Coverage and acquisition
 
@@ -106,18 +106,18 @@ Run commands from the repository root; full names avoid selecting other tests ac
 # Default Nix wrapper: statement + Earn supplement display, reports mismatches:
 nix run .#binance
 BINANCE_STATEMENT='.cache/imports/Binance-Transaction-History-...(UTC).csv' nix run .#binance
-cargo test -p cli adapters::binance::statements::tests::latest_amount_after_cached_statement -- --exact --ignored --nocapture
+cargo test -p lib-app adapters::binance::statements::tests::latest_amount_after_cached_statement -- --exact --ignored --nocapture
 # Same workflow, but fail on reconciliation differences:
-cargo test -p cli adapters::binance::statements::tests::cached_binance_statement_reconciles -- --exact --ignored --nocapture
+cargo test -p lib-app adapters::binance::statements::tests::cached_binance_statement_reconciles -- --exact --ignored --nocapture
 # Fetch/display independent positions without full-history backfill:
-cargo test -p cli adapters::binance::statements::tests::fetch_cached_positions -- --exact --ignored --nocapture
+cargo test -p lib-app adapters::binance::statements::tests::fetch_cached_positions -- --exact --ignored --nocapture
 # Alternative full-history API fixture display and strict reconciliation:
-cargo test -p cli adapters::binance::tests::latest_amount_after_cached_account -- --exact --ignored --nocapture
-cargo test -p cli adapters::binance::tests::cached_binance_account_reconciles -- --exact --nocapture
+cargo test -p lib-app adapters::binance::tests::latest_amount_after_cached_account -- --exact --ignored --nocapture
+cargo test -p lib-app adapters::binance::tests::cached_binance_account_reconciles -- --exact --nocapture
 # Explicit fresh API acquisition; ignored live_binance_account_reconciles is cache-first:
-cargo test -p cli adapters::binance::tests::uncached_binance_account_reconciles -- --exact --ignored --nocapture
+cargo test -p lib-app adapters::binance::tests::uncached_binance_account_reconciles -- --exact --ignored --nocapture
 # Deterministic CLI regressions: skip the nonignored real-account test:
-cargo test -p cli -- --skip cached_binance_account_reconciles
+cargo test -p lib-app -- --skip cached_binance_account_reconciles
 ```
 
 | Fixture/input | Path and reuse |

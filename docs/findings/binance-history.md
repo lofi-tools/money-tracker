@@ -27,7 +27,7 @@ The loader handles ZIP archives with multiple CSV parts and caches extracted byt
 The first statement test fetches current Spot, Funding and Earn positions into `.cache/test-data/binance/positions-v1.json`, without the slow all-pairs trade backfill. Positions are independent reference data: deriving them from transactions would make the comparison meaningless. It also caches API Earn movements omitted by the Spot/Funding CSV in `earn-supplement-v1.json`. Successful history-query responses are also cached as JSON under `.cache/api_responses/binance`, partitioned by a credential fingerprint. Exact endpoint/query parameters identify each file. Changed date windows are new queries; failed requests are not cached. Subsequent fixture runs use the persistent DB and cached responses without credentials or network. The balance-display command reports discrepancies; the strict assertion is:
 
 ```sh
-cargo test -p cli cached_binance_statement_reconciles -- --ignored --nocapture
+cargo test -p lib-app cached_binance_statement_reconciles -- --ignored --nocapture
 ```
 
 Delete the statement DB to remap cached inputs. When advancing the fixture cutoff, refresh the export, position snapshot and Earn supplement together. Statements newer than the saved reference cannot be reconciled against that reference. Activity between export and API fetch can also produce differences; the current supplement covers post-export Locked rewards, not arbitrary post-export trades or transfers. `.cache` is ignored by Git and contains private financial records.

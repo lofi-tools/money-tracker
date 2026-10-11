@@ -26,10 +26,10 @@
           # wd = "$(git rev-parse --show-toplevel)";
           scripts = mapAttrs pkgs.writeShellScriptBin {
             h = ''cargo run -p cli'';
-            nexo = ''cargo test -p cli adapters::nexo::tests::latest_amount -- --ignored --nocapture'';
-            binance = ''cargo test -p cli adapters::binance::statements::tests::latest_amount_after_cached_statement -- --ignored --nocapture'';
-            evm = ''cargo test -p cli adapters::evm::private_tests::latest_amount_after_cached_wallet -- --exact --ignored --nocapture'';
-            kraken = ''cargo test -p cli adapters::kraken::tests::latest_amount_after_cached_account -- --exact --ignored --nocapture'';
+            nexo = ''cargo test -p lib-app adapters::nexo::tests::latest_amount -- --ignored --nocapture'';
+            binance = ''cargo test -p lib-app adapters::binance::statements::tests::latest_amount_after_cached_statement -- --ignored --nocapture'';
+            evm = ''cargo test -p lib-app adapters::evm::private_tests::latest_amount_after_cached_wallet -- --exact --ignored --nocapture'';
+            kraken = ''cargo test -p lib-app adapters::kraken::tests::latest_amount_after_cached_account -- --exact --ignored --nocapture'';
           };
 
           env = {

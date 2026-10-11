@@ -22,7 +22,7 @@ These come from [the user interview](../findings/user-needs.md), [product goals]
 
 ## Source boundaries
 
-[Store](../../libs/lib-core/src/storage.rs) provides local identities, exact quantities, reviewed exclusions and valuation queries. [Provider adapters](../../apps/cli/src/adapters) currently live in the CLI. A reusable application service boundary and typed frontend contracts are proposed tasks, not existing APIs. Existing CLI environment/key setup does not constitute a finished desktop connection or credential-storage flow.
+[Store](../../libs/lib-core/src/storage.rs) provides local identities, exact quantities, reviewed exclusions and valuation queries. [Provider adapters](../../libs/lib-app/src/adapters) now live in the shared application library and are consumed by the CLI. The [stage-1 service and exact JSON DTOs](application-services.md) are implemented; full UI projections and the frontend remain proposed. Existing CLI environment/key setup does not constitute a finished desktop connection or credential-storage flow.
 
 Net-worth valuation exists, subject to available prices and provider coverage. Earnings attribution/calculation, expected annual earnings, benchmark calculations and DeFi underlying interpretation remain outstanding. Do not fill real-data screens with fabricated rates, yields or benchmark returns.
 

@@ -845,11 +845,27 @@ impl Store {
     pub fn position_metadata(
         &self,
     ) -> anyhow::Result<Vec<(PositionId, AssetId, u8, PositionRole)>> {
+        self.filtered_position_metadata(None)
+    }
+
+    /// Account-scoped metadata for application DTOs. Existing global/audit API remains available.
+    pub fn account_position_metadata(
+        &self,
+        account: &AccountId,
+    ) -> anyhow::Result<Vec<(PositionId, AssetId, u8, PositionRole)>> {
+        self.filtered_position_metadata(Some(account))
+    }
+
+    fn filtered_position_metadata(
+        &self,
+        account: Option<&AccountId>,
+    ) -> anyhow::Result<Vec<(PositionId, AssetId, u8, PositionRole)>> {
+        let filter = account.map(|a| a.0.as_str());
         let mut statement = self.connection.prepare(
-            "SELECT p.position_id, p.asset_id, s.decimals, p.role FROM positions p JOIN asset_scales s ON s.asset_id=p.asset_id",
+            "SELECT p.position_id, p.asset_id, s.decimals, p.role FROM positions p JOIN asset_scales s ON s.asset_id=p.asset_id WHERE ? IS NULL OR p.account_id=? ORDER BY p.position_id",
         )?;
         let rows = statement
-            .query_map([], |row| {
+            .query_map(params![filter, filter], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,

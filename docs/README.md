@@ -9,6 +9,7 @@ Documentation is organized by purpose. Specifications describe implemented contr
 - [Web design-system package: proposed pnpm/Solid/Panda/Ark plan](spec/web-design-system.md)
 - [Project context and conventions](spec/project.md)
 - [Core data model](spec/data-model.md)
+- [Shared Rust application services and exact DTOs](spec/application-services.md)
 - [Proposed data model evolution and implementation phases](spec/data-model-proposal.md)
 - [Persistence and ordered startup migrations](spec/persistence.md)
 - [CLI configuration](spec/cli.md)

@@ -1,0 +1,34 @@
+name: Rust foundation
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: 2
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Check explicit workspace and lockfile
+        run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
+      - name: Formatting
+        run: cargo fmt --all --check
+      # Private/live tests are ignored except the legacy cache-first Binance
+      # test, explicitly skipped here. No financial credentials/caches in CI.
+      - name: Deterministic Rust tests
+        run: cargo test --locked --workspace --exclude try-polars -- --skip adapters::binance::tests::cached_binance_account_reconciles
+      - name: CLI help smoke check
+        run: cargo run --locked -p cli -- --help

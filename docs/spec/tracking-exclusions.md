@@ -1,6 +1,6 @@
 # Reviewed asset exclusions
 
-Implemented in [core storage](../../libs/lib-core/src/storage.rs), [migration 006](../../libs/lib-core/src/migrations.rs), and the [EVM adapter](../../apps/cli/src/adapters/evm.rs).
+Implemented in [core storage](../../libs/lib-core/src/storage.rs), [migration 006](../../libs/lib-core/src/migrations.rs), and the [EVM adapter](../../libs/lib-app/src/adapters/evm.rs).
 
 A review identifies an exact account and asset locator, records exclusion/restoration, reason, evidence, revision and UTC review time. Ticker/name heuristics never create exclusions. Decisions do not require an asset scale: an unresolved contract can be excluded without inventing decimals or assigning it a counterparty role. Current policy applies to every displayed historical period. Identical repeated decisions are idempotent; restoration appends a revision. Decisions persist across startup and cache replay.
 

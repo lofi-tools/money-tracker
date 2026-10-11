@@ -6,7 +6,10 @@ Estimate historical value and current revenue.
 
 ## Developer quickstart
 
+The CLI consumes shared provider/application services from `libs/lib-app`; see [the service/DTO contract](docs/spec/application-services.md). Provider tests moved to `-p lib-app`, while CLI configuration tests remain in `-p cli`. The tracked Cargo lockfile and explicit Rust workspace require no external sibling checkout.
+
 Setup deps using `direnv allow` (needs Nix and nix-direnv), then:
+
 - Run unit tests: `utest`
 - Run program: `run`
 
@@ -61,7 +64,7 @@ The Binance adapter maps API-accessible Spot, Funding and Simple Earn activity t
 Set `BINANCE_API_KEY_ID` and `BINANCE_API_KEY_SECRET` in your direnv environment, then run (the earlier `BINANCE_API_KEY` and `BINANCE_SECRET_KEY` names remain supported as fallbacks):
 
 ```sh
-cargo test -p cli cached_binance_account_reconciles
+cargo test -p lib-app cached_binance_account_reconciles
 ```
 
 The first run backfills history from Binance's launch and independently fetches current balances. This can take a long time: trade history requires a request for every known pair, and other endpoints impose rate limits. A complete raw snapshot is saved to `.cache/binance/account-v1.json` before reconciliation, so a discrepancy can be investigated and replayed offline. Successful historical requests are also cached beneath `.cache/api_responses/binance/`, scoped by a credential fingerprint, allowing interrupted backfills to resume. Each successful history response is saved atomically as JSON, including empty pages; errors are not cached. Cache keys include the endpoint and exact query parameters, so a changed end time creates a new request. Exchange metadata and current balances are fetched fresh until the complete test snapshot is frozen. The snapshot is mapped and imported once into `.cache/test-data/test-binance-api-v1.duckdb`, following the Nexo test’s persistent DB pattern. Transactions, account ownership, asset precision, independent API balance observations and the completed-import marker commit together. Subsequent runs reconcile balances queried from DuckDB against those saved observations without reading the snapshot, remapping or calling the API. API observations are reference data and never create ledger entries. Cache files are ignored by Git. Delete the DB to remap the saved snapshot; delete both the DB and complete snapshot to refresh the fixture (historical request caches remain reusable).
@@ -69,13 +72,13 @@ The first run backfills history from Binance's launch and independently fetches 
 The existing ignored command also uses this persistent cache:
 
 ```sh
-cargo test -p cli live_binance_account_reconciles -- --ignored
+cargo test -p lib-app live_binance_account_reconciles -- --ignored
 ```
 
 To explicitly fetch fresh data without the test cache:
 
 ```sh
-cargo test -p cli uncached_binance_account_reconciles -- --ignored
+cargo test -p lib-app uncached_binance_account_reconciles -- --ignored
 ```
 
 Run against a quiet account: history and current positions cannot be captured atomically. Reconciliation checks every owned account, including historical assets absent from current positions, and reports exact differences without adding artificial opening balances. HTTP 429 responses pause requests for the complete `Retry-After` duration; missing or invalid headers use exponential backoff. All Binance clients and real-account tests in a process share one HTTP connection pool and one limiter, regardless of base URL or credentials. The limiter records a rolling minute of weighted requests, starts at 80% of documented budgets, spaces heavy calls, and accounts for usage reported in Binance response headers. Spot’s minute budget is refreshed from `exchangeInfo`. Throttling lowers the estimated budget using observed load; successful calls recover it gradually. Parallel Cargo processes and test binaries in this repository also share the budget via an OS file lock and persisted state under `.cache/binance/limiter`. Requests are retried up to eight attempts, with cooldown progress printed by the cached tests. HTTP 418 bans stop the fetch and retain the cooldown. Other API errors stop the fetch. Binance's API does not guarantee lifetime history for all products (for example, universal transfers expose only the last six months, and dust records before December 2020 are unavailable); derivatives, margin, loans, P2P and retired Earn products are not implemented. Such missing activity can cause reconciliation failure and may require statement exports or additional adapters.
@@ -89,7 +92,7 @@ export BINANCE_ADDITIONAL_SYMBOLS='[{"symbol":"BCCBTC","baseAsset":"BCC","quoteA
 To run the ordinary CLI tests before a real account snapshot is available:
 
 ```sh
-cargo test -p cli -- --skip cached_binance_account_reconciles
+cargo test -p lib-app -- --skip cached_binance_account_reconciles
 ```
 
 Binance’s universal-transfer API retention limit cannot be bypassed with pagination. Older activity needs statement exports from Transaction History → Export Transaction Records; [Binance’s instructions](https://www.binance.com/en-GB/support/faq/how-to-generate-transaction-history-990afa0a0a9341f78e7a9298a9575163) describe generating multiple exports for periods longer than a year. The statement importer accepts CSV and ZIP, preserves repeated rows, pairs Spot/Funding transfers, and maps supported Spot/Funding/Earn operations. Unknown operations and incomplete transfer pairs fail before import. Matching API and statement movements share transaction IDs based on UTC second, asset, exact amount, both accounts and occurrence; records that differ in representation are not assumed equivalent. Accurate ledger totals require either complete movements or independently evidenced opening balances at a known cutoff plus all subsequent movements. Opening balances must be explicit provenance-backed checkpoints, not unexplained plugs calculated to force agreement with current positions. A checkpoint provides balances from that date onward, but does not reconstruct earlier performance or cost basis. Current API positions remain an independent source of current balances.
@@ -98,9 +101,9 @@ The statement fixture independently fetches Spot, Funding and Earn positions onc
 
 ```sh
 # Independent positions only (four endpoint families; no full-history backfill):
-cargo test -p cli fetch_cached_positions -- --ignored --nocapture
+cargo test -p lib-app fetch_cached_positions -- --ignored --nocapture
 # Assert exact account reconciliation for the statement fixture:
-cargo test -p cli cached_binance_statement_reconciles -- --ignored --nocapture
+cargo test -p lib-app cached_binance_statement_reconciles -- --ignored --nocapture
 ```
 
 The supplied October 2026 export plus cached Earn history now matches every Spot, Funding, Flexible and Locked position, including a NEAR reward after the statement cutoff. The previous **0.07192 SOL** deficit was interest on a legacy 15-day Savings product: the API records show a 5 SOL subscription on 14 August 2022, a 5.07192 SOL maturity on 30 August, and immediate reinvestment of principal and interest into Flexible Earn. The CSV omits that maturity/reinvestment sequence. The mapper recognizes legacy `DAYSS` products and requires one matching successful principal subscription and one paid maturity before recognizing the interest; ambiguous or missing evidence fails import. The original subscription deduplicates against the CSV, in either import order. Four original records were recovered from three endpoint/query-verified response-cache files into the existing supplement, without fetching or modifying API positions; their provenance is saved in `.cache/test-data/binance/legacy-savings-reconciliation.json`, and the original supplement is preserved as `earn-supplement-v1.before-legacy-savings.json`. The strict cached statement test passes with SOL totaling **35.25865379**.

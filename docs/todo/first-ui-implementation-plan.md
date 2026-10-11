@@ -1,10 +1,10 @@
 # First UI — ordered implementation plan
 
-Status: **proposed, documentation only; implementation is not authorized by this plan**. Grounded in repository source on 11 October 2026. The [master todo](master-todo.md#0-now-first-usable-desktop-app--ui) remains the canonical completion checklist. This document sequences its existing tasks and defines dependencies and completion evidence; it is not a second backlog.
+Status: **stage 1 implemented; stages 2–9 remain proposed and deferred**. The user authorized stage 1 separately; inclusion here does not authorize the remaining stages. Grounded in repository source on 11 October 2026. The [master todo](master-todo.md#0-now-first-usable-desktop-app--ui) remains the canonical completion checklist. This document sequences its existing tasks and defines dependencies and completion evidence; it is not a second backlog.
 
 The master todo covers the agreed feature scope. What it lacked was an explicit implementation order, a minimum schema/query slice, and intermediate working milestones. Follow the [desktop contract and acceptance scenarios](../spec/desktop-app.md), [design-system package plan](../spec/web-design-system.md), and [data-model proposal](../spec/data-model-proposal.md).
 
-## Starting point and boundaries
+## Starting point and boundaries (before stage 1)
 
 | Current evidence | Consequence for the first UI |
 | --- | --- |
@@ -23,11 +23,13 @@ Scope is one local portfolio, existing imported data, current holdings/allocatio
 
 Canonical tasks: master todo sections 0, 1, 2 and 6.
 
+Implemented: [shared services and exact DTO contract](../spec/application-services.md), provider extraction, explicit Rust membership, removal of unused `typed-ids`, tracked Cargo lockfile and an initial Linux CI workflow. The CLI consumes the shared library; 129 deterministic tests, formatting, CLI help and isolated-checkout metadata passed locally. Hosted CI remains unverified. Current-value/earnings UI projections and all frontend work remain later stages. The baseline table above records the pre-stage-1 gaps.
+
 Define a reusable Rust application-service boundary, provisionally `libs/lib-app`, depending on core/provider libraries rather than the CLI executable. The CLI and eventual Tauri host consume the same services. Extract adapter functionality incrementally; preserve existing CLI behavior and provider fixtures. Keep ingestion, valuation and verification in Rust and reusable presentation in the TypeScript design system.
 
 Specify typed read/write DTOs before binding screens. Serialize integer units, exact decimals and rates as strings with asset scales; never use JavaScript numbers as financial truth. Stable IDs, source/as-of timestamps, calculation basis, coverage and issue references accompany values. Unknown and not-applicable must differ from zero. Group expansion/search/privacy are presentation state, not query filters that change the portfolio's economic perimeter.
 
-Adjust Cargo membership so TypeScript-only `libs/web-design-system` is not treated as a Rust crate; register the planned Tauri crate explicitly, for example `apps/desktop/src-tauri`. Resolve `typed-ids` through a reproducible in-repository or pinned dependency after reviewing its actual use. Choose compatible Tauri/Node/pnpm/tool versions when implementation begins; no scaffold/version selection is required by this documentation task.
+Adjust Cargo membership so TypeScript-only `libs/web-design-system` is not treated as a Rust crate; register the planned Tauri crate explicitly, for example `apps/desktop/src-tauri`. The unused `typed-ids` dependency was removed after reviewing its actual use; no replacement package was needed. Choose compatible Tauri/Node/pnpm/tool versions when implementation begins; no scaffold/version selection is required by this documentation task.
 
 Completion evidence: documented service/DTO contracts, existing Rust checks preserved, clean-checkout Cargo metadata succeeds without sibling repositories, and an initial CI lane excludes private/live tests. Design-system work in stage 5 can start once these DTO/presentation boundaries are settled; it does not need all backend stages finished.
 

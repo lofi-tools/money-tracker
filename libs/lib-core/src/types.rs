@@ -262,7 +262,8 @@ pub enum PositionOwner {
 
 /// Economic role in the user's portfolio. Liability balances are signed:
 /// borrowing decreases the balance, and repayment increases it toward zero.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PositionRole {
     Asset,
     Liability,

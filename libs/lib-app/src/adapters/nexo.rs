@@ -14,8 +14,6 @@ use lib_core::{
 use nexo_csv::{NexoCsv, NexoCsvError, NexoCsvFile, NexoTx, TransactionType};
 use snafu::{ResultExt, Snafu};
 
-use crate::cli::Config;
-
 const CSV_DECIMALS: u8 = 8;
 
 #[derive(Debug, Snafu)]
@@ -51,10 +49,6 @@ pub struct NexoSvc {
 }
 
 impl NexoSvc {
-    pub fn new(config: &Config) -> Self {
-        Self::from_path(&config.nexo_csv_path)
-    }
-
     pub fn from_path(path: impl AsRef<Path>) -> Self {
         Self {
             path_to_csv: path.as_ref().to_path_buf(),

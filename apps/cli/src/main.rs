@@ -4,22 +4,13 @@ use adapters::nexo::{NexoError, NexoImportOutcome, NexoSvc};
 use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc};
 use clap::Parser;
 use cli::{Args, Config};
-use lib_core::{AssetId, PriceRange, Store};
+use lib_core::{AssetId, PriceRange};
 use snafu::{ResultExt, Snafu};
 use std::path::PathBuf;
 use std::time::Instant;
 
-pub mod adapters {
-    pub mod binance;
-    pub mod binance_vision;
-    pub mod coingecko;
-    pub mod evm;
-    pub mod fallback_prices;
-    pub mod kraken;
-    pub mod nexo;
-}
+pub use lib_app::adapters;
 mod cli;
-mod models;
 
 #[derive(Debug, Snafu)]
 enum AppError {
@@ -112,7 +103,8 @@ async fn run() -> Result<(), AppError> {
         path: config.data_dir.clone(),
     })?;
     let db_path = config.data_dir.join("portfolio.duckdb");
-    let store = Store::open(&db_path).context(OpenDatabaseSnafu { path: db_path })?;
+    let app = lib_app::Application::open(&db_path).context(OpenDatabaseSnafu { path: db_path })?;
+    let store = app.store();
     if let Some(cli::Command::Evm {
         address,
         account,
@@ -169,9 +161,9 @@ async fn run() -> Result<(), AppError> {
                 "select one chain for endpoint/snapshot overrides"
             );
             for a in &accounts {
-                adapters::evm::register(&store, a)?;
+                adapters::evm::register(store, a)?;
                 if *exclude_safe_promo {
-                    adapters::evm::exclude_safe_promo(&store, a)?;
+                    adapters::evm::exclude_safe_promo(store, a)?;
                 }
                 if let Some(contract) = restore_token {
                     let contract = evm_client::address(contract)?;
@@ -218,7 +210,7 @@ async fn run() -> Result<(), AppError> {
                     }
                 }
                 if let Err(e) = adapters::evm::run(
-                    &store,
+                    store,
                     &a,
                     &path,
                     rpc.as_deref(),
@@ -258,7 +250,7 @@ async fn run() -> Result<(), AppError> {
                 kraken_client::fingerprint(account.id.0.as_bytes())
             ))
         });
-        return adapters::kraken::run(&store, &account, &path, offline, refresh)
+        return adapters::kraken::run(store, &account, &path, offline, refresh)
             .await
             .context(KrakenSnafu);
     }
@@ -267,8 +259,8 @@ async fn run() -> Result<(), AppError> {
         config.nexo_csv_path.display()
     );
     let started = Instant::now();
-    let outcome = NexoSvc::new(&config)
-        .import_into_with_progress(&store, |done, total| {
+    let outcome = NexoSvc::from_path(&config.nexo_csv_path)
+        .import_into_with_progress(store, |done, total| {
             eprintln!("Writing Nexo transactions: {done}/{total}");
         })
         .context(ImportNexoSnafu)?;
@@ -334,7 +326,7 @@ async fn run() -> Result<(), AppError> {
                         );
                         let started = Instant::now();
                         let fetched = binance_archive
-                            .fill_usd_month(&store, asset, month)
+                            .fill_usd_month(store, asset, month)
                             .await
                             .context(BinanceArchivePricesSnafu {
                                 asset: asset.0.clone(),
@@ -349,12 +341,13 @@ async fn run() -> Result<(), AppError> {
                                     if let Some(first) = stored.first()
                                         && first.datetime > range.from + Duration::days(2)
                                     {
-                                        let early: Vec<_> = NexoSvc::new(&config)
-                                            .implied_nexo_prices(range)
-                                            .context(NexoImpliedPricesSnafu)?
-                                            .into_iter()
-                                            .filter(|point| point.datetime < first.datetime)
-                                            .collect();
+                                        let early: Vec<_> =
+                                            NexoSvc::from_path(&config.nexo_csv_path)
+                                                .implied_nexo_prices(range)
+                                                .context(NexoImpliedPricesSnafu)?
+                                                .into_iter()
+                                                .filter(|point| point.datetime < first.datetime)
+                                                .collect();
                                         store.save_prices(&early).context(SavePricesSnafu)?;
                                         if !early.is_empty() {
                                             eprintln!(
@@ -367,7 +360,7 @@ async fn run() -> Result<(), AppError> {
                                 (fetch.count, fetch.source)
                             }
                             None if asset.0 == "NEXO" => {
-                                let points = NexoSvc::new(&config)
+                                let points = NexoSvc::from_path(&config.nexo_csv_path)
                                     .implied_nexo_prices(range)
                                     .context(NexoImpliedPricesSnafu)?;
                                 if points.is_empty() {

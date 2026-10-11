@@ -1,6 +1,6 @@
 # EVM wallet quantities and reconciliation
 
-Implemented foundation: [acquisition client](../../libs/evm-client/src/lib.rs), [ledger adapter](../../apps/cli/src/adapters/evm.rs), and `evm` CLI command. It tracks native currency and discovered ERC-20 contracts. Protocol position interpretation, underlying exposures, pricing aliases and yield classification are still proposed work in [the master todo](../todo/master-todo.md#9-next-connectors-evm-wallets-then-solana-then-near).
+Implemented foundation: [acquisition client](../../libs/evm-client/src/lib.rs), [ledger adapter](../../libs/lib-app/src/adapters/evm.rs), and `evm` CLI command. It tracks native currency and discovered ERC-20 contracts. Protocol position interpretation, underlying exposures, pricing aliases and yield classification are still proposed work in [the master todo](../todo/master-todo.md#9-next-connectors-evm-wallets-then-solana-then-near).
 
 ## Connecting a wallet
 
@@ -62,9 +62,9 @@ Reconciliation compares cumulative owned ledger positions through the cutoff tim
 ## Verification and boundaries
 
 ```sh
-cargo test -p cli adapters::evm::tests::
+cargo test -p lib-app adapters::evm::tests::
 cargo test -p evm-client
-cargo test -p cli adapters::evm::private_tests::latest_amount_after_cached_wallet -- --exact --ignored --nocapture
+cargo test -p lib-app adapters::evm::private_tests::latest_amount_after_cached_wallet -- --exact --ignored --nocapture
 ```
 
 The ignored provider-only diagnostic reads the saved Ethereum account from `.cache/data/portfolio.duckdb` by default, with `EVM_ACCOUNT_ID` selecting another saved account. `EVM_RPC_URL` and `EVM_INDEXER_URL` override its endpoints. It uses the same `.cache/evm` frozen snapshot as the CLI; missing caches trigger public acquisition. The Nix `evm` wrapper runs this diagnostic.

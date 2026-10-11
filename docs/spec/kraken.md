@@ -1,6 +1,6 @@
 # Kraken provider: account-scoped ledger and balance reconciliation
 
-Implemented Spot REST foundation. Acquisition/signing/cache code lives in [kraken-client](../../libs/kraken-client/src/lib.rs); mapping, persistence, reconciliation and print tests live in [the CLI adapter](../../apps/cli/src/adapters/kraken.rs). Checked against official documentation on 2026-10-11. Synthetic/mock-server fixtures and one private account capture have been verified; this is not validation of every Kraken product or account variant.
+Implemented Spot REST foundation. Acquisition/signing/cache code lives in [kraken-client](../../libs/kraken-client/src/lib.rs); mapping, persistence, reconciliation and print tests live in [the shared application adapter](../../libs/lib-app/src/adapters/kraken.rs). Checked against official documentation on 2026-10-11. Synthetic/mock-server fixtures and one private account capture have been verified; this is not validation of every Kraken product or account variant.
 
 For user setup, OAuth/localhost evidence, historical coverage and manual-export instructions, see [Connecting Kraken](../findings/kraken-connection.md). API-key acquisition is implemented; Kraken Connect OAuth and CSV ingestion are proposed follow-ups.
 
@@ -96,10 +96,10 @@ Schema migrations need no new step and remain ordered/idempotent on every Store 
 
 ```sh
 cargo test -p kraken-client
-cargo test -p cli adapters::kraken::tests::
+cargo test -p lib-app adapters::kraken::tests::
 # Private cache-first, strict reconciliation + exact provider-only print:
 nix run .#kraken
-KRAKEN_ACCOUNT_ID=kraken:primary cargo test -p cli adapters::kraken::tests::latest_amount_after_cached_account -- --exact --ignored --nocapture
+KRAKEN_ACCOUNT_ID=kraken:primary cargo test -p lib-app adapters::kraken::tests::latest_amount_after_cached_account -- --exact --ignored --nocapture
 ```
 
 The ignored private test defaults to AccountId `kraken:primary` and uses `.cache/test-data/kraken/<account hash>.json` with `.cache/test-data/kraken/kraken.duckdb`. First run can fetch private data; subsequent runs use the frozen snapshot. It fails on discrepancies, unlike Binance's display-only tests. Ordinary deterministic tests never require Kraken credentials.

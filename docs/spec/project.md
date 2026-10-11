@@ -1,6 +1,6 @@
 # Project context
 
-Money Tracker aims to provide a local-first view of investments, net worth, yield, revenue, and supporting financial evidence. The current implementation is a Rust CLI and libraries, with DuckDB storage and cached provider data. Desktop/mobile dashboards, broader bank/broker/pension coverage, yield comparisons, and jurisdiction-specific tax reports are future goals.
+Money Tracker aims to provide a local-first view of investments, net worth, yield, revenue, and supporting financial evidence. The current implementation is a Rust CLI and libraries, with DuckDB storage and cached provider data. [First-UI stage 1](application-services.md) adds shared application services and exact JSON DTOs; no frontend exists yet. Desktop/mobile dashboards, broader bank/broker/pension coverage, yield comparisons, and jurisdiction-specific tax reports are future goals.
 
 ## Current delivery priority
 
@@ -21,7 +21,8 @@ Local tracking and earnings analysis must remain usable without a subscription. 
 ## Structure and conventions
 
 - `libs/lib-core`: shared domain types, provider traits, balance history, DuckDB storage, and migrations.
-- `apps/cli`: CLI configuration, provider adapters, imports, pricing orchestration, and reconciliation fixtures.
+- `libs/lib-app`: shared application services, exact JSON DTOs, provider adapters and their mapping/reconciliation fixtures.
+- `apps/cli`: CLI configuration and command/price orchestration consuming the shared library.
 - `libs/binance-client`, `libs/kraken-client`, `libs/evm-client`, `libs/coingecko-client`, `libs/nexo-csv`: source-specific acquisition and parsing; adapters own conversion into domain types.
 - Rust, Tokio, Reqwest, Serde, Chrono, and DuckDB underpin the application. Nix and Direnv provide the development environment. Use rustfmt and scoped Cargo tests; consult the repository README for commands and cached/live integration workflows.
 

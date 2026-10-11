@@ -8,9 +8,16 @@ edition = "2024"
 [workspace]
 resolver = "3"
 members = [
-    "libs/*",
-    "apps/*",
-    "demos/*",
+    "libs/lib-core",
+    "libs/lib-app",
+    "libs/utils",
+    "libs/binance-client",
+    "libs/kraken-client",
+    "libs/evm-client",
+    "libs/coingecko-client",
+    "libs/nexo-csv",
+    "apps/cli",
+    "demos/try-polars",
 ]
 
 [workspace.dependencies]
@@ -39,6 +46,7 @@ temp-env = "^0.3"
 derive_more = "^0.99"
 # own libs, patches
 lib-core = { path="./libs/lib-core" }
+lib-app = { path="./libs/lib-app" }
 binance-client = { path="./libs/binance-client" }
 kraken-client = { path="./libs/kraken-client" }
 evm-client = { path="./libs/evm-client" }
@@ -46,6 +54,5 @@ coingecko-client = { path="./libs/coingecko-client" }
 nexo-csv = { path="./libs/nexo-csv" }
 # api-client-utils = { path="./libs/api-client-utils" }
 utils = { path="./libs/utils" }
-typed-ids = { path='../../weekend-projects/rust-libs/typed-ids' }
 # api-client-utils = { git = "ssh://git@github.com/nmrshll/rust-libs.git" }
 # [patch.'ssh://git@github.com/nmrshll/rust-libs.git']

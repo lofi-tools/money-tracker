@@ -37,7 +37,7 @@ Net worth includes user asset balances and subtracts recorded user liabilities. 
 
 ## Binance account reconciliation
 
-See [Exporting historical Binance transactions](docs/findings/binance-history.md) for the website steps, date ranges, cache location and current importer status.
+See the source-grounded [Nexo](docs/spec/nexo.md) and [Binance](docs/spec/binance.md) provider guides for ledger mappings, asset/liability sums, coverage and exact diagnostic commands. [Shared conventions](docs/findings/provider-diagnostics.md) distinguish independent reconciliation from fixture consistency checks. [Exporting historical Binance transactions](docs/findings/binance-history.md) covers the website steps and replay workflow.
 
 To load the cached account and display exact asset balances with progress logs, run `binance` in the Nix dev shell (or `nix run .#binance` from the repository). This runs the ignored `latest_amount_after_cached_statement` test with output visible, like `nexo`. It reads a Binance ZIP or CSV from `.cache/imports`, caches decompressed CSVs under `.cache/test-data/binance/statements`, and imports once into `.cache/test-data/binance/test-binance-statement-v1.duckdb`. Set `BINANCE_STATEMENT=PATH` to select a particular file. It prints transaction-derived totals and any reconciliation differences without failing the display command. The Nexo test DB is also under `.cache/test-data`.
 

@@ -1,20 +1,19 @@
-use crate::Issuer4;
+use crate::{Issuer4, Units};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TxnEffect {
-    /// The account affected by this effect (e.g. "Binance", "WalletA")
+    /// Asset-denominated bucket affected by this effect.
     pub position_id: PositionId,
-    /// The change in balance. Positive for debit (increase?), Negative for credit (decrease?)
-    /// OR: In accounting, Debit is usually positive (assets increase), Credit is negative (assets decrease).
-    /// The design doc says: "Outflow: Negative amount", "Inflow: Positive amount".
-    pub amount: u64,
+    /// Nonnegative exact smallest-unit magnitude; input/output determines the sign.
+    /// Store rejects negative magnitudes before committing any effects.
+    pub amount: Units,
     pub datetime: DateTime<Utc>,
 }
 
-// inside a transaction, inputs and outputs must be balanced (sum of inputs == sum of outputs)
+// Movement consistency is per asset; unlike currencies cannot be numerically summed.
 pub struct TxInput(pub TxnEffect); // An input withdraws from an account
 pub struct TxOutput(pub TxnEffect); // An output deposits into an account
 
@@ -33,17 +32,17 @@ pub struct Transaction {
 /// smallest unit, as represented by `TxEffect::amount`.
 pub fn cumulative_balances(
     transactions: &[Transaction],
-) -> Vec<(DateTime<Utc>, HashMap<PositionId, i128>)> {
+) -> Vec<(DateTime<Utc>, HashMap<PositionId, Units>)> {
     let mut ordered: Vec<&Transaction> = transactions.iter().collect();
     ordered.sort_by_key(|tx| tx.datetime);
-    let mut balances = HashMap::<PositionId, i128>::new();
+    let mut balances = HashMap::<PositionId, Units>::new();
     let mut history = Vec::with_capacity(ordered.len());
     for tx in ordered {
         for effect in &tx.inputs {
-            *balances.entry(effect.position_id.clone()).or_default() -= i128::from(effect.amount);
+            *balances.entry(effect.position_id.clone()).or_default() -= &effect.amount;
         }
         for effect in &tx.outputs {
-            *balances.entry(effect.position_id.clone()).or_default() += i128::from(effect.amount);
+            *balances.entry(effect.position_id.clone()).or_default() += &effect.amount;
         }
         history.push((tx.datetime, balances.clone()));
     }
@@ -68,7 +67,7 @@ mod balance_tests {
                 datetime: later,
                 inputs: vec![TxnEffect {
                     position_id: position.clone(),
-                    amount: 250,
+                    amount: 250.into(),
                     datetime: later,
                 }],
                 outputs: vec![],
@@ -78,7 +77,7 @@ mod balance_tests {
                 inputs: vec![],
                 outputs: vec![TxnEffect {
                     position_id: position.clone(),
-                    amount: 1_000,
+                    amount: 1_000.into(),
                     datetime: earlier,
                 }],
             },
@@ -152,7 +151,7 @@ impl ExternalAssetId {
 
 impl PartialEq for ExternalAssetId {
     fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
+        self.id == other.id && self.issuer_name == other.issuer_name
     }
 }
 
@@ -226,7 +225,7 @@ impl<S: AsRef<str>> From<S> for PositionId {
 pub struct UserPosition {
     pub id: PositionId,
     pub product_id: ProductId,
-    // pub amount: u64,
+    // pub amount: Units,
     pub start_date: Option<DateTime<Utc>>,
     pub end_date: Option<DateTime<Utc>>,
     // pub owner: PositionOwner,
@@ -244,7 +243,7 @@ impl UserPosition {
 pub struct CounterpartyPosition {
     pub id: PositionId,
     pub asset_id: AssetId,
-    // pub amount: u64,
+    // pub amount: Units,
 }
 
 /// Position balance at a specific time
@@ -252,7 +251,7 @@ pub struct CounterpartyPosition {
 pub struct PositionBalance {
     pub position_id: PositionId,
     pub datetime: DateTime<Utc>,
-    pub amount: i128,
+    pub amount: Units,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

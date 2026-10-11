@@ -10,7 +10,7 @@ The product sequence remains **holdings → received/current annual earnings →
 
 Deliverable: a source-grounded proposed design under `docs/spec/`, with a feature-to-model mapping, minimal schema/API changes, phased migrations, and acceptance examples. Start from [current types](../spec/data-model.md) and [persistence](../spec/persistence.md), not the Airtable columns.
 
-Review delivered 11 October 2026 in [proposed data model evolution](../spec/data-model-proposal.md). It includes recommended entities, ingestion/query boundaries, phased migrations and acceptance examples. Checked design-only items below mean a proposed contract is documented, not that the capability is implemented. Implementation remains outstanding; calculation conventions explicitly identified as open must be settled before their phases.
+Review delivered 11 October 2026 in [proposed data model evolution](../spec/data-model-proposal.md). It includes recommended entities, ingestion/query boundaries, phased migrations and acceptance examples. Checked design-only items below mean a proposed contract is documented, not that the capability is implemented. The first portfolio/account and exact-quantity core slice is implemented; broader model work remains outstanding. Calculation conventions explicitly identified as open must be settled before their phases.
 
 - [x] Map every confirmed user question to the data and queries needed to answer it; separate immediate, next-stage, and later requirements.
 - [x] Inventory current persisted versus transient entities, identifiers, amount types, roles, and evidence; document reusable foundations and actual gaps.
@@ -19,7 +19,7 @@ Review delivered 11 October 2026 in [proposed data model evolution](../spec/data
 - [x] Separate held positions/subscriptions from available product offers and researched providers. Do not recreate unused spreadsheet catalogue fields automatically.
 - [x] Define chain-qualified native/token identity and cross-provider asset aliases; distinguish renamed, migrated, wrapped, and receipt assets.
 - [ ] Fix `ExternalAssetId` equality/hash consistency and define persistent source asset mappings.
-- [ ] Choose exact amount/scale semantics that support chain balances beyond the present signed `BIGINT` range; replace Nexo float parsing and define overflow/scale-change behavior.
+- [x] Choose exact amount/scale semantics that support chain balances beyond the present signed `BIGINT` range; replace Nexo float parsing and define overflow/scale-change behavior.
 - [ ] Preserve economic asset/liability/external roles, signed debt, and owned collateral while extending the model; do not rebuild the already implemented role fix.
 - [ ] Preserve event semantics alongside effects: deposits, withdrawals, internal transfers, interest, staking, cashback, bonuses, promotions, fees, loan interest, and recoveries.
 - [ ] Scope source transaction identities and import hashes by connection/account; preserve repeated identical legitimate events and deduplicate overlapping API/CSV records.
@@ -31,28 +31,32 @@ Review delivered 11 October 2026 in [proposed data model evolution](../spec/data
 - [ ] Model composite/share positions and dated underlying conversions without double counting receipt and underlying value.
 - [x] Identify later-compatible boundaries for lock terms, collateral, claims, risk evidence/dependencies, eligibility, and shared access without implementing every later entity now.
 - [x] Define whether source revisions/mapping corrections need an immutable audit trail; current stable-ID effect replacement is not append-only history.
-- [ ] Append any needed ordered idempotent migrations; preserve data/import markers, transactionality, rerun-at-every-open behavior, and rollback/retry acceptance cases.
+- [x] Append ordered idempotent migrations for the first portfolio/account and exact-unit slice; preserve data/import markers, transactionality, rerun-at-every-open behavior, and rollback/retry acceptance cases. Later schema changes must follow the same contract.
 - [ ] Validate the proposed model with meaningful examples: Nexo debt, Binance Earn, Kraken ledger fees, a different-currency reward, partial disposal, changing principal, and a composite DeFi position.
+
+Implemented foundation: portfolio/account records and scoped import/query APIs; arbitrary-precision units; scale conflict rejection; exact Nexo/Binance parsing; migrations 004/005. Existing provider entry points retain legacy IDs. Remaining work includes connections/catalogue asset mappings, product/held-investment metadata, provenance/reconciliation coverage, account selection in application workflows and deliberate legacy source remapping. Cached Nexo/Binance upgrade checks operate on temporary copies.
 
 ## 2. Second: document every existing provider and acquisition source
 
 Deliverable: a consistent provider/source guide with verified code paths and runnable provider-only commands. These documents describe current behavior and limitations, not planned support as completed.
 
-- [ ] Define a common provider-guide structure: supported accounts/products, data sources/endpoints/files, source fields/IDs, timezones/precision, position roles, transaction-effect mappings, independent balances, coverage, price inputs, tests, and known gaps.
-- [ ] Document Nexo CSV acquisition, configurable input, exact-byte hash imports, stable IDs, aggregate asset positions, credit liabilities, duplicate draw handling, and unsupported product detail.
-- [ ] Document Binance API and statement/ZIP paths, account families, trade/fee/transfer/reward mappings, overlap deduplication, legacy Savings evidence, independent observations, cache layout, and rate limits.
+- [x] Define a common provider-guide structure: supported accounts/products, data sources/endpoints/files, source fields/IDs, timezones/precision, position roles, transaction-effect mappings, independent balances, coverage, price inputs, tests, and known gaps. See [provider conventions](../findings/provider-diagnostics.md).
+- [x] Document Nexo CSV acquisition, configurable input, exact-byte hash imports, stable IDs, aggregate asset positions, credit liabilities, duplicate draw handling, and unsupported product detail. See [Nexo](../spec/nexo.md).
+- [x] Document Binance API and statement/ZIP paths, account families, trade/fee/transfer/reward mappings, overlap deduplication, legacy Savings evidence, independent observations, cache layout, and rate limits. See [Binance](../spec/binance.md).
 - [ ] Document CoinGecko current/recent history and fiat cross-rate handling as a **price source**, not an account integration.
 - [ ] Document Binance Vision archive closes, pair/month caches, unavailable periods, and USDT proxy assumptions as a price source.
 - [ ] Document KuCoin candle, ECB FX, POL/MATIC alias, and Nexo export-implied pricing fallbacks, including provenance and approximation limits.
-- [ ] Add source-record → normalized event → persisted signed effects examples for representative provider operations, including fees in a third asset and debt activity.
-- [ ] Explain asset sums by cutoff/scale/role, liabilities separately, and net-worth inclusion/exclusion; show why counterparties are not user debt.
-- [ ] Record which balance checks are independent and which merely confirm source-to-ledger consistency; do not label CSV self-comparison as independent reconciliation.
-- [ ] Inventory existing provider-only print tests and Nix wrappers. Nexo already has `latest_amount_after_cached_export`; Binance has `latest_amount_after_cached_account` and the statement display path used by `nix run .#binance`.
+- [x] Add source-record → normalized event → persisted signed effects examples for representative provider operations, including fees in a third asset and debt activity.
+- [x] Explain asset sums by cutoff/scale/role, liabilities separately, and net-worth inclusion/exclusion; show why counterparties are not user debt.
+- [x] Record which balance checks are independent and which merely confirm source-to-ledger consistency; do not label CSV self-comparison as independent reconciliation.
+- [x] Inventory existing provider-only print tests and Nix wrappers. Nexo has `latest_amount_after_cached_export`; Binance has `latest_amount_after_cached_account` and the statement display path used by `nix run .#binance`.
 - [ ] Standardize a provider-only diagnostic/print workflow: provider/account selection, exact balances, liability totals, cutoff, reconciliation warnings, import/cache progress, and offline replay.
 - [ ] Ensure provider diagnostics remain scoped to that provider in a mixed database; add meaningful multi-provider isolation verification.
-- [ ] Document commands, initial API-key/CSV prerequisites, persisted fixture DBs, frozen observations, ignored/live test behavior, and safe anonymized fixtures.
+- [x] Document commands, initial API-key/CSV prerequisites, persisted fixture DBs, frozen observations, ignored/live test behavior, and synthetic/private fixture boundaries for Nexo and Binance.
 - [ ] Link directly to export pages when verified, with format/date-range/timezone guidance and account coverage limitations.
 - [ ] Add the same guide and diagnostics to every new connector as part of its completion criteria.
+
+Source review findings: Nexo has no independent balance reconciliation and ignores generic CSV fee columns; Binance covers no debt account family. Current print queries are unscoped and rely on separate fixture DBs. The Nexo print test uses a fixed private export and approximate display with legacy expected balances. Binance display success does not assert reconciliation. Both adapters retain legacy provider-wide IDs. These limits are documented in the guides; account-scoped diagnostics, source provenance, reconciliation status and broader product/debt modeling remain covered by the existing model/diagnostic tasks above.
 
 ## 3. Third: implement Kraken
 

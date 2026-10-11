@@ -2,6 +2,8 @@
 
 Implemented behavior. Remaining expansion work is tracked in [the master todo list](../todo/master-todo.md).
 
+For code paths, endpoint coverage, source-to-ledger mappings, cache layouts and exact commands, see [the Binance provider guide](binance.md).
+
 ## Requirements
 
 ### Requirement: Binance ledger mapping
@@ -36,11 +38,13 @@ The cached reconciliation test SHALL fetch real data on its first run using envi
 
 
 ### Requirement: Cached Binance balance display
-An ignored test SHALL reuse the raw snapshot and persistent test DB, report fetch/cache and import progress, and display exact owned asset totals derived from transactions without asserting reconciliation. A Nix `binance` command SHALL run this test with output visible. The output SHALL indicate that missing history can affect these totals.
+The ignored `latest_amount_after_cached_account` test SHALL reuse the full API snapshot and persistent API test DB, report fetch/cache and import progress, and display exact owned asset totals derived from transactions without asserting reconciliation. Its output SHALL indicate that missing history can affect these totals.
+
+The Nix `binance` command SHALL instead run `latest_amount_after_cached_statement` with output visible. It SHALL import the selected CSV/ZIP and supported Earn supplement into the statement test DB, compare with independently cached API positions and print discrepancies without failing merely because quantities disagree. Structural/import/cutoff errors SHALL still fail. `cached_binance_statement_reconciles` SHALL enforce exact balance agreement.
 
 #### Scenario: Display imported totals
-- **WHEN** the user runs `binance` with a completed test DB import
-- **THEN** the test reports DB reuse and prints asset balances without fetching or reimporting transactions
+- **WHEN** the user runs `binance` with completed statement/supplement imports and matching cached references
+- **THEN** it reuses those imports and references, prints exact asset balances and reports any discrepancy without a new API fetch
 
 
 ### Requirement: Binance backpressure

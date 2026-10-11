@@ -26,6 +26,14 @@ const MIGRATIONS: &[Migration] = &[
         name: "003_legacy_price_coverage",
         apply: legacy_price_coverage,
     },
+    Migration {
+        name: "004_exact_units",
+        apply: exact_units,
+    },
+    Migration {
+        name: "005_portfolio_accounts",
+        apply: portfolio_accounts,
+    },
 ];
 
 /// Run every migration in order before the Store becomes available. Each step
@@ -137,6 +145,54 @@ fn legacy_price_coverage(connection: &Connection) -> anyhow::Result<()> {
     Ok(())
 }
 
+// 004: Preserve every signed legacy coefficient without passing through floating point.
+fn exact_units(connection: &Connection) -> anyhow::Result<()> {
+    let kind: String = connection.query_row(
+        "SELECT type FROM pragma_table_info('transaction_effects') WHERE name='amount'",
+        [],
+        |row| row.get(0),
+    )?;
+    if kind != "VARCHAR" {
+        anyhow::ensure!(
+            kind == "BIGINT",
+            "unsupported legacy amount type {kind}; refusing lossy conversion"
+        );
+        connection.execute_batch("ALTER TABLE transaction_effects ALTER COLUMN amount TYPE VARCHAR USING CAST(amount AS VARCHAR)")?;
+    }
+    Ok(())
+}
+
+// 005: Backfill only recognized namespaces; arbitrary legacy positions remain labelled unresolved.
+fn portfolio_accounts(connection: &Connection) -> anyhow::Result<()> {
+    connection.execute_batch(
+        "CREATE TABLE IF NOT EXISTS portfolios (id VARCHAR PRIMARY KEY, label VARCHAR NOT NULL, reporting_asset_id VARCHAR NOT NULL);
+         CREATE TABLE IF NOT EXISTS accounts (id VARCHAR PRIMARY KEY, portfolio_id VARCHAR NOT NULL, provider_id VARCHAR NOT NULL, label VARCHAR NOT NULL, source_reference VARCHAR);
+         INSERT OR IGNORE INTO portfolios VALUES ('local:default', 'Local portfolio', 'USD');",
+    )?;
+    let has_account: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('positions') WHERE name='account_id')",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_account {
+        connection.execute_batch("ALTER TABLE positions ADD COLUMN account_id VARCHAR")?;
+    }
+    let mut statement = connection.prepare("SELECT position_id FROM positions WHERE role IN ('asset', 'liability') AND account_id IS NULL")?;
+    let positions = statement
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    for position in positions {
+        let account = crate::identity::legacy_account(&position);
+        connection.execute("INSERT OR IGNORE INTO accounts (id, portfolio_id, provider_id, label, source_reference) VALUES (?, ?, ?, ?, ?)",
+            params![account.id.0, account.portfolio_id.0, account.provider_id.0, account.label, account.source_reference])?;
+        connection.execute(
+            "UPDATE positions SET account_id=? WHERE position_id=? AND account_id IS NULL",
+            params![account.id.0, position],
+        )?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,7 +207,7 @@ mod tests {
         {
             let connection = Connection::open(&path)?;
             connection.execute_batch(
-                "INSERT INTO positions VALUES ('NEXO-CREDIT:explicit', 'ETH', false, 'external');
+                "INSERT INTO positions (position_id, asset_id, owned, role) VALUES ('NEXO-CREDIT:explicit', 'ETH', false, 'external');
                  INSERT INTO asset_prices VALUES ('2025-01-01', 'ETH', 'USD', 100), ('2025-01-02', 'ETH', 'USD', 101);
                  INSERT INTO imported_files VALUES ('NEXO', 'original', 3, '2025-01-01');",
             )?;

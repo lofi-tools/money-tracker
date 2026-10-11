@@ -1,4 +1,6 @@
 //! Map Nexo's parsed CSV transactions into the core ledger.
+use lib_core::Units;
+use rust_decimal::{Decimal, prelude::ToPrimitive};
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -38,9 +40,10 @@ pub enum NexoImportOutcome {
 #[derive(Debug, Snafu)]
 pub enum NexoMapError {
     #[snafu(display("invalid Nexo asset amount {amount}"))]
-    InvalidAmount { amount: f64 },
-    #[snafu(display("Nexo asset amount {amount} exceeds the ledger range"))]
-    AmountTooLarge { amount: f64 },
+    InvalidAmount {
+        amount: Decimal,
+        source: anyhow::Error,
+    },
 }
 
 pub struct NexoSvc {
@@ -131,7 +134,7 @@ fn implied_nexo_prices_from_rows(rows: &[NexoTx], range: PriceRange) -> Vec<Asse
     let mut by_time: BTreeMap<_, (f64, f64)> = BTreeMap::new();
     for row in rows {
         if row.output_currency != "NEXO"
-            || row.output_amount <= 0.0
+            || row.output_amount <= Decimal::ZERO
             || row.date_time_utc >= range.to
         {
             continue;
@@ -151,7 +154,7 @@ fn implied_nexo_prices_from_rows(rows: &[NexoTx], range: PriceRange) -> Vec<Asse
         }
         let entry = by_time.entry(row.date_time_utc).or_default();
         entry.0 += usd;
-        entry.1 += row.output_amount;
+        entry.1 += row.output_amount.to_f64().unwrap_or(f64::NAN);
     }
     let mut points = Vec::new();
     for (datetime, (usd, amount)) in by_time {
@@ -272,15 +275,9 @@ fn map_rows(
     Ok((assets, transactions))
 }
 
-fn units(amount: f64) -> Result<u64, NexoMapError> {
-    if !amount.is_finite() || amount < 0.0 {
-        return Err(NexoMapError::InvalidAmount { amount });
-    }
-    let scaled = (amount * 100_000_000.0).round();
-    if scaled > i64::MAX as f64 {
-        return Err(NexoMapError::AmountTooLarge { amount });
-    }
-    Ok(scaled as u64)
+fn units(amount: Decimal) -> Result<Units, NexoMapError> {
+    Units::from_decimal(&amount.to_string(), CSV_DECIMALS)
+        .map_err(|source| NexoMapError::InvalidAmount { amount, source })
 }
 
 /// Rows that move funds within the credit-line (loan) domain rather than
@@ -301,7 +298,7 @@ fn is_credit_domain(row: &NexoTx) -> bool {
         | ReferralBonus
         | Dividend
         | TopUpCrypto
-        | TransferFromProWallet => row.input_amount < 0.0,
+        | TransferFromProWallet => row.input_amount < Decimal::ZERO,
         _ => false,
     }
 }
@@ -309,7 +306,7 @@ fn is_credit_domain(row: &NexoTx) -> bool {
 /// xUSD debt accrued by one loan-domain row (drawdowns, card fees and loan
 /// interest all convert 1:1 to xUSD debt). Duplicate draw records, merchant
 /// spends of already-drawn cash and off-ledger USD annotations accrue 0.
-fn xusd_debt_accrued(row: &NexoTx) -> f64 {
+fn xusd_debt_accrued(row: &NexoTx) -> Decimal {
     use TransactionType::*;
     let fiatx = ["USDX", "xUSD"];
     match row.kind {
@@ -329,13 +326,13 @@ fn xusd_debt_accrued(row: &NexoTx) -> f64 {
         | Dividend
         | TopUpCrypto
         | TransferFromProWallet => {
-            if row.input_amount < 0.0 {
+            if row.input_amount < Decimal::ZERO {
                 row.output_amount
             } else {
-                0.0
+                Decimal::ZERO
             }
         }
-        _ => 0.0,
+        _ => Decimal::ZERO,
     }
 }
 
@@ -344,14 +341,14 @@ fn convert_row(
     assets: &mut BTreeMap<String, bool>,
 ) -> Result<Transaction, NexoMapError> {
     let credit = is_credit_domain(row);
-    let mut changes: Vec<(&str, f64)> = Vec::new();
+    let mut changes: Vec<(&str, Decimal)> = Vec::new();
     use TransactionType::*;
     if credit {
         // Credit-line domain: only the xUSD debt accrual counts, recorded
         // as money owed (negative). Duplicate draw records, spends of drawn
         // cash and merchant-fx legs accrue 0.
         let debt = xusd_debt_accrued(row);
-        if debt != 0.0 {
+        if debt != Decimal::ZERO {
             changes.push(("xUSD", -debt));
         }
     } else {
@@ -366,7 +363,7 @@ fn convert_row(
             | TransferFromProWallet => {
                 // Negative inputs are loan-domain (see is_credit_domain) and
                 // never reach this savings branch.
-                let amount = if row.output_amount == 0.0 {
+                let amount = if row.output_amount == Decimal::ZERO {
                     row.input_amount
                 } else {
                     row.output_amount
@@ -382,7 +379,7 @@ fn convert_row(
                 changes.push((&row.input_currency, -row.input_amount.abs()));
                 // Void/legacy rows record 0 output for a same-value conversion
                 // (e.g. 2023 fiat top-ups); credit 1:1 instead of nothing.
-                let out = if row.output_amount == 0.0 {
+                let out = if row.output_amount == Decimal::ZERO {
                     row.input_amount.abs()
                 } else {
                     row.output_amount
@@ -410,7 +407,7 @@ fn convert_row(
         outputs: Vec::new(),
     };
     for (ticker, change) in changes {
-        if change == 0.0 {
+        if change == Decimal::ZERO {
             continue;
         }
         assets
@@ -427,7 +424,7 @@ fn convert_row(
             amount: units(change.abs())?,
             datetime: row.date_time_utc,
         };
-        if change < 0.0 {
+        if change < Decimal::ZERO {
             transaction.inputs.push(effect);
         } else {
             transaction.outputs.push(effect);
@@ -522,7 +519,7 @@ mod tests {
                 outputs: vec![TxnEffect {
                     position_id: external,
                     datetime: end,
-                    amount: 50_000_000_000,
+                    amount: 50_000_000_000u64.into(),
                 }],
             },
         )?;
@@ -532,7 +529,7 @@ mod tests {
         );
         assert_eq!(
             store.credit_units_at(end)?,
-            vec![(AssetId::str("xUSD"), -2_150_000_000)]
+            vec![(AssetId::str("xUSD"), (-2_150_000_000i64).into())]
         );
         let history = store.total_value_history(&usd)?;
         assert_eq!(
@@ -677,12 +674,12 @@ mod tests {
         // while GBP 7219002 units (£0.07219002) is a genuine remainder from
         // the 2023-11-10 convert-and-withdraw (GBP 990.71 -> £990.78219002,
         // withdrew £990.71). No arithmetic makes it zero.
-        let owned_units: BTreeMap<String, i128> = store
+        let owned_units: BTreeMap<String, Units> = store
             .asset_units_at(end)?
             .into_iter()
             .map(|(asset, n)| (asset.0, n))
             .collect();
-        let expected_units: BTreeMap<String, i128> = [
+        let expected_units: BTreeMap<String, Units> = [
             ("BNB", 3737181767),
             ("BTC", 0),
             ("DOT", 224774400873),
@@ -700,7 +697,7 @@ mod tests {
             ("USDX", 156000000),
         ]
         .into_iter()
-        .map(|(ticker, units)| (ticker.to_string(), units))
+        .map(|(ticker, units): (&str, i128)| (ticker.to_string(), Units::from(units)))
         .collect();
         assert_eq!(owned_units, expected_units);
         // Credit line: every card spend was converted immediately to xUSD
@@ -708,7 +705,7 @@ mod tests {
         // independently from the rows: drawdowns (USDX/xUSD loan inputs) +
         // card fees = principal 1357.92, loan-interest outputs = 83.64,
         // total draft -1441.56.
-        let (mut principal, mut loan_interest) = (0.0, 0.0);
+        let (mut principal, mut loan_interest) = (Decimal::ZERO, Decimal::ZERO);
         for row in &rows {
             use TransactionType::*;
             let fiatx = ["USDX", "xUSD"];
@@ -727,26 +724,29 @@ mod tests {
                 | Dividend
                 | TopUpCrypto
                 | TransferFromProWallet
-                    if row.input_amount < 0.0 =>
+                    if row.input_amount < Decimal::ZERO =>
                 {
                     loan_interest += row.output_amount;
                 }
                 _ => {}
             }
         }
-        assert!((principal - 1357.92).abs() < 1e-6, "principal {principal}");
         assert!(
-            (loan_interest - 83.64).abs() < 1e-6,
+            (principal.to_f64().unwrap() - 1357.92).abs() < 1e-6,
+            "principal {principal}"
+        );
+        assert!(
+            (loan_interest.to_f64().unwrap() - 83.64).abs() < 1e-6,
             "interest {loan_interest}"
         );
-        let credit_units: BTreeMap<String, i128> = store
+        let credit_units: BTreeMap<String, Units> = store
             .credit_units_at(end)?
             .into_iter()
             .map(|(asset, n)| (asset.0, n))
             .collect();
-        let expected_credit: BTreeMap<String, i128> = [("xUSD", -144156000000)]
+        let expected_credit: BTreeMap<String, Units> = [("xUSD", -144156000000)]
             .into_iter()
-            .map(|(ticker, units)| (ticker.to_string(), units))
+            .map(|(ticker, units): (&str, i128)| (ticker.to_string(), Units::from(units)))
             .collect();
         assert_eq!(credit_units, expected_credit);
         Ok(())
@@ -893,6 +893,26 @@ mod tests {
             store.asset_amounts_at(at)?,
             vec![(AssetId::str("ETH"), 2.0)]
         );
+        Ok(())
+    }
+    #[test]
+    fn exact_import_retains_large_decimal_units_and_rejects_rounding() -> anyhow::Result<()> {
+        let store = Store::in_memory()?;
+        let row = NexoTx::try_from_csv_row(
+            "exact,Top up Crypto,ETH,123456789012345678.12345678,ETH,123456789012345678.12345678,$1,-,-,deposit,2025-01-01 00:00:00",
+        )?;
+        import_nexo_rows(&store, &[row])?;
+        assert_eq!(
+            store.asset_units_at(DateTime::from_timestamp(1735689600, 0).unwrap())?[0]
+                .1
+                .to_string(),
+            "12345678901234567812345678"
+        );
+        let row = NexoTx::try_from_csv_row(
+            "precision,Top up Crypto,ETH,0.000000001,ETH,0.000000001,$1,-,-,deposit,2025-01-01 00:00:00",
+        )?;
+        assert!(import_nexo_rows(&store, &[row]).is_err());
+        assert!(NexoTx::try_from_csv_row("precision,Top up Crypto,ETH,0.00000000000000000000000000001,ETH,0.00000000000000000000000000001,$1,-,-,deposit,2025-01-01 00:00:00").is_err());
         Ok(())
     }
 }

@@ -1,9 +1,12 @@
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::Path,
+};
 
 use crate::history::AssetPricePoint;
 use crate::{
-    AssetId, PositionBalance, PositionId, PositionRole, Product, ProductId, Transaction,
-    TransactionId, UserPosition,
+    Account, AccountId, AssetId, Portfolio, PortfolioId, PositionBalance, PositionId, PositionRole,
+    Product, ProductId, Transaction, TransactionId, Units, UserPosition,
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
 use duckdb::{Connection, params};
@@ -49,20 +52,225 @@ impl Store {
         asset_id: &AssetId,
         role: PositionRole,
     ) -> anyhow::Result<()> {
-        self.connection.execute(
-            "INSERT OR REPLACE INTO positions (position_id, asset_id, owned, role) VALUES (?, ?, ?, ?)",
-            params![position_id.0, asset_id.0.as_str(), role == PositionRole::Asset, role.as_str()],
-        )?;
+        Self::register_position(&self.connection, position_id, asset_id, role, None)
+    }
+
+    fn register_position(
+        connection: &Connection,
+        position: &PositionId,
+        asset: &AssetId,
+        role: PositionRole,
+        account: Option<&AccountId>,
+    ) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            !position.0.is_empty() && !asset.0.is_empty(),
+            "empty position/asset ID"
+        );
+        let existing: Vec<(String, String, Option<String>)> = connection
+            .prepare("SELECT asset_id, role, account_id FROM positions WHERE position_id=?")?
+            .query_map([&position.0], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<Result<_, _>>()?;
+        if let Some((old_asset, old_role, old_account)) = existing.first() {
+            anyhow::ensure!(
+                old_asset == &asset.0 && old_role == role.as_str(),
+                "position identity/role conflict: {}",
+                position.0
+            );
+            if let Some(account) = account {
+                anyhow::ensure!(
+                    old_account.as_ref() == Some(&account.0),
+                    "position account conflict: {}",
+                    position.0
+                );
+            }
+            return Ok(());
+        }
+        let account_id = if role == PositionRole::ExternalCounterparty {
+            anyhow::ensure!(
+                account.is_none(),
+                "external counterparties cannot be owned accounts"
+            );
+            None
+        } else if let Some(account) = account {
+            let exists: bool = connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM accounts WHERE id=?)",
+                [&account.0],
+                |r| r.get(0),
+            )?;
+            anyhow::ensure!(exists, "unknown account {}", account.0);
+            Some(account.0.clone())
+        } else {
+            let account = crate::identity::legacy_account(&position.0);
+            connection.execute("INSERT OR IGNORE INTO accounts (id, portfolio_id, provider_id, label, source_reference) VALUES (?, ?, ?, ?, ?)",
+                params![account.id.0, account.portfolio_id.0, account.provider_id.0, account.label, account.source_reference])?;
+            Some(account.id.0)
+        };
+        connection.execute("INSERT INTO positions (position_id, asset_id, owned, role, account_id) VALUES (?, ?, ?, ?, ?)",
+            params![position.0, asset.0, role == PositionRole::Asset, role.as_str(), account_id])?;
         Ok(())
     }
 
-    /// Record the ledger scale for an asset (the CSV importer uses 8 decimals).
+    /// Repeat registrations are safe; changing scale requires a separate explicit conversion.
     pub fn save_asset_scale(&self, asset_id: &AssetId, decimals: u8) -> anyhow::Result<()> {
-        self.connection.execute(
-            "INSERT OR REPLACE INTO asset_scales VALUES (?, ?)",
-            params![asset_id.0.as_str(), i32::from(decimals)],
+        Self::register_scale(&self.connection, asset_id, decimals)
+    }
+
+    fn register_scale(connection: &Connection, asset: &AssetId, scale: u8) -> anyhow::Result<()> {
+        connection.execute(
+            "INSERT OR IGNORE INTO asset_scales (asset_id, decimals) VALUES (?, ?)",
+            params![asset.0, i32::from(scale)],
         )?;
+        let existing: i32 = connection.query_row(
+            "SELECT decimals FROM asset_scales WHERE asset_id=?",
+            [&asset.0],
+            |r| r.get(0),
+        )?;
+        anyhow::ensure!(
+            existing == i32::from(scale),
+            "asset scale conflict for {}: stored {existing}, requested {scale}",
+            asset.0
+        );
         Ok(())
+    }
+
+    pub fn save_portfolio(&self, portfolio: &Portfolio) -> anyhow::Result<()> {
+        anyhow::ensure!(!portfolio.id.0.is_empty(), "empty portfolio ID");
+        self.connection.execute("INSERT INTO portfolios (id, label, reporting_asset_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET label=excluded.label, reporting_asset_id=excluded.reporting_asset_id",
+            params![portfolio.id.0, portfolio.label, portfolio.reporting_asset.0])?;
+        Ok(())
+    }
+
+    pub fn portfolios(&self) -> anyhow::Result<Vec<Portfolio>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT id, label, reporting_asset_id FROM portfolios ORDER BY id")?;
+        Ok(statement
+            .query_map([], |r| {
+                Ok(Portfolio {
+                    id: PortfolioId(r.get(0)?),
+                    label: r.get(1)?,
+                    reporting_asset: AssetId(r.get(2)?),
+                })
+            })?
+            .collect::<Result<_, _>>()?)
+    }
+
+    pub fn save_account(&self, account: &Account) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            !account.id.0.is_empty() && !account.provider_id.0.is_empty(),
+            "empty account/provider ID"
+        );
+        let tx = self.connection.unchecked_transaction()?;
+        let exists: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM portfolios WHERE id=?)",
+            [&account.portfolio_id.0],
+            |r| r.get(0),
+        )?;
+        anyhow::ensure!(exists, "unknown portfolio {}", account.portfolio_id.0);
+        tx.execute("INSERT OR IGNORE INTO accounts (id, portfolio_id, provider_id, label, source_reference) VALUES (?, ?, ?, ?, ?)", params![account.id.0, account.portfolio_id.0, account.provider_id.0, account.label, account.source_reference])?;
+        let (portfolio, provider): (String, String) = tx.query_row(
+            "SELECT portfolio_id, provider_id FROM accounts WHERE id=?",
+            [&account.id.0],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        anyhow::ensure!(
+            portfolio == account.portfolio_id.0 && provider == account.provider_id.0,
+            "account ownership/provider conflict"
+        );
+        tx.execute(
+            "UPDATE accounts SET label=?, source_reference=? WHERE id=?",
+            params![account.label, account.source_reference, account.id.0],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn accounts(&self, portfolio: &PortfolioId) -> anyhow::Result<Vec<Account>> {
+        let mut statement = self.connection.prepare("SELECT id, provider_id, label, source_reference FROM accounts WHERE portfolio_id=? ORDER BY id")?;
+        Ok(statement
+            .query_map([&portfolio.0], |r| {
+                Ok(Account {
+                    id: AccountId(r.get(0)?),
+                    portfolio_id: portfolio.clone(),
+                    provider_id: crate::ProviderId(r.get(1)?),
+                    label: r.get(2)?,
+                    source_reference: r.get(3)?,
+                })
+            })?
+            .collect::<Result<_, _>>()?)
+    }
+
+    /// Canonical position ID for an account-local source reference.
+    pub fn account_position_id(account: &AccountId, source_id: &PositionId) -> PositionId {
+        PositionId(crate::identity::scoped_id(
+            account,
+            "position",
+            &source_id.0,
+        ))
+    }
+
+    pub fn has_account_imported_file(
+        &self,
+        account: &AccountId,
+        source: &str,
+        hash: &str,
+    ) -> anyhow::Result<bool> {
+        self.has_imported_file(&crate::identity::scoped_id(account, "source", source), hash)
+    }
+
+    pub fn account_balance_observations(
+        &self,
+        account: &AccountId,
+        source: &str,
+        hash: &str,
+    ) -> anyhow::Result<Vec<PositionBalance>> {
+        self.balance_observations(&crate::identity::scoped_id(account, "source", source), hash)
+    }
+
+    /// Namespace positions, transaction IDs and file markers by stable account identity.
+    /// Legacy provider-wide helpers retain their old IDs for backwards-compatible replay.
+    pub fn save_account_import(
+        &self,
+        account: &AccountId,
+        source: &str,
+        hash: &str,
+        positions: &[(PositionId, AssetId, u8, PositionRole)],
+        transactions: &[(String, Transaction)],
+        observations: &[PositionBalance],
+    ) -> anyhow::Result<bool> {
+        let position_id =
+            |id: &PositionId| PositionId(crate::identity::scoped_id(account, "position", &id.0));
+        let positions: Vec<_> = positions
+            .iter()
+            .map(|(p, a, s, r)| (position_id(p), a.clone(), *s, *r))
+            .collect();
+        let transactions: Vec<_> = transactions
+            .iter()
+            .map(|(id, t)| {
+                let mut t = t.clone();
+                for effect in t.inputs.iter_mut().chain(t.outputs.iter_mut()) {
+                    effect.position_id = position_id(&effect.position_id);
+                }
+                (crate::identity::scoped_id(account, "transaction", id), t)
+            })
+            .collect();
+        let observations: Vec<_> = observations
+            .iter()
+            .map(|o| PositionBalance {
+                position_id: position_id(&o.position_id),
+                datetime: o.datetime,
+                amount: o.amount.clone(),
+            })
+            .collect();
+        self.import_with_account(
+            &crate::identity::scoped_id(account, "source", source),
+            hash,
+            &positions,
+            &transactions,
+            &observations,
+            Some(account),
+            |_, _| {},
+        )
     }
 
     /// Persist a transaction and signed effects atomically. `id` should be the
@@ -119,9 +327,38 @@ impl Store {
         asset_positions: &[(PositionId, AssetId, u8, PositionRole)],
         transactions: &[(String, Transaction)],
         observations: &[PositionBalance],
+        on_progress: impl FnMut(usize, usize),
+    ) -> anyhow::Result<bool> {
+        self.import_with_account(
+            source,
+            content_hash,
+            asset_positions,
+            transactions,
+            observations,
+            None,
+            on_progress,
+        )
+    }
+
+    fn import_with_account(
+        &self,
+        source: &str,
+        content_hash: &str,
+        asset_positions: &[(PositionId, AssetId, u8, PositionRole)],
+        transactions: &[(String, Transaction)],
+        observations: &[PositionBalance],
+        account: Option<&AccountId>,
         mut on_progress: impl FnMut(usize, usize),
     ) -> anyhow::Result<bool> {
         let tx = self.connection.unchecked_transaction()?;
+        if let Some(account) = account {
+            let exists: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM accounts WHERE id=?)",
+                [&account.0],
+                |r| r.get(0),
+            )?;
+            anyhow::ensure!(exists, "unknown account {}", account.0);
+        }
         let already_imported: bool = tx.query_row(
             "SELECT EXISTS(SELECT 1 FROM imported_files WHERE source=? AND content_hash=?)",
             params![source, content_hash],
@@ -131,19 +368,23 @@ impl Store {
             return Ok(false);
         }
         for (position, asset, decimals, role) in asset_positions {
-            tx.execute(
-                "INSERT OR REPLACE INTO asset_scales VALUES (?, ?)",
-                params![asset.0.as_str(), i32::from(*decimals)],
-            )?;
-            tx.execute(
-                "INSERT OR REPLACE INTO positions (position_id, asset_id, owned, role) VALUES (?, ?, ?, ?)",
-                params![position.0.as_str(), asset.0.as_str(), *role == PositionRole::Asset, role.as_str()],
+            Self::register_scale(&tx, asset, *decimals)?;
+            Self::register_position(
+                &tx,
+                position,
+                asset,
+                *role,
+                if *role == PositionRole::ExternalCounterparty {
+                    None
+                } else {
+                    account
+                },
             )?;
         }
         Self::write_transactions(&tx, transactions, &mut on_progress)?;
         for balance in observations {
             tx.execute(
-                "INSERT INTO balance_observations VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO balance_observations (source, content_hash, position_id, datetime, amount) VALUES (?, ?, ?, ?, ?)",
                 params![
                     source,
                     content_hash,
@@ -154,7 +395,7 @@ impl Store {
             )?;
         }
         tx.execute(
-            "INSERT INTO imported_files VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+            "INSERT INTO imported_files (source, content_hash, transaction_count, completed_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
             params![source, content_hash, i64::try_from(transactions.len())?],
         )?;
         tx.commit()?;
@@ -217,7 +458,7 @@ impl Store {
     ) -> anyhow::Result<()> {
         for (index, (id, transaction)) in transactions.iter().enumerate() {
             tx.execute(
-                "INSERT OR REPLACE INTO transactions VALUES (?, ?)",
+                "INSERT OR REPLACE INTO transactions (id, datetime) VALUES (?, ?)",
                 params![id, transaction.datetime.naive_utc()],
             )?;
             tx.execute(
@@ -227,13 +468,23 @@ impl Store {
             for (order, (effect, sign)) in transaction
                 .inputs
                 .iter()
-                .map(|e| (e, -1i64))
-                .chain(transaction.outputs.iter().map(|e| (e, 1i64)))
+                .map(|e| (e, -1i32))
+                .chain(transaction.outputs.iter().map(|e| (e, 1i32)))
                 .enumerate()
             {
-                let amount = i64::try_from(effect.amount)? * sign;
+                anyhow::ensure!(
+                    !effect.amount.is_negative(),
+                    "effect magnitude must be nonnegative"
+                );
+                let exists: bool = tx.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM positions WHERE position_id=?)",
+                    [&effect.position_id.0],
+                    |r| r.get(0),
+                )?;
+                anyhow::ensure!(exists, "unknown effect position {}", effect.position_id.0);
+                let amount = (&effect.amount * sign).to_string();
                 tx.execute(
-                    "INSERT INTO transaction_effects VALUES (?, ?, ?, ?)",
+                    "INSERT INTO transaction_effects (transaction_id, position_id, amount, effect_order) VALUES (?, ?, ?, ?)",
                     params![id, effect.position_id.0, amount, i32::try_from(order)?],
                 )?;
             }
@@ -430,19 +681,70 @@ impl Store {
     }
 
     pub fn balances_at(&self, datetime: DateTime<Utc>) -> anyhow::Result<Vec<PositionBalance>> {
-        let mut statement = self.connection.prepare(
-            "SELECT e.position_id, SUM(e.amount)::BIGINT FROM transaction_effects e JOIN transactions t ON t.id=e.transaction_id JOIN positions p ON p.position_id=e.position_id WHERE t.datetime <= ? AND p.role = 'asset' GROUP BY e.position_id ORDER BY e.position_id",
+        self.position_balances_at(datetime, None, None)
+    }
+
+    pub fn portfolio_balances_at(
+        &self,
+        portfolio: &PortfolioId,
+        datetime: DateTime<Utc>,
+    ) -> anyhow::Result<Vec<PositionBalance>> {
+        self.position_balances_at(datetime, Some(portfolio), None)
+    }
+
+    /// Signed asset and liability buckets for one account; counterparties are excluded.
+    pub fn account_balances_at(
+        &self,
+        account: &AccountId,
+        datetime: DateTime<Utc>,
+    ) -> anyhow::Result<Vec<PositionBalance>> {
+        self.position_balances_at(datetime, None, Some(account))
+    }
+
+    fn position_balances_at(
+        &self,
+        datetime: DateTime<Utc>,
+        portfolio: Option<&PortfolioId>,
+        account: Option<&AccountId>,
+    ) -> anyhow::Result<Vec<PositionBalance>> {
+        let mut statement = self.connection.prepare("SELECT e.position_id, e.amount FROM transaction_effects e JOIN transactions t ON t.id=e.transaction_id JOIN positions p ON p.position_id=e.position_id LEFT JOIN accounts a ON a.id=p.account_id WHERE t.datetime<=? AND p.role IN ('asset','liability') AND (? IS NOT NULL OR p.role='asset') AND (? IS NULL OR a.portfolio_id=?) AND (? IS NULL OR p.account_id=?) ORDER BY e.position_id")?;
+        let filter = portfolio.map(|p| p.0.as_str());
+        let account_filter = account.map(|a| a.0.as_str());
+        let rows = statement.query_map(
+            params![
+                datetime.naive_utc(),
+                account_filter,
+                filter,
+                filter,
+                account_filter,
+                account_filter
+            ],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
         )?;
-        let rows = statement.query_map([datetime.naive_utc()], |row| {
-            let position_id: String = row.get(0)?;
-            let amount: i64 = row.get(1)?;
-            Ok(PositionBalance {
-                position_id: PositionId(position_id),
+        let mut sums = BTreeMap::<String, Units>::new();
+        for row in rows {
+            let (id, amount) = row?;
+            *sums.entry(id).or_default() += amount.parse::<Units>()?;
+        }
+        Ok(sums
+            .into_iter()
+            .map(|(id, amount)| PositionBalance {
+                position_id: PositionId(id),
                 datetime,
-                amount: i128::from(amount),
+                amount,
             })
-        })?;
-        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+            .collect())
+    }
+
+    pub fn position_account(&self, position: &PositionId) -> anyhow::Result<Option<AccountId>> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT account_id FROM positions WHERE position_id=?",
+                [&position.0],
+                |r| r.get::<_, Option<String>>(0),
+            )?
+            .map(AccountId))
     }
 
     pub fn position_metadata(
@@ -485,79 +787,75 @@ impl Store {
 
     /// Asset totals in human units at the specified instant, across owned positions.
     pub fn asset_amounts_at(&self, datetime: DateTime<Utc>) -> anyhow::Result<Vec<(AssetId, f64)>> {
-        let mut statement = self.connection.prepare(
-            "SELECT p.asset_id, SUM(e.amount)::DOUBLE / POWER(10, s.decimals) \
-             FROM transaction_effects e \
-             JOIN transactions t ON t.id=e.transaction_id \
-             JOIN positions p ON p.position_id=e.position_id \
-             JOIN asset_scales s ON s.asset_id=p.asset_id \
-             WHERE p.role = 'asset' AND t.datetime <= ? \
-             GROUP BY p.asset_id, s.decimals ORDER BY p.asset_id",
-        )?;
-        let rows = statement.query_map([datetime.naive_utc()], |row| {
-            let asset_name: String = row.get(0)?;
-            let amount: f64 = row.get(1)?;
-            let asset_id = AssetId::str(&asset_name);
-            Ok((asset_id, amount))
-        })?;
-        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        self.approximate_amounts(datetime, PositionRole::Asset)
     }
 
-    /// User liability totals in human units. Negative means money owed.
-    /// External counterparties are excluded even when they use the same asset.
     pub fn credit_amounts_at(
         &self,
         datetime: DateTime<Utc>,
     ) -> anyhow::Result<Vec<(AssetId, f64)>> {
-        let mut statement = self.connection.prepare(
-            "SELECT p.asset_id, SUM(e.amount)::DOUBLE / POWER(10, s.decimals) \
-             FROM transaction_effects e \
-             JOIN transactions t ON t.id=e.transaction_id \
-             JOIN positions p ON p.position_id=e.position_id \
-             JOIN asset_scales s ON s.asset_id=p.asset_id \
-             WHERE p.role = 'liability' AND t.datetime <= ? \
-             GROUP BY p.asset_id, s.decimals ORDER BY p.asset_id",
-        )?;
-        let rows = statement.query_map([datetime.naive_utc()], |row| {
-            let asset_name: String = row.get(0)?;
-            let amount: f64 = row.get(1)?;
-            let asset_id = AssetId::str(&asset_name);
-            Ok((asset_id, amount))
-        })?;
-        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        self.approximate_amounts(datetime, PositionRole::Liability)
     }
 
-    /// Asset totals in exact smallest units at the specified instant, across
-    /// owned positions. No floating-point division: use this when dust
-    /// matters (e.g. proving a remainder is real, not DOUBLE noise).
-    pub fn asset_units_at(&self, datetime: DateTime<Utc>) -> anyhow::Result<Vec<(AssetId, i128)>> {
-        self.summed_units_at(datetime, PositionRole::Asset)
+    fn approximate_amounts(
+        &self,
+        datetime: DateTime<Utc>,
+        role: PositionRole,
+    ) -> anyhow::Result<Vec<(AssetId, f64)>> {
+        self.summed_units_at(datetime, role, None)?
+            .into_iter()
+            .map(|(asset, amount)| {
+                let value = amount.approximate(self.asset_scale(&asset)?)?;
+                Ok((asset, value))
+            })
+            .collect()
     }
 
-    /// User liability totals in exact smallest units; negative means owed.
-    pub fn credit_units_at(&self, datetime: DateTime<Utc>) -> anyhow::Result<Vec<(AssetId, i128)>> {
-        self.summed_units_at(datetime, PositionRole::Liability)
+    pub fn asset_units_at(&self, datetime: DateTime<Utc>) -> anyhow::Result<Vec<(AssetId, Units)>> {
+        self.summed_units_at(datetime, PositionRole::Asset, None)
+    }
+
+    pub fn credit_units_at(
+        &self,
+        datetime: DateTime<Utc>,
+    ) -> anyhow::Result<Vec<(AssetId, Units)>> {
+        self.summed_units_at(datetime, PositionRole::Liability, None)
+    }
+
+    pub fn portfolio_units_at(
+        &self,
+        portfolio: &PortfolioId,
+        datetime: DateTime<Utc>,
+        role: PositionRole,
+    ) -> anyhow::Result<Vec<(AssetId, Units)>> {
+        anyhow::ensure!(
+            role != PositionRole::ExternalCounterparty,
+            "counterparties are not portfolio holdings"
+        );
+        self.summed_units_at(datetime, role, Some(portfolio))
     }
 
     fn summed_units_at(
         &self,
         datetime: DateTime<Utc>,
         role: PositionRole,
-    ) -> anyhow::Result<Vec<(AssetId, i128)>> {
-        let mut statement = self.connection.prepare(
-            "SELECT p.asset_id, SUM(e.amount)::BIGINT \
-             FROM transaction_effects e \
-             JOIN transactions t ON t.id=e.transaction_id \
-             JOIN positions p ON p.position_id=e.position_id \
-             WHERE p.role = ? AND t.datetime <= ? \
-             GROUP BY p.asset_id ORDER BY p.asset_id",
+        portfolio: Option<&PortfolioId>,
+    ) -> anyhow::Result<Vec<(AssetId, Units)>> {
+        let mut statement = self.connection.prepare("SELECT p.asset_id, e.amount FROM transaction_effects e JOIN transactions t ON t.id=e.transaction_id JOIN positions p ON p.position_id=e.position_id LEFT JOIN accounts a ON a.id=p.account_id WHERE p.role=? AND t.datetime<=? AND (? IS NULL OR a.portfolio_id=?) ORDER BY p.asset_id")?;
+        let filter = portfolio.map(|p| p.0.as_str());
+        let rows = statement.query_map(
+            params![role.as_str(), datetime.naive_utc(), filter, filter],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
         )?;
-        let rows = statement.query_map(params![role.as_str(), datetime.naive_utc()], |row| {
-            let asset_name: String = row.get(0)?;
-            let amount: i64 = row.get(1)?;
-            Ok((AssetId::str(&asset_name), i128::from(amount)))
-        })?;
-        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        let mut sums = BTreeMap::<String, Units>::new();
+        for row in rows {
+            let (asset, amount) = row?;
+            *sums.entry(asset).or_default() += amount.parse::<Units>()?;
+        }
+        Ok(sums
+            .into_iter()
+            .map(|(asset, amount)| (AssetId(asset), amount))
+            .collect())
     }
 
     pub fn owned_asset_ids(&self) -> anyhow::Result<Vec<AssetId>> {
@@ -607,48 +905,104 @@ impl Store {
         &self,
         quote: &AssetId,
     ) -> anyhow::Result<Vec<(DateTime<Utc>, f64)>> {
-        let quote = quote.0.as_str();
-        let mut statement = self.connection.prepare(
-            "WITH times AS (SELECT datetime FROM transactions UNION SELECT datetime FROM asset_prices WHERE vs_asset_id=?), \
-             assets AS (SELECT DISTINCT asset_id FROM positions WHERE role IN ('asset', 'liability')), \
-             events AS (SELECT t.datetime, p.asset_id, SUM(e.amount) AS delta \
-                 FROM transaction_effects e JOIN transactions t ON t.id=e.transaction_id \
-                 JOIN positions p ON p.position_id=e.position_id WHERE p.role IN ('asset', 'liability') \
-                 GROUP BY t.datetime, p.asset_id), \
-             holdings AS (SELECT times.datetime, assets.asset_id, \
-                 SUM(COALESCE(events.delta, 0)) OVER \
-                 (PARTITION BY assets.asset_id ORDER BY times.datetime) AS amount \
-                 FROM times CROSS JOIN assets LEFT JOIN events \
-                 ON events.datetime=times.datetime AND events.asset_id=assets.asset_id), \
-             valued AS (SELECT h.datetime, h.amount / POWER(10, s.decimals) AS amount, \
-                 CASE WHEN h.asset_id=? THEN 1.0 ELSE \
-                   (SELECT ap.price FROM asset_prices ap WHERE ap.asset_id=h.asset_id \
-                    AND ap.vs_asset_id=? AND ap.datetime<=h.datetime \
-                    ORDER BY ap.datetime DESC LIMIT 1) END AS price \
-                 FROM holdings h JOIN asset_scales s ON s.asset_id=h.asset_id) \
-             SELECT datetime, SUM(CASE WHEN amount <> 0 THEN amount*price ELSE 0 END), \
-                 SUM(CASE WHEN amount <> 0 AND price IS NULL THEN 1 ELSE 0 END) \
-             FROM valued GROUP BY datetime ORDER BY datetime",
-        )?;
-        let rows = statement.query_map(params![quote, quote, quote], |row| {
-            let datetime: NaiveDateTime = row.get(0)?;
-            let value: Option<f64> = row.get(1)?;
-            let missing: i64 = row.get(2)?;
+        self.value_history(quote, None)
+    }
+
+    pub fn portfolio_value_history(
+        &self,
+        portfolio: &PortfolioId,
+        quote: &AssetId,
+    ) -> anyhow::Result<Vec<(DateTime<Utc>, f64)>> {
+        self.value_history(quote, Some(portfolio))
+    }
+
+    fn value_history(
+        &self,
+        quote: &AssetId,
+        portfolio: Option<&PortfolioId>,
+    ) -> anyhow::Result<Vec<(DateTime<Utc>, f64)>> {
+        let filter = portfolio.map(|p| p.0.as_str());
+        let mut statement = self.connection.prepare("SELECT t.datetime, p.asset_id, e.amount FROM transactions t JOIN transaction_effects e ON e.transaction_id=t.id JOIN positions p ON p.position_id=e.position_id LEFT JOIN accounts a ON a.id=p.account_id WHERE p.role IN ('asset','liability') AND (? IS NULL OR a.portfolio_id=?) ORDER BY t.datetime")?;
+        let rows = statement.query_map(params![filter, filter], |r| {
             Ok((
-                DateTime::from_naive_utc_and_offset(datetime, Utc),
-                value.unwrap_or(0.0),
-                missing,
+                r.get::<_, NaiveDateTime>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
             ))
         })?;
-        let mut history = Vec::new();
+        let mut events = BTreeMap::<NaiveDateTime, Vec<(String, Units)>>::new();
         for row in rows {
-            let (datetime, value, missing) = row?;
+            let (time, asset, amount) = row?;
+            events
+                .entry(time)
+                .or_default()
+                .push((asset, amount.parse()?));
+        }
+        // Preserve transaction-only cutoffs (including no-effect legacy records).
+        let mut times = self.connection.prepare("SELECT t.datetime FROM transactions t WHERE ? IS NULL OR EXISTS(SELECT 1 FROM transaction_effects e JOIN positions p ON p.position_id=e.position_id JOIN accounts a ON a.id=p.account_id WHERE e.transaction_id=t.id AND a.portfolio_id=?) UNION SELECT datetime FROM asset_prices WHERE vs_asset_id=? ORDER BY datetime")?;
+        for time in times.query_map(params![filter, filter, &quote.0], |r| {
+            r.get::<_, NaiveDateTime>(0)
+        })? {
+            events.entry(time?).or_default();
+        }
+        let mut prices = self.connection.prepare("SELECT datetime, asset_id, price FROM asset_prices WHERE vs_asset_id=? ORDER BY datetime")?;
+        let prices = prices
+            .query_map([&quote.0], |r| {
+                Ok((
+                    r.get::<_, NaiveDateTime>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, f64>(2)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut scale_query = self
+            .connection
+            .prepare("SELECT asset_id, decimals FROM asset_scales")?;
+        let scales: HashMap<String, u8> = scale_query
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i32>(1)?)))?
+            .map(|row| {
+                let (asset, scale) = row?;
+                Ok((asset, u8::try_from(scale)?))
+            })
+            .collect::<anyhow::Result<_>>()?;
+        let mut price_index = 0;
+        let mut current_prices = HashMap::<String, f64>::new();
+        let mut balances = BTreeMap::<String, Units>::new();
+        let mut history = Vec::new();
+        for (time, effects) in events {
+            while price_index < prices.len() && prices[price_index].0 <= time {
+                current_prices.insert(prices[price_index].1.clone(), prices[price_index].2);
+                price_index += 1;
+            }
+            for (asset, amount) in effects {
+                *balances.entry(asset).or_default() += amount;
+            }
+            let mut value = 0.0;
+            for (asset, amount) in &balances {
+                if amount.is_zero() {
+                    continue;
+                }
+                let price = if asset == &quote.0 {
+                    1.0
+                } else {
+                    *current_prices.get(asset).ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "portfolio asset or liability {asset} has no {} price at {time}",
+                            quote.0
+                        )
+                    })?
+                };
+                value += amount.approximate(
+                    *scales
+                        .get(asset)
+                        .ok_or_else(|| anyhow::anyhow!("missing asset scale for {asset}"))?,
+                )? * price;
+            }
             anyhow::ensure!(
-                missing == 0,
-                "{missing} portfolio asset(s) or liability currencies have no {} price at {datetime}",
-                quote
+                value.is_finite(),
+                "net worth exceeds approximate valuation range"
             );
-            history.push((datetime, value));
+            history.push((time.and_utc(), value));
         }
         Ok(history)
     }
@@ -714,9 +1068,9 @@ mod tests {
         input: u64,
         output: u64,
     ) -> Transaction {
-        let effect = |amount| TxnEffect {
+        let effect = |amount: u64| TxnEffect {
             position_id: position.clone(),
-            amount,
+            amount: amount.into(),
             datetime: at,
         };
         Transaction {
@@ -820,7 +1174,10 @@ mod tests {
             store.credit_amounts_at(time(3))?,
             vec![(eur.clone(), -16.0)]
         );
-        assert_eq!(store.credit_units_at(time(3))?, vec![(eur.clone(), -1_600)]);
+        assert_eq!(
+            store.credit_units_at(time(3))?,
+            vec![(eur.clone(), (-1_600).into())]
+        );
         assert_eq!(
             store.owned_assets_first_seen()?,
             vec![(usd.clone(), time(1))]
@@ -915,7 +1272,7 @@ mod tests {
         assert!(store.has_imported_file("NEXO", "already-imported")?);
         assert_eq!(
             store.credit_units_at(time(1))?,
-            vec![(AssetId::str("xUSD"), -2_000)]
+            vec![(AssetId::str("xUSD"), (-2_000).into())]
         );
         let roles: HashMap<_, _> = store
             .position_metadata()?
@@ -1158,7 +1515,7 @@ mod tests {
         let observations = [PositionBalance {
             position_id: position.clone(),
             datetime: time(2),
-            amount: i128::MAX,
+            amount: i128::MAX.into(),
         }];
         let valid = (
             "deposit".to_owned(),
@@ -1166,7 +1523,15 @@ mod tests {
         );
         let invalid = (
             "overflow".to_owned(),
-            transaction(time(2), &position, 0, u64::MAX),
+            Transaction {
+                datetime: time(2),
+                inputs: vec![],
+                outputs: vec![crate::TxnEffect {
+                    position_id: position.clone(),
+                    datetime: time(2),
+                    amount: (-1).into(),
+                }],
+            },
         );
         assert!(
             store
@@ -1220,7 +1585,15 @@ mod tests {
         let valid = ("first".to_string(), transaction(time(1), &position, 0, 100));
         let invalid = (
             "second".to_string(),
-            transaction(time(2), &position, 0, u64::MAX),
+            Transaction {
+                datetime: time(2),
+                inputs: vec![],
+                outputs: vec![crate::TxnEffect {
+                    position_id: position.clone(),
+                    datetime: time(2),
+                    amount: (-1).into(),
+                }],
+            },
         );
         assert!(
             store
@@ -1253,6 +1626,375 @@ mod tests {
             |_, _| {},
         )?);
         assert_eq!(store.balances_at(time(3))?.len(), 1);
+        Ok(())
+    }
+    #[test]
+    fn exact_balances_exceed_machine_ranges_and_scales_are_protected() -> anyhow::Result<()> {
+        let store = Store::in_memory()?;
+        let asset = AssetId::str("chain:token");
+        let position = PositionId::from("large");
+        store.save_asset_scale(&asset, 18)?;
+        store.save_position_asset(&position, &asset, PositionRole::Asset)?;
+        let huge: Units = "100000000000000000000000000000000000000000000000001".parse()?;
+        let tx = Transaction {
+            datetime: time(1),
+            inputs: vec![],
+            outputs: vec![TxnEffect {
+                position_id: position.clone(),
+                amount: huge.clone(),
+                datetime: time(1),
+            }],
+        };
+        store.save_transaction("large", &tx)?;
+        store.save_transaction("second", &transaction(time(1), &position, 0, u64::MAX))?;
+        let mut expected = huge.clone();
+        expected += Units::from(u64::MAX);
+        assert_eq!(
+            store.asset_units_at(time(1))?,
+            vec![(asset.clone(), expected.clone())]
+        );
+        assert_eq!(store.balances_at(time(1))?[0].amount, expected);
+        store.save_asset_scale(&asset, 18)?;
+        assert!(store.save_asset_scale(&asset, 8).is_err());
+        assert_eq!(store.asset_scale(&asset)?, 18);
+        assert!(
+            store
+                .save_file_import_with_progress(
+                    "test",
+                    "conflicting",
+                    &[(position.clone(), asset.clone(), 8, PositionRole::Asset)],
+                    &[("large".into(), transaction(time(1), &position, 0, 1))],
+                    |_, _| {}
+                )
+                .is_err()
+        );
+        assert!(!store.has_imported_file("test", "conflicting")?);
+        assert_eq!(store.balances_at(time(1))?[0].amount, expected);
+        store.save_price(&AssetPricePoint {
+            datetime: time(1),
+            asset_id: asset,
+            vs_asset_id: AssetId::str("USD"),
+            price: 1.0,
+        })?;
+        assert!(store.total_value_history(&AssetId::str("USD"))?[0].1 > 1e30);
+        Ok(())
+    }
+
+    #[test]
+    fn account_scoped_imports_isolate_ids_markers_and_portfolios() -> anyhow::Result<()> {
+        let store = Store::in_memory()?;
+        let asset = AssetId::str("USD");
+        let local_position = PositionId::from("spot:USD");
+        let input = [(
+            local_position.clone(),
+            asset.clone(),
+            2,
+            PositionRole::Asset,
+        )];
+        for (portfolio, account, amount) in
+            [("alice", "account-a", 100u64), ("bob", "account-b", 200u64)]
+        {
+            let portfolio = Portfolio {
+                id: portfolio.into(),
+                label: portfolio.into(),
+                reporting_asset: asset.clone(),
+            };
+            store.save_portfolio(&portfolio)?;
+            let account = Account {
+                id: account.into(),
+                portfolio_id: portfolio.id.clone(),
+                provider_id: crate::ProviderId::from("nexo"),
+                label: "Account".into(),
+                source_reference: Some("provider-reference".into()),
+            };
+            store.save_account(&account)?;
+            let txs = [(
+                "same-provider-id".into(),
+                transaction(time(1), &local_position, 0, amount),
+            )];
+            let observations = [PositionBalance {
+                position_id: local_position.clone(),
+                datetime: time(1),
+                amount: amount.into(),
+            }];
+            assert!(store.save_account_import(
+                &account.id,
+                "export",
+                "same-hash",
+                &input,
+                &txs,
+                &observations
+            )?);
+            assert!(!store.save_account_import(
+                &account.id,
+                "export",
+                "same-hash",
+                &input,
+                &txs,
+                &observations
+            )?);
+            assert_eq!(
+                store.portfolio_units_at(&portfolio.id, time(1), PositionRole::Asset)?,
+                vec![(asset.clone(), amount.into())]
+            );
+            assert_eq!(
+                store.portfolio_balances_at(&portfolio.id, time(1))?.len(),
+                1
+            );
+            assert_eq!(
+                store.portfolio_value_history(&portfolio.id, &asset)?,
+                vec![(time(1), amount as f64 / 100.0)]
+            );
+            let mut conflict = account.clone();
+            conflict.portfolio_id = crate::DEFAULT_PORTFOLIO.into();
+            assert!(store.save_account(&conflict).is_err());
+            assert_eq!(store.accounts(&portfolio.id)?[0], account);
+            assert!(store.has_account_imported_file(&account.id, "export", "same-hash")?);
+            assert_eq!(
+                store.account_balance_observations(&account.id, "export", "same-hash")?[0].amount,
+                amount
+            );
+            assert_eq!(
+                store.account_balances_at(&account.id, time(1))?[0].amount,
+                amount
+            );
+            assert_eq!(
+                store
+                    .position_account(&Store::account_position_id(&account.id, &local_position))?,
+                Some(account.id)
+            );
+        }
+        assert_eq!(
+            store.asset_units_at(time(1))?,
+            vec![(asset.clone(), 300.into())]
+        );
+        assert!(
+            store
+                .portfolio_units_at(
+                    &crate::DEFAULT_PORTFOLIO.into(),
+                    time(1),
+                    PositionRole::Asset
+                )?
+                .is_empty()
+        );
+        let mut account = store.accounts(&PortfolioId::from("alice"))?.remove(0);
+        account.label = "Renamed".into();
+        store.save_account(&account)?;
+        assert_eq!(
+            store.portfolio_units_at(&account.portfolio_id, time(1), PositionRole::Asset)?,
+            vec![(asset, 100.into())]
+        );
+        assert!(
+            store
+                .save_account_import(&AccountId::from("missing"), "export", "hash", &[], &[], &[])
+                .is_err()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_nexo_binance_upgrade_preserves_data_and_user_metadata() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("legacy-both.duckdb");
+        {
+            let connection = Connection::open(&path)?;
+            // Schema immediately before this change, including explicit roles and evidence.
+            connection.execute_batch("CREATE TABLE positions (position_id VARCHAR PRIMARY KEY, asset_id VARCHAR NOT NULL, owned BOOLEAN NOT NULL, role VARCHAR NOT NULL);
+                CREATE TABLE transaction_effects (transaction_id VARCHAR NOT NULL, position_id VARCHAR NOT NULL, amount BIGINT NOT NULL, effect_order INTEGER NOT NULL);
+                CREATE TABLE transactions (id VARCHAR PRIMARY KEY, datetime TIMESTAMP NOT NULL);
+                INSERT INTO positions VALUES ('NEXO:USD','USD',true,'asset'), ('NEXO-CREDIT:USD','USD',false,'liability'), ('BINANCE:spot:USD','USD',true,'asset'), ('BINANCE:external:fees:USD','USD',false,'external');
+                INSERT INTO transactions VALUES ('NEXO:1','2025-01-01'), ('BINANCE:1','2025-01-01');
+                INSERT INTO transaction_effects VALUES ('NEXO:1','NEXO:USD',9223372036854775807,0), ('NEXO:1','NEXO-CREDIT:USD',-2000,1), ('BINANCE:1','BINANCE:spot:USD',9223372036854775807,0), ('BINANCE:1','BINANCE:external:fees:USD',-100,1);")?;
+            crate::migrations::run(&connection)?;
+            connection.execute_batch("INSERT INTO asset_scales VALUES ('USD',2);
+                INSERT INTO imported_files VALUES ('NEXO','nexo-hash',1,'2025-01-01'), ('BINANCE','binance-hash',1,'2025-01-01');
+                INSERT INTO balance_observations VALUES ('BINANCE','binance-hash','BINANCE:spot:USD','2025-01-01','9223372036854775807');
+                INSERT INTO asset_prices VALUES ('2025-01-01','USD','USD',1);
+                INSERT INTO price_coverage VALUES ('USD','USD','2025-01-01','2025-01-02');
+                UPDATE accounts SET label='My Nexo' WHERE id='legacy:nexo';
+                UPDATE portfolios SET label='My portfolio', reporting_asset_id='EUR' WHERE id='local:default';")?;
+        }
+        for _ in 0..3 {
+            let store = Store::open(&path)?;
+            assert!(store.has_imported_file("NEXO", "nexo-hash")?);
+            assert!(store.has_imported_file("BINANCE", "binance-hash")?);
+            assert_eq!(
+                store.asset_units_at(time(1))?[0].1.to_string(),
+                "18446744073709551614"
+            );
+            assert_eq!(
+                store.credit_units_at(time(1))?,
+                vec![(AssetId::str("USD"), (-2000).into())]
+            );
+            assert_eq!(
+                store.position_account(&PositionId::from("BINANCE:external:fees:USD"))?,
+                None
+            );
+            assert_eq!(
+                store.position_account(&PositionId::from("BINANCE:spot:USD"))?,
+                Some(AccountId::from("legacy:binance:spot"))
+            );
+            assert_eq!(
+                store.balance_observations("BINANCE", "binance-hash")?[0].amount,
+                i64::MAX
+            );
+            assert_eq!(store.portfolios()?[0].label, "My portfolio");
+            assert_eq!(store.portfolios()?[0].reporting_asset, AssetId::str("EUR"));
+            assert_eq!(
+                store
+                    .accounts(&PortfolioId::from(crate::DEFAULT_PORTFOLIO))?
+                    .iter()
+                    .find(|a| a.id.0 == "legacy:nexo")
+                    .unwrap()
+                    .label,
+                "My Nexo"
+            );
+            assert!(
+                store
+                    .missing_price_ranges(
+                        &AssetId::str("USD"),
+                        &AssetId::str("USD"),
+                        PriceRange::new(time(1), time(2))?
+                    )?
+                    .is_empty()
+            );
+            let ordering: Vec<(String, i32)> = store.connection.prepare("SELECT transaction_id, effect_order FROM transaction_effects ORDER BY transaction_id, effect_order")?.query_map([], |r| Ok((r.get(0)?,r.get(1)?)))?.collect::<Result<_,_>>()?;
+            assert_eq!(
+                ordering,
+                vec![
+                    ("BINANCE:1".into(), 0),
+                    ("BINANCE:1".into(), 1),
+                    ("NEXO:1".into(), 0),
+                    ("NEXO:1".into(), 1)
+                ]
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires private cached Nexo/Binance DBs; copies them to temporary storage, no network"]
+    fn cached_provider_databases_upgrade_without_changing_financial_records() -> anyhow::Result<()>
+    {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let snapshot = |connection: &Connection| -> anyhow::Result<Vec<Option<Vec<String>>>> {
+            let queries = [
+                "SELECT position_id, asset_id, owned, role FROM positions ORDER BY position_id",
+                "SELECT transaction_id, position_id, CAST(amount AS VARCHAR) AS amount, effect_order FROM transaction_effects ORDER BY transaction_id, effect_order",
+                "SELECT * FROM transactions ORDER BY id",
+                "SELECT * FROM asset_scales ORDER BY asset_id",
+                "SELECT * FROM imported_files ORDER BY source, content_hash",
+                "SELECT * FROM balance_observations ORDER BY source, content_hash, position_id, datetime, amount",
+                "SELECT * FROM asset_prices ORDER BY datetime, asset_id, vs_asset_id",
+                "SELECT * FROM price_coverage ORDER BY asset_id, vs_asset_id, from_datetime, to_datetime",
+                "SELECT * FROM unavailable_price_periods ORDER BY provider, pair, from_datetime, to_datetime",
+            ];
+            queries.iter().map(|query| {
+                let table = query.split(" FROM ").nth(1).unwrap().split_whitespace().next().unwrap();
+                let exists: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name=?)", [table], |r| r.get(0))?;
+                if !exists { return Ok(None); }
+                let mut query = query.to_string();
+                if table == "positions" {
+                    let has_role: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('positions') WHERE name='role')", [], |r| r.get(0))?;
+                    if !has_role { query = query.replace("owned, role", "owned, CASE WHEN owned THEN 'asset' WHEN starts_with(position_id, 'NEXO-CREDIT:') THEN 'liability' ELSE 'external' END AS role"); }
+                }
+                let mut statement = connection.prepare(&query)?;
+                Ok(Some(statement.query_map([], |r| {
+                    let columns = r.as_ref().column_count();
+                    let values = (0..columns).map(|column| r.get::<_, duckdb::types::Value>(column)).collect::<Result<Vec<_>, _>>()?;
+                    Ok(format!("{values:?}"))
+                })?.collect::<Result<_, _>>()?))
+            }).collect()
+        };
+        for relative in [
+            ".cache/test-data/test-nexo_05-10-2026.duckdb",
+            ".cache/test-data/test-binance-api-v1.duckdb",
+            ".cache/test-data/binance/test-binance-statement-v1.duckdb",
+        ] {
+            let source = root.join(relative);
+            anyhow::ensure!(
+                !source.with_extension("duckdb.wal").exists(),
+                "fixture has an active WAL; close its writer before copying"
+            );
+            let dir = tempfile::tempdir()?;
+            let copy = dir.path().join("copy.duckdb");
+            std::fs::copy(source, &copy)?;
+            let before = snapshot(&Connection::open(&copy)?)?;
+            for _ in 0..3 {
+                let store = Store::open(&copy)?;
+                let after = snapshot(&store.connection)?;
+                for (index, original) in before.iter().enumerate() {
+                    if let Some(original) = original {
+                        let upgraded = after[index].as_ref().unwrap();
+                        if index == 7 {
+                            // Earlier coverage backfill may add conservative intervals.
+                            assert!(original.iter().all(|row| upgraded.contains(row)));
+                        } else {
+                            assert_eq!(
+                                upgraded, original,
+                                "financial records changed for {relative}, table {index}"
+                            );
+                        }
+                    }
+                }
+                store.latest_balances()?;
+                store.asset_units_at(time(31))?;
+            }
+        }
+        Ok(())
+    }
+    #[test]
+    fn scoped_debt_and_external_counterparties_preserve_economic_roles() -> anyhow::Result<()> {
+        let store = Store::in_memory()?;
+        let account = Account {
+            id: "provider:account".into(),
+            portfolio_id: crate::DEFAULT_PORTFOLIO.into(),
+            provider_id: crate::ProviderId::from("nexo"),
+            label: "Loan account".into(),
+            source_reference: None,
+        };
+        store.save_account(&account)?;
+        let usd = AssetId::str("USD");
+        let cash = PositionId::from("cash");
+        let debt = PositionId::from("debt");
+        let fees = PositionId::from("external:fees");
+        let positions = [
+            (cash.clone(), usd.clone(), 2, PositionRole::Asset),
+            (debt.clone(), usd.clone(), 2, PositionRole::Liability),
+            (
+                fees.clone(),
+                usd.clone(),
+                2,
+                PositionRole::ExternalCounterparty,
+            ),
+        ];
+        let transactions = [
+            ("cash".into(), transaction(time(1), &cash, 0, 10000)),
+            ("debt".into(), transaction(time(1), &debt, 2000, 0)),
+            ("external".into(), transaction(time(1), &fees, 999999, 0)),
+        ];
+        store.save_account_import(
+            &account.id,
+            "source",
+            "hash",
+            &positions,
+            &transactions,
+            &[],
+        )?;
+        let balances = store.account_balances_at(&account.id, time(1))?;
+        assert_eq!(balances.len(), 2);
+        assert_eq!(
+            store.portfolio_units_at(&account.portfolio_id, time(1), PositionRole::Liability)?,
+            vec![(usd.clone(), (-2000).into())]
+        );
+        assert_eq!(
+            store.position_account(&Store::account_position_id(&account.id, &fees))?,
+            None
+        );
+        assert_eq!(
+            store.portfolio_value_history(&account.portfolio_id, &usd)?,
+            vec![(time(1), 80.0)]
+        );
         Ok(())
     }
 }

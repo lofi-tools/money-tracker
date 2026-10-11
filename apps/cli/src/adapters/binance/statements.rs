@@ -112,7 +112,8 @@ pub fn import_statement(path: &Path, cache: &Path, store: &Store) -> Result<bool
                     "Funding" => "funding",
                     _ => anyhow::bail!("unsupported statement account {}", row.account),
                 };
-                let n: Decimal = row.change.parse().context("invalid statement amount")?;
+                let n: Decimal =
+                    Decimal::from_str_exact(&row.change).context("invalid statement amount")?;
                 if n.is_zero() {
                     continue;
                 }
@@ -410,8 +411,7 @@ mod tests {
                 println!(
                     "{}: {}",
                     balance.position_id.0,
-                    Decimal::try_from_i128_with_scale(balance.amount, u32::from(scale))?
-                        .normalize()
+                    balance.amount.decimal_string(scale)
                 );
             }
         }
@@ -462,11 +462,7 @@ mod tests {
                 println!(
                     "  {}: {}",
                     asset.0,
-                    Decimal::try_from_i128_with_scale(
-                        amount,
-                        u32::from(store.asset_scale(&asset)?)
-                    )?
-                    .normalize()
+                    amount.decimal_string(store.asset_scale(&asset)?)
                 );
             }
         }
@@ -490,9 +486,7 @@ mod tests {
                 .find(|(_, id, _, _)| id == asset)
                 .map(|(_, _, scale, _)| *scale)
                 .unwrap_or(scales[asset]);
-            let value =
-                Decimal::try_from_i128_with_scale(balance.amount, u32::from(scales[asset]))?;
-            balance.amount = i128::from(units(value, scale)?);
+            balance.amount = balance.amount.rescale(scales[asset], scale)?;
         }
         let ledger = balances
             .into_iter()

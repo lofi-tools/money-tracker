@@ -34,7 +34,7 @@ Ordered by importance for migration and reliable provider integration.
 
 | Priority | Spreadsheet evidence | Current gap | Required model or behavior |
 | --- | --- | --- | --- |
-| P0 | `provider`, `parent_product`, `DisplayName`, `short_name` | Provider IDs exist, but there is no persisted provider/account/product hierarchy. Position IDs carry implicit account information. | Stable `Provider`, `Account`, `Product`, and `Position` relationships; display names and aliases; optional product parent; separate account instance IDs for multiple accounts at one provider. |
+| P0 | `provider`, `parent_product`, `DisplayName`, `short_name` | Portfolio/account metadata and position membership now persist. Full provider/product/held-investment relationships remain missing; legacy position IDs still retain their original provider/bucket format. | Stable `Provider`, `Account`, `Product`, and `Position` relationships; display names and aliases; optional product parent; separate account instance IDs for multiple accounts at one provider. |
 | P0 | `-> APYs`, `moved_to_individual_subs`, repeated provider/asset rows | Multiple positions are possible in Rust, but subscription identity and terms are not persisted. Binance aggregates Locked positions; Nexo lacks identifying data. | Separate product offers/rate tiers from individual subscriptions. Store source subscription ID, account, asset, principal evidence, opening date, maturity, renewal, and closure. Leave unknown terms unset. |
 | P0 | `amount_manual (old)`, empty subscription rollup | No Airtable importer or manual balance workflow. Independent source observations already exist in DuckDB. | Import/manual observations with timestamp, source, confidence, and provenance. Keep an observation distinct from a transaction. An opening checkpoint must be explicitly dated and evidenced; it must not invent earlier history. |
 | P0 | `obligation/loss`, provider closure, historical lenders | Asset/liability/counterparty roles and signed liability valuation are now implemented; no general claim model or loan lifecycle metadata. | Add recovery claims, loan principal/interest/repayment metadata, impairment, recoveries, claim valuation, and evidence. |
@@ -61,7 +61,7 @@ Older databases automatically migrate known `NEXO-CREDIT:*` positions on open, r
 
 Introduce token identity by chain and contract/mint, native-asset identity by chain, and effective-dated aliases/migrations. Investigate the exported CHSB, MATIC, Elrond eGLD, and LUNA labels against actual source history; do not treat a renamed token, migrated token, fork, and wrapped token as interchangeable merely because tickers resemble each other.
 
-Binance parses decimal strings exactly; Nexo currently parses amounts as `f64` and rounds into eight decimal places. Ledger effects are `u64` in Rust and checked into signed `BIGINT` in DuckDB, which is too narrow for general raw 18-decimal token balances. Choose an exact numeric representation and stable scale policy before chain connectors; reject or explicitly migrate scale changes instead of reinterpreting existing units.
+The initial review found Nexo float rounding and a `u64`/signed `BIGINT` ledger boundary. The first foundation implementation now uses arbitrary-precision integer units, lossless legacy migration, exact Nexo/Binance decimal parsing and rejected scale conflicts; see [the current model](../spec/data-model.md). Existing float-derived ledger results are preserved until deliberate source replay. Chain-qualified asset mappings, full-history scale-change operations and on-chain adapters remain future work. Provider decimal parsers are bounded and reject unsupported precision.
 
 ### On-chain balances can change without transfer events
 
@@ -80,7 +80,7 @@ Transfers alone are insufficient for yield-bearing positions. Lido distinguishes
 
 ## Existing work to extend
 
-- [Persistence](../spec/persistence.md) already stores ledger movements, economic roles, prices, and import evidence. Extend it with provider/account/product/position metadata.
+- [Persistence](../spec/persistence.md) already stores ledger movements, economic roles, prices, and import evidence. Portfolio/account and position membership have been added; full provider/product/held-investment metadata remains outstanding.
 - [Historical valuation](../spec/historical-net-worth.md) already subtracts liabilities and excludes external counterparties. Composite-position valuation and broader loan/claim metadata remain outstanding.
 - [Binance account history](../spec/binance-account-history.md) includes independent reconciliation and statement/API replay. Prioritize a normal application import/sync workflow and explicit coverage.
 - [Nexo ingestion](../spec/nexo.md) already supports configurable paths and atomic file-hash deduplication. Managed uploads and discovery remain future work in [the implementation planning notes](../todo/implementation-gaps.md).

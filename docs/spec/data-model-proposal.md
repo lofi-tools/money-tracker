@@ -1,6 +1,6 @@
 # Proposed data model evolution
 
-Status: **proposed; no schema, adapter, or calculation changes implemented by this review**. Reviewed against source on 11 October 2026. Delivery status belongs to [the master todo list](../todo/master-todo.md#1-first-data-model-review-and-minimum-supporting-changes). This document is the design deliverable for that review, not approval to implement every phase.
+Status: **partially implemented: A1 portfolio/account identity, exact units and protected scales; remaining phases proposed**. Reviewed against source on 11 October 2026. Delivery status belongs to [the master todo list](../todo/master-todo.md#1-first-data-model-review-and-minimum-supporting-changes). This document is the design deliverable for that review, not approval to implement every phase.
 
 ## Recommendation
 
@@ -8,7 +8,13 @@ Keep the signed movement ledger and explicit asset/liability/external roles. Add
 
 Implement this incrementally. Kraken should use the same ingestion contract as Nexo/Binance after the minimum foundation changes; it need not wait for shared accounts, the risk service, or a complete DeFi ontology. Do not translate all Airtable tables into database tables. The [interview](../findings/user-needs.md) and [product questions](product-goals.md) determine requirements; [Airtable findings](../findings/airtable-model.md) identify evidence and candidate holdings.
 
-## Current source and gaps
+## Implemented foundation after the review
+
+The first implementation adds portfolio/account storage and scoped import/query APIs, arbitrary-precision `Units` stored as signed integer text, protected scale registrations, exact Nexo/Binance decimal parsing and issuer-consistent `ExternalAssetId` equality/hash. Migrations `004_exact_units` and `005_portfolio_accounts` preserve legacy IDs, signed effects and completed source hashes and rerun safely at every open. See [current data model](data-model.md) and [persistence](persistence.md) for the authoritative implemented contract and validation.
+
+This is a core/API foundation, not a complete implementation of A1's proposed provider/connection/asset registry. Existing adapters keep legacy entry points; the new account-scoped import API supports independent future account instances. Product/rate persistence, event/source revisions, matching registries, reconciliation coverage, scale-change migrations and calculation conventions remain outstanding. Legacy float-derived balances are not automatically corrected.
+
+## Baseline source and gaps before the first implementation
 
 | Area | Implemented evidence | Gap / consequence |
 | --- | --- | --- |
@@ -234,7 +240,7 @@ Broader financial instruments can add instrument metadata, ownership shares, cor
 | D/E | Catalogue/risk schemas and scenarios, term/constraint/notification records. | Independent catalogue and private settings; net opportunity and liquidity examples pass. |
 | F | Sharing/sync and broader services/instruments when scheduled. | Separate reviewed contracts; no local-first/subscription-free regression. |
 
-Recommended next implementation slice is A1 plus the minimal A2 event/evidence/reconciliation contract used by existing adapters and Kraken. Do not implement phase B calculations as part of the connector. Provider documentation should explain old and new mapping behavior as adapters transition.
+The initial A1 portfolio/account, quantity and scale slice is implemented. Next implement the remaining identity/ingestion integration and minimal A2 event/evidence/reconciliation contract used by existing adapters and Kraken. Do not implement phase B calculations as part of the connector. Provider documentation should explain old and new mapping behavior as adapters transition.
 
 Append migration steps to the existing registry without changing the first three or introducing an applied-version gate. Step numbers/names should be assigned when patches are ready, not reserved for this entire proposal. Every new step reruns on every open and checks current schema/data. Use per-step transactionality, explicit insert columns and deterministic upsert/backfill keys. Never rerun destructive rebuilds on already-upgraded tables or overwrite user labels, mappings, policy, explicit roles or evidence.
 

@@ -6,9 +6,9 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use lib_core::traits::{IsProvider, Issuer3};
 use lib_core::{
     Asset, AssetId, CollectTxnData, PositionBalance, PositionId, Product, ProductId, ProviderId,
-    Transaction, TxnEffect, UserPosition,
+    Transaction, TxnEffect, Units, UserPosition,
 };
-use rust_decimal::{Decimal, prelude::ToPrimitive};
+use rust_decimal::Decimal;
 use serde_json::Value;
 use snafu::Snafu;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -107,9 +107,9 @@ pub struct BinanceAccountData {
 impl BinanceAccountData {
     /// Compare the union of historical and current accounts, including closed assets.
     pub fn reconcile(&self) -> Result<(), BinanceServiceError> {
-        let mut ledger = HashMap::<PositionId, i128>::new();
+        let mut ledger = HashMap::<PositionId, Units>::new();
         for tx in &self.data.transactions {
-            let mut asset_totals = HashMap::<AssetId, i128>::new();
+            let mut asset_totals = HashMap::<AssetId, Units>::new();
             for (effects, sign) in [(&tx.inputs, -1), (&tx.outputs, 1)] {
                 for e in effects {
                     let asset = snafu::OptionExt::context(
@@ -118,9 +118,8 @@ impl BinanceAccountData {
                             position: e.position_id.clone(),
                         },
                     )?;
-                    *asset_totals.entry(asset.clone()).or_default() += sign * i128::from(e.amount);
-                    *ledger.entry(e.position_id.clone()).or_default() +=
-                        sign * i128::from(e.amount);
+                    *asset_totals.entry(asset.clone()).or_default() += &e.amount * sign;
+                    *ledger.entry(e.position_id.clone()).or_default() += &e.amount * sign;
                 }
             }
             snafu::ensure!(
@@ -136,12 +135,12 @@ impl BinanceAccountData {
 }
 
 fn reconcile_amounts(
-    ledger: HashMap<PositionId, i128>,
+    ledger: HashMap<PositionId, Units>,
     observations: &[PositionBalance],
 ) -> Result<(), BinanceServiceError> {
-    let mut actual = HashMap::<PositionId, i128>::new();
+    let mut actual = HashMap::<PositionId, Units>::new();
     for balance in observations {
-        *actual.entry(balance.position_id.clone()).or_default() += balance.amount;
+        *actual.entry(balance.position_id.clone()).or_default() += &balance.amount;
     }
     let positions: std::collections::BTreeSet<_> = ledger
         .keys()
@@ -151,12 +150,12 @@ fn reconcile_amounts(
     let mut differences = Vec::new();
     for id in positions {
         let position = PositionId(id.to_owned());
-        let derived = ledger.get(&position).copied().unwrap_or(0);
-        let current = actual.get(&position).copied().unwrap_or(0);
+        let derived = ledger.get(&position).cloned().unwrap_or_default();
+        let current = actual.get(&position).cloned().unwrap_or_default();
         if derived != current {
             differences.push(format!(
                 "{id}: ledger={derived}, API={current}, difference={} smallest units",
-                current - derived
+                current.clone() - derived.clone()
             ));
         }
     }
@@ -181,8 +180,7 @@ fn text<'a>(row: &'a Value, field: &str) -> anyhow::Result<&'a str> {
         .with_context(|| format!("Binance record: missing string {field}"))
 }
 fn amount(row: &Value, field: &str) -> anyhow::Result<Decimal> {
-    let n = text(row, field)?
-        .parse::<Decimal>()
+    let n = Decimal::from_str_exact(text(row, field)?)
         .with_context(|| format!("invalid Binance decimal {field}"))?;
     ensure!(!n.is_sign_negative(), "negative Binance amount {field}");
     Ok(n)
@@ -407,18 +405,9 @@ fn events(snapshot: &AccountSnapshot) -> anyhow::Result<Vec<Event>> {
 fn position(account: &str, asset: &str) -> PositionId {
     PositionId::from(format!("BINANCE:{account}:{asset}"))
 }
-fn units(n: Decimal, decimals: u8) -> anyhow::Result<u64> {
-    let scaled = n
-        .checked_mul(Decimal::from(
-            10u64
-                .checked_pow(u32::from(decimals))
-                .context("Binance asset precision too large")?,
-        ))
-        .context("Binance amount overflow")?;
-    ensure!(scaled.fract().is_zero(), "Binance amount loses precision");
-    scaled
-        .to_u64()
-        .context("Binance amount exceeds ledger u64 range")
+fn units(n: Decimal, decimals: u8) -> anyhow::Result<Units> {
+    ensure!(!n.is_sign_negative(), "negative Binance effect magnitude");
+    Units::from_decimal(&n.to_string(), decimals)
 }
 
 pub fn map_snapshot(snapshot: &AccountSnapshot) -> anyhow::Result<BinanceAccountData> {
@@ -508,7 +497,7 @@ fn map_movements(
                 );
                 effects.push(TxnEffect {
                     position_id: id,
-                    amount: n,
+                    amount: n.clone(),
                     datetime: event.datetime,
                 });
             }
@@ -524,7 +513,7 @@ fn map_movements(
         current_balances.push(PositionBalance {
             position_id: id,
             datetime: fetched_at,
-            amount: i128::from(units(n, precision[&asset])?),
+            amount: units(n, precision[&asset])?,
         });
     }
     let mut positions = Vec::new();
@@ -767,11 +756,21 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_records_negative_and_overflow_amounts() {
+    fn rejects_unknown_records_negative_and_precision_loss_but_accepts_large_amounts() {
         let mut snapshot = sample();
         snapshot.history.insert("unknown".into(), vec![json!({})]);
         assert!(map_snapshot(&snapshot).is_err());
-        assert!(units(Decimal::MAX, 8).is_err());
+        assert_eq!(
+            units(Decimal::MAX, 8).unwrap().decimal_string(8),
+            format!("{}.00000000", Decimal::MAX)
+        );
+        assert!(
+            amount(
+                &json!({"amount":"0.00000000000000000000000000001"}),
+                "amount"
+            )
+            .is_err()
+        );
         assert!(units("0.000000001".parse().unwrap(), 8).is_err());
         snapshot = sample();
         snapshot.history.get_mut("deposits").unwrap()[0]["amount"] = json!("-1");
@@ -996,8 +995,8 @@ mod tests {
             );
             for (asset, amount) in store.asset_units_at(balance.datetime)? {
                 let scale = store.asset_scale(&asset)?;
-                let amount = Decimal::try_from_i128_with_scale(amount, u32::from(scale))?;
-                println!("  {}: {}", asset.0, amount.normalize());
+                let amount = amount.decimal_string(scale);
+                println!("  {}: {}", asset.0, amount);
             }
         } else {
             println!("No Binance transactions in the cached ledger");

@@ -82,6 +82,13 @@ impl NexoCsv {
     }
 }
 
+fn deserialize_exact_decimal<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<rust_decimal::Decimal, D::Error> {
+    let text = String::deserialize(deserializer)?;
+    rust_decimal::Decimal::from_str_exact(&text).map_err(serde::de::Error::custom)
+}
+
 #[derive(Debug, Deserialize)]
 pub struct NexoTx {
     #[serde(rename = "Transaction")]
@@ -90,12 +97,18 @@ pub struct NexoTx {
     pub kind: TransactionType,
     #[serde(rename = "Input Currency")]
     pub input_currency: String,
-    #[serde(rename = "Input Amount")]
-    pub input_amount: f64, // TODO use decimal
+    #[serde(
+        rename = "Input Amount",
+        deserialize_with = "deserialize_exact_decimal"
+    )]
+    pub input_amount: rust_decimal::Decimal,
     #[serde(rename = "Output Currency")]
     pub output_currency: String,
-    #[serde(rename = "Output Amount")]
-    pub output_amount: f64, // TODO use decimal
+    #[serde(
+        rename = "Output Amount",
+        deserialize_with = "deserialize_exact_decimal"
+    )]
+    pub output_amount: rust_decimal::Decimal,
     #[serde(rename = "USD Equivalent")]
     pub usd_equivalent: String,
     #[serde(rename = "Details")]
@@ -232,9 +245,9 @@ pub mod tests {
         assert_eq!(nexo_tx.tx_id, "NXT7YGjfSsQYl1XIWtcxdUcjx");
         assert_eq!(nexo_tx.kind, TransactionType::Interest);
         assert_eq!(nexo_tx.input_currency, "NEXO");
-        assert_eq!(nexo_tx.input_amount, 7.26938619);
+        assert_eq!(nexo_tx.input_amount.to_string(), "7.26938619");
         assert_eq!(nexo_tx.output_currency, "NEXO");
-        assert_eq!(nexo_tx.output_amount, 7.26938619);
+        assert_eq!(nexo_tx.output_amount.to_string(), "7.26938619");
         assert_eq!(nexo_tx.usd_equivalent, "$7.31");
         assert_eq!(nexo_tx.details, "approved / NEXO Interest Earned");
         assert_eq!(

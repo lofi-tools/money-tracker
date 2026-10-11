@@ -10,7 +10,8 @@ Documentation is organized by purpose. Specifications describe implemented contr
 - [Proposed data model evolution and implementation phases](spec/data-model-proposal.md)
 - [Persistence and ordered startup migrations](spec/persistence.md)
 - [CLI configuration](spec/cli.md)
-- [Nexo CSV ingestion](spec/nexo.md)
+- [Nexo sources, ledger mapping, balance sums and diagnostics](spec/nexo.md)
+- [Binance sources, ledger mapping, reconciliation and diagnostics](spec/binance.md)
 - [Historical net worth and pricing](spec/historical-net-worth.md)
 - [Binance account history and rate limiting](spec/binance-account-history.md)
 
@@ -22,6 +23,7 @@ Documentation is organized by purpose. Specifications describe implemented contr
 - [Risk measurement research and proposed opportunity comparisons](findings/risk-comparison.md)
 - [Airtable data model comparison](findings/airtable-model.md)
 - [Binance export and replay guide](findings/binance-history.md)
+- [Shared provider-guide and diagnostic conventions](findings/provider-diagnostics.md)
 - [Consolidated implementation decisions and documentation corrections](findings/implementation-history.md)
 
 ## Todos

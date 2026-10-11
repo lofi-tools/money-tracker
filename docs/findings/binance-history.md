@@ -1,5 +1,7 @@
 # Exporting historical Binance transactions
 
+For implemented endpoints, record mappings, asset/liability sums and all diagnostic commands, see [the Binance provider guide](../spec/binance.md). This page owns export/replay instructions and the earlier frozen-fixture findings.
+
 Use Binance’s **transaction-history export** to recover movements older than the API retention window. A current account balance statement or a Spot trade-only report does not replace the transaction history: we need transfers, deposits, withdrawals, fees, rewards and Earn activity as well as trades.
 
 ## Generate the reports

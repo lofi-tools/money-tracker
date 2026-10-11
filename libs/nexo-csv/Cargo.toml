@@ -9,6 +9,7 @@ ring = "0.17"
 # data, serde, formats
 serde.workspace = true
 csv = "^1.3"
+rust_decimal = "1.39.0"
 chrono.workspace = true
 # errors, logs
 snafu.workspace = true

@@ -14,6 +14,7 @@ fn locations(dir: &TempDir, windows: bool) -> Locations {
         &dir.path().join("config"),
         &dir.path().join("local"),
         &dir.path().join("old"),
+        &dir.path().join("cache"),
         windows,
     )
 }

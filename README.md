@@ -17,7 +17,7 @@ Setup deps using `direnv allow` (needs Nix and nix-direnv), then:
 
 ## Desktop portfolio browser
 
-Run `pnpm install --frozen-lockfile` and `pnpm dev:desktop` to open the local Tauri app. It displays the already-imported database with exact quantities, allocations, current earnings when evidenced, and clear partial/unknown figures. Unix default: `~/.data/money-tracker/portfolio.duckdb`; `APP_DATA_DIR` overrides its directory. Missing databases offer Copy existing or Start new. See [desktop setup and checks](apps/desktop/README.md) and [stage-6 scope](docs/findings/desktop-stage-6.md). Manual financial edits and provider refresh come next.
+Run `pnpm install --frozen-lockfile` and `pnpm dev:desktop` to open the local Tauri app. It displays the already-imported database with exact quantities, allocations, current earnings when evidenced, and clear partial/unknown figures. Unix default: `~/.data/money-tracker/portfolio.duckdb`; `APP_DATA_DIR` overrides its directory. Missing databases offer Copy existing or Start new. See [desktop setup and checks](apps/desktop/README.md) and [stage-6 scope](docs/findings/desktop-stage-6.md). Manual financial edits with Undo and the scheduled refresh lifecycle are implemented in stages 7–8; account connection/import UI remains deferred.
 
 ## Full design-system showcase
 

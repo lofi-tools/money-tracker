@@ -336,6 +336,27 @@ body {
   gap: 12px;
   align-items: end;
 }
+
+/* Refresh source schedule, freshness and prerequisites; scrolls on narrow windows. */
+.refresh-status {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--mt-font-sizes-sm);
+}
+.refresh-status caption {
+  text-align: left;
+}
+.refresh-status th,
+.refresh-status td {
+  padding: 4px 8px 4px 0;
+  text-align: left;
+  vertical-align: top;
+  font-weight: 400;
+  color: var(--mt-colors-text);
+}
+.refresh-status th {
+  color: var(--mt-colors-muted);
+}
 .privacy-settings-row > :only-child {
   grid-column: 1 / -1;
 }

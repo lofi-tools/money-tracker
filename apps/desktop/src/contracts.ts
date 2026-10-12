@@ -49,6 +49,43 @@ export interface Settings {
   refresh_interval_seconds: number;
   refresh_on_open: boolean;
 }
+export type RefreshTrigger = "launch" | "scheduled" | "manual";
+/** One configured refresh source with its persisted schedule and freshness. */
+export interface RefreshStatus {
+  source: string;
+  label: string;
+  ready: boolean;
+  prerequisite: string | null;
+  last_attempt: string | null;
+  last_success: string | null;
+  next_due: string | null;
+  last_error: string | null;
+}
+/** There is no amount or provider text in a refresh outcome, by design. */
+export type RefreshOutcome =
+  | { status: "updated"; detail: string }
+  | { status: "unchanged" }
+  | { status: "failed"; code: string; message: string }
+  | { status: "blocked"; reason: string }
+  | { status: "scheduled" }
+  | { status: "not_due" };
+export interface RefreshEntry {
+  source: string;
+  label: string;
+  outcome: RefreshOutcome;
+}
+export interface RefreshReport {
+  at: string;
+  trigger: RefreshTrigger;
+  interval_seconds: number;
+  in_flight: boolean;
+  entries: RefreshEntry[];
+}
+/** One refresh pass; `startup` carries the snapshot and schedule it produced. */
+export interface RefreshUpdate {
+  startup: Startup;
+  report: RefreshReport;
+}
 export type Startup =
   | { status: "ready"; data: Snapshot; settings: Settings }
   | {
@@ -195,6 +232,8 @@ export interface Snapshot {
   holding_count: number;
   dust_count: number;
   edits: EditContext;
+  /** Configured refresh sources with stored schedule, freshness and failures. */
+  refresh: RefreshStatus[];
 }
 export type AllocationTarget =
   | { kind: "provider"; id: string }

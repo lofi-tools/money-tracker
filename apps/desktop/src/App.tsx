@@ -7,6 +7,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  onCleanup,
   onMount,
 } from "solid-js";
 import {
@@ -34,11 +35,13 @@ import type {
   CurrencyFigure,
   Rational,
 } from "@money-tracker/design-system";
-import { api, reviewMode } from "./api";
+import { api, onRefresh, reviewMode } from "./api";
 import { defaultSettings } from "./contracts";
 import type {
   Startup,
   Settings,
+  RefreshReport,
+  RefreshUpdate,
   Snapshot,
   Selection,
   Summary,
@@ -109,6 +112,21 @@ const spamState = (slot?: EditSlot | null) =>
     ? slot.value.value
     : { excluded: false, reason: "" };
 const targetKey = (target: LocalTarget) => JSON.stringify(target);
+/** Refresh outcomes carry counts and static text only, never amounts. */
+function refreshNotice(report: RefreshReport): string {
+  const parts = report.entries.flatMap((entry) => {
+    if (entry.outcome.status === "updated")
+      return [`${entry.label}: updated (${entry.outcome.detail})`];
+    if (entry.outcome.status === "failed")
+      return [`${entry.label}: refresh failed — ${entry.outcome.message}`];
+    return [];
+  });
+  return parts.length
+    ? parts.join(" · ")
+    : "Refresh finished; cached figures are unchanged.";
+}
+const missing = (value: string | null) =>
+  value === null ? "Never" : new Date(value).toLocaleString();
 
 function Apy(props: { figure: Figure<Rational> }) {
   return (
@@ -223,6 +241,36 @@ function Body(props: {
     }
   }
   onMount(() => void start(api.startup));
+  // Scheduled refresh runs announce their result; the stored snapshot is adopted.
+  onCleanup(
+    onRefresh((update: RefreshUpdate) => {
+      accept(update.startup);
+      if (update.report.entries.some((e) => e.outcome.status !== "not_due"))
+        setNotice(refreshNotice(update.report));
+    }),
+  );
+  /** Explicit refresh from Settings; a concurrent pass coalesces into one run. */
+  async function refreshNow() {
+    if (busy() || reviewMode) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const update = await api.refresh("manual");
+      if (!update) {
+        setNotice("A refresh is already running; its result will appear here.");
+        return;
+      }
+      accept(update.startup);
+      setNotice(refreshNotice(update.report));
+    } catch {
+      setError(
+        "Unable to refresh. Existing cached figures are retained; check your connection and provider configuration.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
   const entries = createMemo(() => {
     const list = group() === "asset" ? data()?.assets : data()?.providers;
     const text = search().toLocaleLowerCase();
@@ -794,26 +842,11 @@ function Body(props: {
                           })
                         }
                       />
-                      <Button
-                        disabled={reviewMode || busy()}
-                        onClick={() => {
-                          setBusy(true);
-                          void api
-                            .refreshPrices()
-                            .then(accept)
-                            .catch(() =>
-                              setError(
-                                "Unable to refresh prices. Existing cached figures are retained; check your connection and price API configuration.",
-                              ),
-                            )
-                            .finally(() => setBusy(false));
-                        }}
-                      >
-                        Refresh prices
-                      </Button>
                       <p class="muted">
-                        Prices can be refreshed above. Scheduled account updates
-                        are not available yet.
+                        The app refreshes the configured sources below at this
+                        interval while it is open; closing it ends all refresh
+                        work. Refresh on open is separate and off by default,
+                        but a missed interval triggers one catch-up refresh.
                       </p>
                       <TextField
                         label="Refresh interval (seconds)"
@@ -844,13 +877,62 @@ function Body(props: {
                               })
                             }
                           />{" "}
-                          Refresh on open (when scheduler is implemented)
+                          Refresh on open
                         </span>
                       </label>
                       <Button type="submit" disabled={busy()}>
                         Save settings
                       </Button>
                     </form>
+                    <section aria-label="Refresh status">
+                      <h3>Refresh status</h3>
+                      <Button
+                        disabled={reviewMode || busy()}
+                        onClick={() => void refreshNow()}
+                      >
+                        Refresh now
+                      </Button>
+                      <Show
+                        when={data()?.refresh?.length}
+                        fallback={
+                          <p class="muted">
+                            No refresh source is configured for this portfolio
+                            yet.
+                          </p>
+                        }
+                      >
+                        <table class="refresh-status">
+                          <thead>
+                            <tr>
+                              <th>Source</th>
+                              <th>Last success</th>
+                              <th>Next refresh</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <For each={data()?.refresh ?? []}>
+                              {(source) => (
+                                <tr>
+                                  <td>{source.label}</td>
+                                  <td>{missing(source.last_success)}</td>
+                                  <td>
+                                    {source.next_due === null
+                                      ? "Not scheduled"
+                                      : missing(source.next_due)}
+                                  </td>
+                                  <td>
+                                    {source.prerequisite ??
+                                      source.last_error ??
+                                      (source.ready ? "Ready" : "Unavailable")}
+                                  </td>
+                                </tr>
+                              )}
+                            </For>
+                          </tbody>
+                        </table>
+                      </Show>
+                    </section>
                   </section>
                 </Match>
                 <Match when={options() === "history"}>

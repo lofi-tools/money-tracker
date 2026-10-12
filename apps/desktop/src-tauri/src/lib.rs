@@ -9,6 +9,7 @@ use lib_app::{
         AllocationTarget, CalculatedMoney, CurrentHolding, NavigationEntry, PortfolioProjection,
         Selection, Summary,
     },
+    refresh::{RefreshPlan, RefreshReport, RefreshStatus, RefreshTrigger, SourceOutcome},
     startup::{MissingDatabase, OpenAction},
     worker::{DatabaseWorker, StartupOutcome},
 };
@@ -21,8 +22,29 @@ use lib_core::{
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::future::Future;
 
-#[derive(Serialize)]
+/// One refresh pass at a time. Launch, catch-up, scheduled and manual triggers
+/// that arrive together coalesce into the running pass instead of stacking
+/// provider work; the next trigger after it completes starts a fresh pass.
+pub struct RefreshGate(tokio::sync::Mutex<()>);
+impl RefreshGate {
+    pub fn new() -> Self {
+        Self(tokio::sync::Mutex::new(()))
+    }
+    /// Run `pass`, or return `None` when an equivalent pass is already running.
+    pub async fn run<F: Future>(&self, pass: F) -> Option<F::Output> {
+        let _in_flight = self.0.try_lock().ok()?;
+        Some(pass.await)
+    }
+}
+impl Default for RefreshGate {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Clone, Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum Startup {
     Missing {
@@ -110,6 +132,14 @@ pub struct Snapshot {
     pub holding_count: usize,
     pub dust_count: usize,
     pub edits: EditContext,
+    /// Configured refresh sources with their schedule, freshness and failures.
+    pub refresh: Vec<RefreshStatus>,
+}
+/// One completed refresh: the new snapshot plus what each source did.
+#[derive(Clone, Serialize)]
+pub struct RefreshUpdate {
+    pub startup: Startup,
+    pub report: RefreshReport,
 }
 #[derive(Serialize)]
 pub struct HoldingDetails {
@@ -213,12 +243,45 @@ impl Session {
             settings: self.settings().await?,
         })
     }
-    pub async fn refresh_prices(&mut self) -> Result<Startup> {
-        self.worker()?.refresh_prices().await?;
-        Ok(Startup::Ready {
-            data: self.snapshot().await?,
-            settings: self.settings().await?,
-        })
+    /// A pure scheduling decision: no provider, network or file access.
+    pub async fn refresh_plan(
+        &self,
+        trigger: RefreshTrigger,
+        now: DateTime<Utc>,
+    ) -> Result<RefreshPlan> {
+        self.worker()?.refresh_plan(trigger, now).await
+    }
+    /// Persist acquired outcomes and rebuild the snapshot they changed.
+    pub async fn refresh_commit(
+        &mut self,
+        plan: RefreshPlan,
+        outcomes: Vec<SourceOutcome>,
+        now: DateTime<Utc>,
+    ) -> Result<(Startup, RefreshReport)> {
+        let report = self.worker()?.refresh_commit(plan, outcomes, now).await?;
+        Ok((
+            Startup::Ready {
+                data: self.snapshot().await?,
+                settings: self.settings().await?,
+            },
+            report,
+        ))
+    }
+    /// Plan, acquire and commit in one call. Hosts that must keep browsing
+    /// responsive split these steps around a short-lived session lock.
+    pub async fn refresh(
+        &mut self,
+        trigger: RefreshTrigger,
+        now: DateTime<Utc>,
+    ) -> Result<(Startup, RefreshReport)> {
+        let plan = self.refresh_plan(trigger, now).await?;
+        let mut outcomes = Vec::new();
+        for item in plan.runs() {
+            if let Some(outcome) = lib_app::refresh::acquire(item).await {
+                outcomes.push(outcome);
+            }
+        }
+        self.refresh_commit(plan, outcomes, now).await
     }
     /// One typed manual edit; the snapshot is rebuilt so stale IDs are rejected.
     pub async fn apply_edit(&mut self, edit: ManualEdit) -> Result<Startup> {
@@ -269,6 +332,7 @@ impl Session {
             holding_count: p.holdings.len(),
             dust_count: p.holdings.iter().filter(|h| h.is_dust).count(),
             edits: edit_context(&p, &actions),
+            refresh: self.worker()?.refresh_status().await?,
         };
         self.projection = Some(p);
         Ok(out)
@@ -604,6 +668,25 @@ mod tests {
     use super::*;
     use lib_app::config::{AppConfig, DATABASE_FILENAME};
     #[tokio::test]
+    async fn overlapping_refresh_triggers_coalesce_into_the_running_pass() {
+        let gate = RefreshGate::new();
+        let (running, coalesced) = tokio::join!(
+            gate.run(async {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                "refreshed"
+            }),
+            gate.run(async { "second pass" })
+        );
+        assert_eq!(running, Some("refreshed"));
+        assert_eq!(
+            coalesced, None,
+            "a concurrent trigger joins the running pass"
+        );
+        // The gate accepts a later pass once the first one has finished.
+        assert_eq!(gate.run(async { "later" }).await, Some("later"));
+    }
+
+    #[tokio::test]
     async fn missing_new_snapshot_settings_and_close() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let resolved = ResolvedConfig {
@@ -611,6 +694,7 @@ mod tests {
             config_file: temp.path().join("config.json"),
             config: AppConfig::default(),
             legacy_database: None,
+            cache_dir: temp.path().join("cache"),
         };
         let mut s = Session::new(resolved.clone());
         assert!(matches!(s.startup().await?, Startup::Missing { .. }));
@@ -653,6 +737,7 @@ mod tests {
             config_file: temp.path().join("config.json"),
             config: AppConfig::default(),
             legacy_database: None,
+            cache_dir: temp.path().join("cache"),
         };
         let mut s = Session::new(resolved.clone());
         assert!(matches!(

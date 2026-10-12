@@ -1,6 +1,6 @@
 # First desktop app — scope and implementation
 
-Status: stages 1–6 are implemented, including the local Tauri/Solid portfolio browser. Financial edit/Undo controls, provider refresh and cross-platform packaging remain stages 7–9. The interview below retains the full agreed first-version scope; it is not a claim that every scenario is delivered. See [stage 6 behavior and limitations](../findings/desktop-stage-6.md).
+Status: stages 1–8 are implemented, including the local Tauri/Solid portfolio browser, financial edit/Undo controls and the refresh lifecycle. Cross-platform packaging and final acceptance remain stage 9. The interview below retains the full agreed first-version scope; it is not a claim that every scenario is delivered. See [stage 6 behavior and limitations](../findings/desktop-stage-6.md), [stage 7 manual edits](../findings/desktop-stage-7.md) and [stage 8 refresh lifecycle](../findings/desktop-stage-8.md).
 
 ## Priority decision
 
@@ -379,4 +379,14 @@ Settings labels scaled privacy as “Scaled down”. The scale input is shown on
 
 Current-price/navbar refinement: navigation continues to sort exact current values (including labelled partial subtotals) descending, unknown values last. Unknown/not-applicable APY is omitted in navigation; individual allocation rates remain labelled unknown. Aggregate navigation and expandable group rows use `estimated_current_apy`, marked `(est.)` when missing investment rates are assumed zero. Unknown borrowing costs are never assumed zero. This supersedes the earlier requirement to withhold every incomplete aggregate display rate; strict query APY remains available separately.
 
-Settings provides explicit **Refresh prices** through the Rust service. This is price acquisition only; it does not refresh provider balances/history or reconcile them. Ordinary startup stays offline. The current batch supports USD reporting and reviewed canonical crypto IDs plus the existing provider fiat-unit mappings. Other reporting currencies and unmapped assets remain unsupported by this refresh; they are not matched by ticker guessing. The frozen browser review cannot initiate price refresh, but its export can fetch fresh prices into the validated temporary database copy with `--refresh-prices`.
+## Implemented refresh lifecycle (stage 8)
+
+Implemented 12 October 2026. Sources: [refresh lifecycle](../../libs/lib-app/src/refresh.rs), [managed worker](../../libs/lib-app/src/worker.rs), [desktop host](../../apps/desktop/src-tauri/src/main.rs) and [offline refresh tests](../../libs/lib-app/tests/refresh.rs). Details, decisions and validation are recorded in [stage 8 findings](../findings/desktop-stage-8.md).
+
+Refresh sources are derived from the open portfolio, not from a global list: `prices` covers the distinct non-reporting assets held, `account:<id>` covers each saved Kraken account, and `provider:NEXO` covers the configured Nexo export. Providers the app has no acquisition path for (Binance statements/API, EVM chains) are listed with an explicit prerequisite instead of failing, and providers without any documented path are not offered as sources.
+
+Scheduling is a pure decision over persisted per-source state, so tests inject a clock and no run happens without a decision. A source that was never scheduled starts its interval on the next launch or scheduled tick without contacting anything, so an ordinary open shows stored data and only contacts providers when the interval elapses. Refresh-on-open runs every ready source immediately. A launch after a missed interval performs exactly one catch-up run, and the host's in-flight guard coalesces launch, catch-up, scheduled and manual triggers into a single pass instead of stacking provider work. Failed runs keep the previous success, record a redacted reason and schedule the next attempt.
+
+Acquisition never runs on the database thread: the host plans through the worker, contacts providers or reads local files on the async side, then commits exact evidence and the resulting schedule in one worker request. Provider text is not forwarded to the app or its storage; failures carry a code, a static explanation and nothing else. The app refreshes at the configured interval while it is running (daily by default) and closing the window or quitting ends all refresh work, with no tray or background process.
+
+Manual refresh is in Settings and refreshes every ready source. Settings also lists each source's last success, next refresh, stored failure and prerequisite. The frozen browser review cannot initiate a refresh, but its export can fetch into the validated temporary database copy with `--refresh`. Ordinary opening no longer triggers price acquisition on its own; the manual refresh belongs to options as agreed.

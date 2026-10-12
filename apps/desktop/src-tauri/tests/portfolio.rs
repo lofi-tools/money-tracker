@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
+use lib_app::refresh::{RefreshOutcome, RefreshTrigger};
 use lib_app::{
     Application,
     config::{AppConfig, DATABASE_FILENAME, ResolvedConfig},
@@ -15,6 +16,7 @@ fn resolved(dir: &std::path::Path) -> ResolvedConfig {
         config_file: dir.join("config.json"),
         config: AppConfig::default(),
         legacy_database: None,
+        cache_dir: dir.join("cache"),
     }
 }
 fn seed(path: &std::path::Path) -> Result<()> {
@@ -211,6 +213,92 @@ impl<T> Status for lib_app::dto::FigureDto<T> {
         }
     }
 }
+/// Stage 8 evidence: a configured source starts unscheduled, a manual run
+/// re-reads it offline, and the store stays authoritative across a restart.
+#[tokio::test]
+async fn refresh_starts_unscheduled_imports_exactly_and_survives_restart() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let export = temp.path().join("nexo.csv");
+    // A USD-denominated unit needs no market lookup, so this stays offline.
+    std::fs::write(
+        &export,
+        "Transaction,Type,Input Currency,Input Amount,Output Currency,Output Amount,USD Equivalent,Fee,Fee Currency,Details,Date / Time (UTC)\n\
+         id,Top up Crypto,USDX,2,USDX,2,$2,-,-,approved / deposit,2025-01-01 00:00:00\n",
+    )?;
+    let mut config = resolved(temp.path());
+    config.config.nexo_csv_path = Some(export);
+    seed(&config.database)?;
+    let mut session = Session::new(config.clone());
+    let Startup::Ready { data, .. } = session.startup().await? else {
+        panic!()
+    };
+    // The configured export is a source; the held MYSTERY asset has no reviewed
+    // price mapping and is never fabricated.
+    let sources: Vec<_> = data.refresh.iter().map(|s| s.source.clone()).collect();
+    assert_eq!(
+        sources,
+        vec!["prices".to_string(), "provider:NEXO".to_string()]
+    );
+    assert!(data.refresh.iter().all(|s| s.next_due.is_none()));
+
+    // A launch starts the interval without contacting or reading anything.
+    let now = Utc::now();
+    let plan = session.refresh_plan(RefreshTrigger::Launch, now).await?;
+    assert_eq!(plan.runs().count(), 0);
+    let (startup, report) = session.refresh_commit(plan, Vec::new(), now).await?;
+    assert!(
+        report
+            .entries
+            .iter()
+            .all(|e| matches!(e.outcome, RefreshOutcome::Scheduled))
+    );
+    let Startup::Ready { data, .. } = &startup else {
+        panic!()
+    };
+    assert!(data.refresh.iter().all(|s| s.next_due.is_some()));
+
+    // A manual run re-reads the export; the same bytes are not imported twice.
+    let (startup, report) = session.refresh(RefreshTrigger::Manual, now).await?;
+    assert!(report.entries.iter().any(|e| e.source == "provider:NEXO"));
+    assert!(matches!(
+        report
+            .entries
+            .iter()
+            .find(|e| e.source == "provider:NEXO")
+            .map(|e| &e.outcome),
+        Some(RefreshOutcome::Updated { detail }) if detail == "1 transactions"
+    ));
+    let Startup::Ready { data, .. } = &startup else {
+        panic!()
+    };
+    let nexo = data
+        .refresh
+        .iter()
+        .find(|s| s.source == "provider:NEXO")
+        .context("Nexo source")?;
+    assert_eq!(nexo.last_success, Some(now));
+    session.close().await?;
+
+    // Reopening restores the schedule and freshness from the database.
+    let mut reopened = Session::new(config);
+    let Startup::Ready { data, .. } = reopened.startup().await? else {
+        panic!()
+    };
+    let nexo = data
+        .refresh
+        .iter()
+        .find(|s| s.source == "provider:NEXO")
+        .context("Nexo source after restart")?;
+    assert_eq!(nexo.last_success, Some(now));
+    let interval = reopened.settings().await?.refresh_interval_seconds;
+    assert_eq!(
+        nexo.next_due,
+        Some(now + chrono::Duration::seconds(interval as i64))
+    );
+    reopened.close().await?;
+    Ok(())
+}
+
 /// Stage 7 evidence: a manual rate edit changes the projection, Undo restores the
 /// source figure, and both the action log and compensations survive a restart.
 #[tokio::test]

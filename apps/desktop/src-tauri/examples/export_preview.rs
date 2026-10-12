@@ -1,8 +1,10 @@
 //! Export a read-only UI review snapshot from a validated temporary DB copy.
 use anyhow::{Context, Result, ensure};
+use chrono::Utc;
 use lib_app::{
     config::{DATABASE_FILENAME, ResolvedConfig},
     portfolio::Selection,
+    refresh::RefreshTrigger,
     startup::OpenAction,
 };
 use money_tracker_desktop::{Session, Startup};
@@ -12,8 +14,8 @@ use std::path::PathBuf;
 async fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     ensure!(
-        args.len() == 2 || (args.len() == 3 && args[2] == "--refresh-prices"),
-        "usage: export_preview SOURCE.duckdb OUTPUT.json [--refresh-prices]"
+        args.len() == 2 || (args.len() == 3 && args[2] == "--refresh"),
+        "usage: export_preview SOURCE.duckdb OUTPUT.json [--refresh]"
     );
     let mut resolved = ResolvedConfig::system(None, None)?;
     let temporary = tempfile::tempdir()?;
@@ -24,7 +26,7 @@ async fn main() -> Result<()> {
         .open(OpenAction::CopyExisting(PathBuf::from(&args[0])))
         .await?;
     if args.len() == 3 {
-        ready = session.refresh_prices().await?;
+        ready = session.refresh(RefreshTrigger::Manual, Utc::now()).await?.0;
     }
     let Startup::Ready { data, .. } = &ready else {
         anyhow::bail!("preview database missing")

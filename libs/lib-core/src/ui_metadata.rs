@@ -273,6 +273,10 @@ pub struct RefreshState {
     pub next_due: Option<DateTime<Utc>>,
     pub last_attempt: Option<DateTime<Utc>>,
     pub last_success: Option<DateTime<Utc>>,
+    /// Redacted failure text from the last attempt; the app never stores raw
+    /// provider errors, which can carry credentials or private amounts.
+    #[serde(default)]
+    pub last_error: Option<String>,
 }
 
 fn json<T: Serialize>(value: &T) -> Result<String> {

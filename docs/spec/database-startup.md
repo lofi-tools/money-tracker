@@ -21,6 +21,8 @@ Example version-1 config (all omitted settings default):
   "version": 1,
   "data_dir": "/absolute/path/to/money-tracker",
   "active_portfolio": "local:default",
+  "cache_dir": "/absolute/path/to/money-tracker-cache",
+  "nexo_csv_path": "/absolute/path/to/nexo-transactions.csv",
   "settings": {
     "reporting_currency": "USD",
     "theme": "system",
@@ -33,9 +35,11 @@ Example version-1 config (all omitted settings default):
 }
 ```
 
-Settings are local preferences in this file, separate from provider credentials, source transactions and portfolio metadata. Theme accepts `system`, `light`, `dark`; privacy accepts `normal`, `hidden`, `scaled`. Privacy scale is an exact string strictly between zero and one. Dust threshold is a nonnegative exact string denominated in the reporting currency (USD by default). Reporting currency must be nonempty; this preference does not establish available pricing for an arbitrary asset. Refresh interval is a positive number of seconds. No rate/price selection, display formatting or refresh execution is implemented by these settings alone.
+Settings are local preferences in this file, separate from provider credentials, source transactions and portfolio metadata. Theme accepts `system`, `light`, `dark`; privacy accepts `normal`, `hidden`, `scaled`. Privacy scale is an exact string strictly between zero and one. Dust threshold is a nonnegative exact string denominated in the reporting currency (USD by default). Reporting currency must be nonempty; this preference does not establish available pricing for an arbitrary asset. Refresh interval is a positive number of seconds. These settings alone do not perform a refresh; stage 8 interprets them through the refresh lifecycle described in the [desktop app spec](desktop-app.md#implemented-refresh-lifecycle-stage-8).
 
-`AppConfig::save` validates first, writes and syncs a temporary file in the same directory, then replaces the configuration file. The worker updates its in-memory settings only after this succeeds. Existing `data_dir` and `active_portfolio` configuration survive a settings save. Environment/CLI directory overrides are not silently persisted as config values. Configuration is loaded at startup; external edits take effect on the next open. DB-backed manual-action/Undo and refresh scheduling records were added in stage 3; their UI and execution remain stages 7 and 8.
+`cache_dir` and `nexo_csv_path` are optional paths. `cache_dir` defaults to the platform cache directory (`~/Library/Caches/money-tracker` on macOS, `~/.cache/money-tracker` on Linux), the same directory the CLI uses, so cached provider responses and resumable acquisitions are shared. `nexo_csv_path` names the CSV export the app may re-read; it never turns that export into a live Nexo balance source. Both must be nonempty when present and are never treated as credentials.
+
+`AppConfig::save` validates first, writes and syncs a temporary file in the same directory, then replaces the configuration file. The worker updates its in-memory settings only after this succeeds. Existing `data_dir` and `active_portfolio` configuration survive a settings save. Environment/CLI directory overrides are not silently persisted as config values. Configuration is loaded at startup; external edits take effect on the next open. DB-backed manual-action/Undo and refresh scheduling records were added in stage 3; their UI arrived in stage 7 and their scheduling and execution in stage 8.
 
 ## Explicit database opening
 
@@ -55,7 +59,7 @@ Copy/new installation uses a temporary file in the destination directory, valida
 
 Without `active_portfolio`, the managed worker requires the sole portfolio to be `local:default`. Multiple portfolios or a different sole identity require an explicitly configured existing ID. Unknown IDs fail; copying/new creation validates the ID before installation. Portfolios are never merged. Worker ledger queries construct `ReadContext` using the selected ID; callers cannot accidentally supply a different portfolio. The later switcher remains deferred.
 
-One dedicated `money-tracker-db` thread owns the `Application`/DuckDB connection from startup through close. Cloneable handles enqueue typed async reads and settings writes; migrations, file operations and queries run off the caller/UI thread, serialized in order. Provider fetches are never triggered by opening or reading settings, including when `refresh_on_open` is true; stage 8 will interpret that setting.
+One dedicated `money-tracker-db` thread owns the `Application`/DuckDB connection from startup through close. Cloneable handles enqueue typed async reads and settings writes; migrations, file operations and queries run off the caller/UI thread, serialized in order. Provider fetches are not triggered by opening a database, running migrations or reading settings. Stage 8 interprets `refresh_on_open` in the host: a launch refresh runs only when that setting is enabled or a scheduled interval was missed. Planning is a worker request, acquisition runs on the async side without holding the session, and the results are committed in one further worker request.
 
 Dropping a queued request skips its effects. Already-running operations finish atomically; cancellation does not roll back a completed settings write or DB installation. `close().await` rejects new requests, drops queued jobs, waits for in-flight work and joins the owner thread. Dropping the last handle also signals shutdown; hosts must await explicit close for a confirmed completed shutdown. No provider task or persistent background process is created. The existing synchronous `Application::open/store` boundary remains available to CLI orchestration.
 

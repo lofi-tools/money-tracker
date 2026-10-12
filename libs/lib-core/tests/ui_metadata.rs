@@ -800,6 +800,7 @@ fn verification_is_exact_scoped_and_stale_after_ledger_or_policy_changes() -> Re
         next_due: Some(time(4)),
         last_attempt: Some(time(3)),
         last_success: Some(time(2)),
+        last_error: None,
     };
     store.save_refresh_state(&DEFAULT_PORTFOLIO.into(), "kraken", &state)?;
     assert_eq!(

@@ -54,7 +54,7 @@ Dust state is per portfolio/provider/asset: Auto, Dust or Significant. It never 
 
 Accepted financial writes increment affected portfolio ledger revisions atomically, including replacement effects' former portfolio scopes. Duplicate completed imports do not increment them. Existing account reviews and new global spam mutations increment policy revisions. Reports retain their evidence but `verification_is_current` becomes false after relevant ledger/policy changes. Metadata revision is separately retained; this conservative invalidation applies at portfolio level, not just one position. Existing provider reports are not automatically converted into these generic records; stage 4 consumes generic coverage/issues, while adapter population remains stage 8/provider work.
 
-Per-source `RefreshState` persists next due, last attempt and last successful update separately. Failed attempts may advance last attempt without advancing success. Scheduling/coalescing/network refresh remain stage 8. Stage-2 settings stay in their existing JSON file; there is no competing DB preference store.
+Per-source `RefreshState` persists next due, last attempt, last successful update and a redacted last failure separately. Failed attempts advance last attempt and the schedule without advancing success; the stored failure is a code plus a static explanation, never raw provider text that could carry credentials or private amounts. Stage 8 implements the scheduling, coalescing and acquisition that consume these records; see the [desktop app spec](desktop-app.md#implemented-refresh-lifecycle-stage-8). Stage-2 settings stay in their existing JSON file; there is no competing DB preference store.
 
 ## Atomic local changes and Undo
 

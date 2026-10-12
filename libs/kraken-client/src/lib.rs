@@ -158,12 +158,16 @@ impl Client {
             let clock = u64::try_from(Utc::now().timestamp_millis())?;
             *last = clock.max(last.checked_add(1).context("Kraken nonce exhausted")?);
             let nonce = last.to_string();
-            let mut form = url::form_urlencoded::Serializer::new(String::new());
-            form.append_pair("nonce", &nonce);
-            for (name, value) in params {
-                form.append_pair(name, value);
-            }
-            let body = form.finish();
+            // Scope the form encoder: holding it across the request would make the
+            // future non-Send, so hosts could not refresh Kraken off the UI thread.
+            let body = {
+                let mut form = url::form_urlencoded::Serializer::new(String::new());
+                form.append_pair("nonce", &nonce);
+                for (name, value) in params {
+                    form.append_pair(name, value);
+                }
+                form.finish()
+            };
             let response = self
                 .http
                 .post(format!("{}{path}", self.base))

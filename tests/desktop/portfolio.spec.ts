@@ -92,6 +92,65 @@ async function install(page: Page, missing = false) {
               case "save_settings":
                 state.settings = args.settings;
                 return copy(state);
+              // A refresh pass returns the new snapshot plus typed per-source outcomes.
+              case "refresh": {
+                const at = new Date().toISOString();
+                state.data = {
+                  ...state.data,
+                  refresh: [
+                    {
+                      source: "prices",
+                      label: "Current prices (USD)",
+                      ready: true,
+                      prerequisite: null,
+                      last_attempt: at,
+                      last_success: at,
+                      next_due: new Date(Date.now() + 86_400_000).toISOString(),
+                      last_error: null,
+                    },
+                    {
+                      source: "provider:NEXO",
+                      label: "Nexo export",
+                      ready: false,
+                      prerequisite:
+                        "No readable Nexo export is configured; refreshing Nexo re-reads a CSV export and cannot fetch live balances.",
+                      last_attempt: at,
+                      last_success: null,
+                      next_due: null,
+                      last_error: null,
+                    },
+                  ],
+                };
+                return {
+                  startup: copy(state),
+                  report: {
+                    at,
+                    trigger: args.trigger,
+                    interval_seconds: 86_400,
+                    in_flight: false,
+                    entries: [
+                      {
+                        source: "prices",
+                        label: "Current prices (USD)",
+                        outcome: {
+                          status: "updated",
+                          detail: "2 exact current prices",
+                        },
+                      },
+                      {
+                        source: "provider:NEXO",
+                        label: "Nexo export",
+                        outcome: {
+                          status: "failed",
+                          code: "acquisition_failed",
+                          message:
+                            "the source could not be reached or refused the request from this app",
+                        },
+                      },
+                    ],
+                  },
+                };
+              }
               // Browser previews echo the request into the ordered action log.
               case "manual_edit":
                 applied.push(args.edit);
@@ -261,7 +320,9 @@ test("647px window contains independent panes and keeps Settings reachable", asy
   await expect(
     page.getByRole("main").getByRole("heading", { name: "Settings" }),
   ).toBeVisible();
-  await expect(page.getByRole("main").getByRole("table")).toHaveCount(0);
+  await expect(
+    page.getByRole("main").getByRole("table", { name: "Current allocations" }),
+  ).toHaveCount(0);
   await expect(page.getByLabel("Privacy mode")).toBeVisible();
   await expect(page.getByLabel("Privacy scale (fraction)")).toHaveCount(0);
   await page.getByLabel("Privacy mode").selectOption({ label: "Scaled down" });
@@ -276,7 +337,7 @@ test("647px window contains independent panes and keeps Settings reachable", asy
   });
 });
 
-test("failed explicit price refresh retains cached navbar figures", async ({
+test("refresh reports each source and retains cached figures", async ({
   page,
 }) => {
   await install(page);
@@ -285,13 +346,16 @@ test("failed explicit price refresh retains cached navbar figures", async ({
   const usd = nav.getByRole("button", { name: /US USD/ });
   const before = await usd.innerText();
   await nav.getByRole("button", { name: "Settings", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Refresh prices", exact: true })
-    .click();
-  await expect(page.getByRole("alert")).toContainText(
-    "Existing cached figures are retained",
-  );
+  const status = page.getByRole("region", { name: "Refresh status" });
+  await status.getByRole("button", { name: "Refresh now" }).click();
+  // Failures name their source and carry redacted text, never provider detail.
+  const notice = page.getByRole("status");
+  await expect(notice).toContainText("Nexo export: refresh failed");
+  await expect(notice).toContainText("2 exact current prices");
+  await expect(status).toContainText("Current prices (USD)");
+  await expect(status).toContainText("No readable Nexo export is configured");
   expect(await usd.innerText()).toBe(before);
+  await page.screenshot({ path: ".cache/desktop-refresh-review.png" });
 });
 
 test("manual rate, price, dust and spam edits commit typed requests", async ({

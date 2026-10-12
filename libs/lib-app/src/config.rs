@@ -87,6 +87,10 @@ pub struct AppConfig {
     pub data_dir: Option<PathBuf>,
     pub active_portfolio: Option<PortfolioId>,
     pub settings: Settings,
+    /// Provider response/cache directory; defaults to the shared platform cache.
+    pub cache_dir: Option<PathBuf>,
+    /// Nexo export the app may re-read; never a live Nexo balance source.
+    pub nexo_csv_path: Option<PathBuf>,
 }
 impl Default for AppConfig {
     fn default() -> Self {
@@ -95,6 +99,8 @@ impl Default for AppConfig {
             data_dir: None,
             active_portfolio: None,
             settings: Settings::default(),
+            cache_dir: None,
+            nexo_csv_path: None,
         }
     }
 }
@@ -116,6 +122,18 @@ impl AppConfig {
                 .as_ref()
                 .is_none_or(|p| !p.0.trim().is_empty()),
             "active portfolio is empty"
+        );
+        ensure!(
+            self.cache_dir
+                .as_ref()
+                .is_none_or(|p| !p.as_os_str().is_empty()),
+            "cache directory is empty"
+        );
+        ensure!(
+            self.nexo_csv_path
+                .as_ref()
+                .is_none_or(|p| !p.as_os_str().is_empty()),
+            "Nexo export path is empty"
         );
         self.settings.validate()
     }
@@ -151,6 +169,8 @@ impl AppConfig {
 #[derive(Clone, Debug)]
 pub struct Locations {
     pub default_data_dir: PathBuf,
+    /// Shared with the CLI so cached provider responses and resume state are reused.
+    pub default_cache_dir: PathBuf,
     pub config_file: PathBuf,
     pub legacy_database: Option<PathBuf>,
 }
@@ -160,6 +180,7 @@ impl Locations {
         config_dir: &Path,
         local_data_dir: &Path,
         legacy_data_dir: &Path,
+        cache_dir: &Path,
         windows: bool,
     ) -> Self {
         Self {
@@ -168,6 +189,7 @@ impl Locations {
             } else {
                 home.join(".data/money-tracker")
             },
+            default_cache_dir: cache_dir.join("money-tracker"),
             config_file: config_dir.join("money-tracker/config.json"),
             legacy_database: Some(
                 legacy_data_dir
@@ -182,6 +204,7 @@ impl Locations {
             &dirs::config_dir().context("config directory unavailable")?,
             &dirs::data_local_dir().context("local data directory unavailable")?,
             &dirs::data_dir().context("legacy data directory unavailable")?,
+            &dirs::cache_dir().context("cache directory unavailable")?,
             cfg!(windows),
         ))
     }
@@ -192,6 +215,7 @@ pub struct ResolvedConfig {
     pub config_file: PathBuf,
     pub config: AppConfig,
     pub legacy_database: Option<PathBuf>,
+    pub cache_dir: PathBuf,
 }
 impl ResolvedConfig {
     pub fn resolve(
@@ -217,11 +241,16 @@ impl ResolvedConfig {
         // '~' is not expanded. Document this rather than guessing at path syntax.
         let database = data_dir.join(DATABASE_FILENAME);
         let legacy_database = locations.legacy_database.filter(|p| p != &database);
+        let cache_dir = config
+            .cache_dir
+            .clone()
+            .unwrap_or_else(|| locations.default_cache_dir.clone());
         Ok(Self {
             database,
             config_file,
             config,
             legacy_database,
+            cache_dir,
         })
     }
     pub fn system(

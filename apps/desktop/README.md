@@ -1,6 +1,6 @@
 # Money Tracker desktop
 
-Stage 7: a local Tauri 2 host and Solid frontend consuming `@money-tracker/design-system` and the shared Rust application worker. Displays already-imported current holdings, allocations and evidenced current annual earnings, and exposes typed manual edits (APY, borrowing rates, prices, local names, dust/spam, grouping) with persistent Undo. Missing inputs are labelled unknown/partial. Account connection, CSV-import and transaction-history commands are not exposed yet.
+Stage 8: a local Tauri 2 host and Solid frontend consuming `@money-tracker/design-system` and the shared Rust application worker. Displays already-imported current holdings, allocations and evidenced current annual earnings, exposes typed manual edits (APY, borrowing rates, prices, local names, dust/spam, grouping) with persistent Undo, and refreshes configured sources on a schedule. Missing inputs are labelled unknown/partial. Account connection, CSV-import and transaction-history commands are not exposed yet.
 
 From the repository root:
 
@@ -18,6 +18,8 @@ The GUI uses `APP_DATA_DIR`, then local JSON `data_dir`, then the OS default. Un
 A missing database prompts for Copy existing (native picker; preserves source) or Start new (explicit empty DB). Close any other process writing the selected source/destination first. Corrupt/locked/unrelated databases return an explicit error; they never become empty portfolios automatically.
 
 `pnpm --filter @money-tracker/desktop dev` alone is a frontend preview, without access to Rust/portfolio data. It explicitly reports the missing desktop runtime. It does not load synthetic showcase data.
+
+Refresh: the app refreshes every ready source at the configured interval while it is open (daily by default) and always ends refresh work on close/Quit; refresh-on-open is off by default and a missed interval triggers one catch-up pass. Settings lists each source with its last success, next refresh and any stored failure, plus **Refresh now**. Sources are derived from the open portfolio: current prices, saved Kraken accounts and the configured Nexo export path (`nexo_csv_path`). Kraken needs `KRAKEN_API_KEY_ID`/`KRAKEN_API_SECRET` in the app's environment; Binance and EVM stay listed as prerequisites until their UI setup exists. Cached provider responses are shared with the CLI through `cache_dir`. See [stage 8](../../docs/findings/desktop-stage-8.md).
 
 Validation:
 

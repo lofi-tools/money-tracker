@@ -1,6 +1,6 @@
 # First UI — ordered implementation plan
 
-Status: **stages 1–7 implemented; stages 8–9 remain proposed and deferred**. The user authorized stages 1, 2, 3, 4, 5, 6 and 7 separately; inclusion here does not authorize the remaining stages. Grounded in repository source on 12 October 2026. The [master todo](master-todo.md#0-now-first-usable-desktop-app--ui) remains the canonical completion checklist. This document sequences its existing tasks and defines dependencies and completion evidence; it is not a second backlog.
+Status: **stages 1–8 implemented; stage 9 remains proposed and deferred**. The user authorized stages 1, 2, 3, 4, 5, 6, 7 and 8 separately; inclusion here does not authorize the remaining stage. Grounded in repository source on 12 October 2026. The [master todo](master-todo.md#0-now-first-usable-desktop-app--ui) remains the canonical completion checklist. This document sequences its existing tasks and defines dependencies and completion evidence; it is not a second backlog.
 
 The master todo covers the agreed feature scope. What it lacked was an explicit implementation order, a minimum schema/query slice, and intermediate working milestones. Follow the [desktop contract and acceptance scenarios](../spec/desktop-app.md), [design-system package plan](../spec/web-design-system.md), and [data-model proposal](../spec/data-model-proposal.md).
 
@@ -134,6 +134,8 @@ Completion evidence: actual edit → updated summaries → restart → Undo scen
 
 ## 8. Add refresh lifecycle using existing acquisition paths
 
+Implemented: [refresh lifecycle](../findings/desktop-stage-8.md), the shared [refresh module](../../libs/lib-app/src/refresh.rs), worker plan/commit requests, host coalescing and scheduler, and the Settings refresh controls. Sources are derived from the open portfolio (`prices`, saved Kraken accounts, a configured Nexo export); Binance/EVM stay visible with explicit prerequisites rather than failing runs. An unscheduled source starts its interval without contacting anything, refresh-on-open runs everything, and a missed interval produces exactly one coalesced catch-up. Failures keep the last success and store only a code and static text. Cross-platform timer behaviour remains stage 9. Validation passed across six new unit tests, two offline integration tests, the desktop `Session` refresh test, `cargo fmt`, `cargo clippy` (no new warnings), `pnpm typecheck`, `pnpm format:check` and `pnpm test:desktop` (6 passed).
+
 Canonical tasks: master todo section 0 refresh/settings entries; reuse provider acquisition tasks rather than expand coverage.
 
 Refresh already configured accounts and price/rate sources through the shared application services; UI connection setup remains deferred. State provider prerequisites clearly: the Nexo CSV path can only re-read available files, not claim live Nexo balance acquisition; unsupported rate endpoints leave rates unknown/manual. Desktop credential availability must be explicit because a GUI launch does not necessarily inherit a terminal's direnv environment. Reuse existing locally configured credentials without logging them; do not add OAuth onboarding here.
@@ -156,9 +158,9 @@ Record validation results and limitations, then update canonical master todo sta
 | --- | --- | --- |
 | Contracts and migration foundation | 1–3 | Existing data preserved; metadata/settings/actions ready. No UI completion claim. |
 | Real-data browse | 1–6 | Tauri opens imported holdings with allocations/details and truthful partial earnings. |
-| Complete first UI behavior | 1–8 | Current-rate edits, debt costs, grouping/classification, persistent Undo and configured refresh work. |
+| Complete first UI behavior | 1–8 | Current-rate edits, debt costs, grouping/classification, persistent Undo and configured refresh work — implemented; stage 9 validates the built app. |
 | Validated first build | 9 plus prior stages | Acceptance evidence and reproducible three-system builds. |
 
 The design system can progress alongside backend metadata/query work after contract design. A fake-data prototype may help visual review but cannot replace real-data validation. Do not wait for new providers, a complete opportunity catalogue, risk service, routing, sharing/sync or the full historical calculation engine before building this UI.
 
-Current-price follow-up before stage 8: explicit Settings USD price refresh and a live-priced frozen imported preview are implemented. Missing investment rates now have a separately labelled aggregate APY estimate, while strict/individual unknowns and debt protections remain. Automatic provider/rate refresh and scheduling stay in stage 8. See [follow-up findings](../findings/desktop-stage-6.md#current-price-and-aggregate-apy-follow-up).
+Current-price follow-up before stage 8: explicit Settings USD price refresh and a live-priced frozen imported preview are implemented. Missing investment rates now have a separately labelled aggregate APY estimate, while strict/individual unknowns and debt protections remain. Stage 8 replaced that explicit price button with a manual refresh over every ready source and added the scheduling/coalescing described above; see [follow-up findings](../findings/desktop-stage-6.md#current-price-and-aggregate-apy-follow-up).

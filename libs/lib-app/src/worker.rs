@@ -3,6 +3,7 @@ use crate::{
     Application,
     config::{ResolvedConfig, Settings},
     dto::{LedgerBalancesDto, ReadContext},
+    refresh::{RefreshPlan, RefreshReport, RefreshStatus, RefreshTrigger, SourceOutcome},
     startup::{self, MissingDatabase, OpenAction, Opened},
 };
 use anyhow::{Context, Result, ensure};
@@ -155,34 +156,73 @@ impl DatabaseWorker {
         })
         .await
     }
-    /// Explicit current-price refresh; provider ledger and reconciliation records are untouched.
-    pub async fn refresh_prices(&self) -> Result<()> {
-        let projection = self.portfolio_projection(Utc::now()).await?;
-        ensure!(
-            projection.request.reporting_asset.0 == "USD",
-            "current price refresh currently supports USD only"
-        );
-        let assets: Vec<_> = projection
-            .assets
-            .iter()
-            .filter_map(|entry| {
-                if let crate::portfolio::Selection::Asset(id) = &entry.selection {
-                    Some(id.clone())
-                } else {
-                    None
-                }
-            })
-            .collect();
-        let prices = crate::adapters::coingecko::CoinGeckoSvc::new()?
-            .fetch_exact_current_prices(&assets)
-            .await?;
-        self.request(move |app, _| {
-            for price in prices {
-                app.store().save_price_evidence(&price)?;
-            }
-            Ok(())
+    /// Configured refresh sources with stored schedule and prerequisites.
+    pub async fn refresh_status(&self) -> Result<Vec<RefreshStatus>> {
+        let portfolio = self.portfolio_id.clone();
+        self.request(move |app, resolved| {
+            crate::refresh::candidates(
+                app.store(),
+                &portfolio,
+                &resolved.config.settings.reporting_currency,
+                &resolved.cache_dir,
+                resolved.config.nexo_csv_path.as_deref(),
+            )
+            .map(|candidates| candidates.iter().map(RefreshStatus::from).collect())
         })
         .await
+    }
+    /// A pure scheduling decision at `now`: no provider, network or file access.
+    pub async fn refresh_plan(
+        &self,
+        trigger: RefreshTrigger,
+        now: DateTime<Utc>,
+    ) -> Result<RefreshPlan> {
+        let portfolio = self.portfolio_id.clone();
+        self.request(move |app, resolved| {
+            let settings = resolved.config.settings.clone();
+            let candidates = crate::refresh::candidates(
+                app.store(),
+                &portfolio,
+                &settings.reporting_currency,
+                &resolved.cache_dir,
+                resolved.config.nexo_csv_path.as_deref(),
+            )?;
+            Ok(crate::refresh::plan(
+                portfolio,
+                trigger,
+                settings.refresh_on_open,
+                settings.refresh_interval_seconds,
+                candidates,
+                now,
+            ))
+        })
+        .await
+    }
+    /// Persist acquired outcomes and the resulting schedule in one request.
+    pub async fn refresh_commit(
+        &self,
+        plan: RefreshPlan,
+        outcomes: Vec<SourceOutcome>,
+        now: DateTime<Utc>,
+    ) -> Result<RefreshReport> {
+        self.request(move |app, _| crate::refresh::commit(app.store(), &plan, &outcomes, now))
+            .await
+    }
+    /// Plan, acquire outside the database thread, then commit. Hosts that must
+    /// stay responsive call these three steps separately around their own guard.
+    pub async fn refresh(
+        &self,
+        trigger: RefreshTrigger,
+        now: DateTime<Utc>,
+    ) -> Result<RefreshReport> {
+        let plan = self.refresh_plan(trigger, now).await?;
+        let mut outcomes = Vec::new();
+        for item in plan.runs() {
+            if let Some(outcome) = crate::refresh::acquire(item).await {
+                outcomes.push(outcome);
+            }
+        }
+        self.refresh_commit(plan, outcomes, now).await
     }
 
     pub async fn ui_metadata(&self) -> Result<crate::dto::UiMetadataDto> {
@@ -270,7 +310,14 @@ mod tests {
     async fn cancellation_skips_queued_mutations_and_close_waits_for_inflight_work() -> Result<()> {
         let dir = tempfile::tempdir()?;
         let resolved = ResolvedConfig::resolve(
-            Locations::for_platform(dir.path(), dir.path(), dir.path(), dir.path(), false),
+            Locations::for_platform(
+                dir.path(),
+                dir.path(),
+                dir.path(),
+                dir.path(),
+                dir.path(),
+                false,
+            ),
             None,
             None,
             None,

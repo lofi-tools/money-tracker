@@ -9,6 +9,8 @@ pnpm install --frozen-lockfile
 pnpm dev:desktop
 # Production assets + native binary (platform prerequisites required):
 pnpm build:desktop
+# macOS .app/.dmg bundles (unsigned, local only):
+pnpm bundle:desktop
 # Faster native smoke build, still embedding production assets:
 pnpm --filter @money-tracker/desktop tauri build --debug --no-bundle
 ```
@@ -38,7 +40,7 @@ pnpm test:desktop-native
 cargo test --locked -p money-tracker-desktop --test portfolio cached_imported_portfolios_are_browsable -- --ignored
 ```
 
-`pnpm test:desktop-native` starts the release binary from `pnpm build:desktop` three times in throwaway directories: a fresh location must show the missing-database chooser and create an empty database when asked, the same location must reopen it, and a corrupt file must fail (exit 1) instead of becoming an empty portfolio. `MONEY_TRACKER_DESKTOP_BIN` overrides the binary. It needs a display; CI runs it under `xvfb` on Linux.
+`pnpm test:desktop-native` starts the release binary from `pnpm build:desktop` three times in throwaway directories: a fresh location must show the missing-database chooser and create an empty database when asked, the same location must reopen it, and a corrupt file must fail (exit 1) instead of becoming an empty portfolio. `pnpm test:desktop-bundle` runs the same acceptance against `Money Tracker.app` from `pnpm bundle:desktop` (macOS only, unsigned, nothing is published). `MONEY_TRACKER_DESKTOP_BIN` overrides the binary under test. Both need a display; CI runs the release-binary check under `xvfb` on Linux. See [packaging evidence](../../docs/findings/desktop-packaging.md).
 
 Linux, macOS and Windows run the shared foundation checks, these desktop tests plus the startup smoke, a `--no-bundle` Tauri build and the native launch acceptance in CI; see [CI and native build lanes](../../docs/findings/ci-lanes.md) for what is configured and what still needs a human-observed desktop session.
 

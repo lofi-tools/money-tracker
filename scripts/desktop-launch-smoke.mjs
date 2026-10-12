@@ -1,5 +1,9 @@
 // Native launch acceptance for the built desktop host.
 //
+// Usage: node scripts/desktop-launch-smoke.mjs [--bundle]
+//   --bundle  test the macOS bundle from `pnpm bundle:desktop` instead of the
+//             bare release binary. MONEY_TRACKER_DESKTOP_BIN overrides either.
+//
 // The built host is launched three times, each against a throwaway directory:
 //   1. a fresh location must create its window, load the bundled frontend, show
 //      the missing-database chooser and create an empty database when asked to;
@@ -17,15 +21,32 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
+const args = process.argv.slice(2);
+const unknown = args.filter((a) => a !== "--bundle");
+if (unknown.length > 0) {
+  throw new Error(`unknown arguments: ${unknown.join(" ")}`);
+}
+const bundled = args.includes("--bundle");
 const binary = resolve(
   process.env.MONEY_TRACKER_DESKTOP_BIN ??
-    `target/release/money-tracker-desktop${process.platform === "win32" ? ".exe" : ""}`,
+    (bundled
+      ? "target/release/bundle/macos/Money Tracker.app/Contents/MacOS/money-tracker-desktop"
+      : `target/release/money-tracker-desktop${process.platform === "win32" ? ".exe" : ""}`),
 );
 if (!existsSync(binary)) {
-  throw new Error(`build the desktop host first: ${binary}`);
+  throw new Error(
+    bundled
+      ? `build the bundle first (macOS: pnpm bundle:desktop): ${binary}`
+      : `build the desktop host first (pnpm build:desktop): ${binary}`,
+  );
 }
+const plist = join(dirname(dirname(binary)), "Info.plist");
+if (bundled && !existsSync(plist)) {
+  throw new Error(`the bundle has no Info.plist: ${plist}`);
+}
+console.log(`launch acceptance: ${binary}`);
 
 function check(condition, message) {
   if (!condition) throw new Error(message);

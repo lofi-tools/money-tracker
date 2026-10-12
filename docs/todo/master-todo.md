@@ -166,7 +166,7 @@ Assumption for “3 systems”: **Linux, macOS, and Windows**. CPU architecture 
 - [ ] Run formatting, appropriate linting, deterministic unit/mapping/storage tests, and documentation checks on pull requests.
 - [ ] Audit existing private/live/cache-first tests, including non-ignored real-account tests; keep ordinary CI free of financial credentials and private fixtures.
 - [ ] Add an explicitly opt-in private/live reconciliation lane with controlled secrets and no publication of private artifacts.
-- [ ] Publish per-platform build artifacts and smoke-test install/startup/migrations with temporary data; decide release packaging and supported architectures.
+- [ ] Publish per-platform build artifacts and smoke-test install/startup/migrations with temporary data; decide release packaging and supported architectures. macOS `.app`/`.dmg` bundles now build and pass the launch acceptance locally, unsigned and unpublished, with the decision recorded in [desktop packaging](../findings/desktop-packaging.md); Windows/Linux formats, architectures, publication and install-path checks remain open. The user scoped this step to local macOS evidence, so no CI bundle lane exists yet.
 - [ ] Add release tagging, changelog/versioning, checksums, and later signing/notarization/update-delivery decisions before distributing production desktop bundles.
 
 ## 7. Foundations and holdings workflow

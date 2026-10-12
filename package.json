@@ -19,7 +19,9 @@
     "dev:desktop": "pnpm --filter @money-tracker/design-system build && pnpm --filter @money-tracker/desktop tauri dev",
     "build:desktop": "pnpm --filter @money-tracker/desktop tauri build --no-bundle",
     "test:desktop": "pnpm build && node scripts/desktop-fixture.mjs && playwright test --config playwright.desktop.config.ts",
-    "test:desktop-native": "node scripts/desktop-launch-smoke.mjs"
+    "bundle:desktop": "pnpm --filter @money-tracker/desktop tauri build",
+    "test:desktop-native": "node scripts/desktop-launch-smoke.mjs",
+    "test:desktop-bundle": "node scripts/desktop-launch-smoke.mjs --bundle"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0",

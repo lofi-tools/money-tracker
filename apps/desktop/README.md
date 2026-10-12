@@ -26,12 +26,16 @@ Validation:
 ```sh
 pnpm build
 cargo test --locked -p money-tracker-desktop
+# Headless host startup on a temporary database (never touches your portfolio):
+cargo run --locked -p money-tracker-desktop --example startup_smoke -- /tmp/mt-smoke
 UPDATE_DESKTOP_FIXTURE="$PWD/.cache/desktop-fixture.json" cargo test --locked -p money-tracker-desktop --test portfolio real_wire_fixture
 pnpm build
 PLAYWRIGHT_BROWSERS_PATH=.cache/playwright pnpm test:desktop
 # Opt-in offline check, only on temporary copies of private cached DBs:
 cargo test --locked -p money-tracker-desktop --test portfolio cached_imported_portfolios_are_browsable -- --ignored
 ```
+
+Linux, macOS and Windows run the shared foundation checks, these desktop tests plus the startup smoke, and a `--no-bundle` Tauri build in CI; see [CI and native build lanes](../../docs/findings/ci-lanes.md) for what is configured and what still needs a desktop session.
 
 `pnpm test:desktop` builds assets, then regenerates the Rust fixture before browser checks; it requires the native Tauri prerequisites. The fixture-generation helper works across Node-supported platforms. Browser tests mock only Tauri IPC and consume serialized Rust Session results. Native lifecycle/build checks are separate; a browser test does not prove native picker or OS shutdown behavior. Snapshot IDs reject stale view requests; every allocation/detail retains the same cutoff and exact Rust calculation as its navigation summary. Close and Quit await worker shutdown and exit, with no tray/background process.
 

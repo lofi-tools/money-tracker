@@ -1,0 +1,110 @@
+name: Desktop app
+
+# Three-system service tests and native builds for the Tauri host plus the
+# shared frontend. Deterministic data only: no provider credentials, private
+# caches or financial fixtures are used or published.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  service-tests:
+    name: Desktop service tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      CARGO_BUILD_JOBS: 2
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+      - name: Install Tauri system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev build-essential curl wget file
+      # Real Session/DTO tests over temporary databases: read-only navigation,
+      # exact/partial figures, manual edits with Undo, dust/spam/grouping and
+      # the refresh lifecycle. No provider or network access.
+      - name: Desktop wire and lifecycle tests
+        run: cargo test --locked -p money-tracker-desktop
+      # The real host startup path (missing chooser → explicit creation → empty
+      # snapshot → close) against a temporary database. The GUI window needs a
+      # display and is not covered here.
+      - name: Desktop startup smoke on a temporary database
+        run: cargo run --locked -p money-tracker-desktop --example startup_smoke -- "${{ runner.temp }}/money-tracker-smoke"
+
+  frontend:
+    name: Desktop frontend and browser acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - run: npm install --global pnpm@11.27.0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev build-essential curl wget file
+      - run: pnpm install --frozen-lockfile
+      # `test:desktop` regenerates the fixture from real Rust Session output and
+      # then drives the built frontend in Chromium, including the axe scan.
+      - run: pnpm exec playwright install --with-deps chromium --only-shell
+      - run: pnpm test:desktop
+
+  native-build:
+    name: Tauri build smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      CARGO_BUILD_JOBS: 2
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - run: npm install --global pnpm@11.27.0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Tauri system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev build-essential curl wget file
+      - run: pnpm install --frozen-lockfile
+      # Debug, unbundled build: proves the host compiles and embeds production
+      # assets on each system without packaging/signing decisions.
+      - run: pnpm build:desktop

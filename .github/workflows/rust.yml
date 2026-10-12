@@ -9,8 +9,13 @@ permissions:
 
 jobs:
   rust:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    name: Rust foundation (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     env:
       CARGO_BUILD_JOBS: 2
       CARGO_TERM_COLOR: always
@@ -28,8 +33,7 @@ jobs:
         run: cargo fmt --all --check
       # Private/live tests are ignored except the legacy cache-first Binance
       # test, explicitly skipped here. No financial credentials/caches in CI.
-      # Tauri native OS dependencies/build lane arrive in stage 9. Desktop
-      # service and macOS build checks run locally in stage 6.
+      # The desktop crate's Tauri/native lane runs in the desktop workflow.
       - name: Deterministic Rust tests
         run: cargo test --locked --workspace --exclude try-polars --exclude money-tracker-desktop -- --skip adapters::binance::tests::cached_binance_account_reconciles
       - name: CLI help smoke check

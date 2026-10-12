@@ -146,6 +146,8 @@ Completion evidence: controlled-clock missed-schedule/coalescing cases, partial-
 
 ## 9. Finish cross-platform acceptance and build delivery
 
+Partially implemented: the three-system foundation matrix, three-system desktop `Session` tests with a headless startup smoke, the Linux frontend/axe lane and three-system `--no-bundle` Tauri build smokes are configured in [rust.yml](../../.github/workflows/rust.yml) and [desktop.yml](../../.github/workflows/desktop.yml), with local macOS evidence and the unverified parts recorded in [CI and native build lanes](../findings/ci-lanes.md). Hosted execution, opening the actual window and native picker on each system, packaging formats, signing and the remaining acceptance scenarios are still outstanding; stage 9 is not complete.
+
 Canonical tasks: master todo sections 0 and 6. Start basic CI during stage 1 and extend it as packages appear; do not postpone integration failures until this stage.
 
 Run clean-checkout Rust and pnpm typecheck/codegen/production builds, then Linux/macOS/Windows Tauri build lanes. Keep deterministic synthetic data in CI and private financial data/keys out of artifacts/logs. Validate the [desktop acceptance scenarios](../spec/desktop-app.md#first-version-acceptance-scenarios--proposed), startup migration preservation, offline/partial/missing-price views, privacy, accessibility, Undo persistence and refresh lifecycle. Smoke-test built app startup with a temporary DB on each supported system.

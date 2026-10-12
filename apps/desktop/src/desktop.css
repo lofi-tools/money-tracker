@@ -309,3 +309,12 @@ body {
 .desktop-stage {
   font-size: var(--mt-font-sizes-md);
 }
+
+.sidebar-footer > button[aria-current="page"],
+.sidebar-footer > button[aria-current="page"]:hover {
+  background: var(--mt-colors-accent-subtle);
+  color: var(--mt-colors-accent-text);
+}
+.main-pane .settings {
+  max-width: 560px;
+}

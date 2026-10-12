@@ -69,3 +69,5 @@ Sage/catalog follow-up validation passed: frozen pnpm installation, Panda genera
 Theme changes switch foreground/background colors together without a background-color tween; otherwise a dark-to-light change can briefly combine final text with an intermediate surface and fail contrast. Hover motion/shadows remain, with reduced-motion overrides.
 
 Navigation selection colors the entire entry container, including its independently clickable warning button. Selection and warning actions remain separate sibling buttons with separate accessible names and keyboard focus.
+
+The sliding details pane uses square corners and no outer border. Internal section dividers and visible focus outlines on its interactive controls remain.

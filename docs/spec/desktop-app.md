@@ -358,3 +358,5 @@ The shared design-system compact follow-up uses 4–12px corners, smaller typogr
 Navigation placement refinement: Overview stays in the fixed controls area above the By asset / By provider tabs and search. Only asset/provider entries scroll. Settings remains at the navbar bottom, with a decorative gear icon and transparent background/border at rest; its background appears on hover and its keyboard focus outline remains visible.
 
 The portfolio pane no longer displays the local-snapshot/current-rate explanatory footnote. Calculation assumptions remain documented, and scoped unknown/partial states and warning details remain visible in the UI.
+
+Settings is a main-pane destination: it replaces the entire right-side portfolio content and highlights Settings in the navbar using the shared selection colors. Other navigation items are unselected while Settings is active. Selecting Overview, an asset/provider or Dust returns to portfolio content. Evidence and warning details continue to use the separate details panel.

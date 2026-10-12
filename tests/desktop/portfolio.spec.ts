@@ -198,6 +198,12 @@ test("647px window contains independent panes and keeps Settings reachable", asy
   });
   await expect(settings).toBeVisible();
   await settings.click();
+  await expect(settings).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    page.getByRole("main").getByRole("heading", { name: "Settings" }),
+  ).toBeVisible();
+  await expect(page.getByRole("main").getByRole("table")).toHaveCount(0);
   await expect(page.getByLabel("Privacy mode")).toBeVisible();
   await page.getByLabel("Privacy mode").selectOption("hidden");
   await page.getByRole("button", { name: "Save settings" }).click();

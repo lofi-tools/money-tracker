@@ -179,6 +179,7 @@ function Body(props: {
   function select(s: Selection) {
     detailRequest++;
     setPanel(undefined);
+    setOptions(false);
     setSelection(s);
   }
   createEffect(() => {
@@ -315,7 +316,7 @@ function Body(props: {
     />
   );
   return (
-    <div class={`desktop ${panel() || options() ? "panel-open" : ""}`}>
+    <div class={`desktop ${panel() ? "panel-open" : ""}`}>
       <header class="app-header">
         <h1>Money Tracker</h1>
       </header>
@@ -405,7 +406,7 @@ function Body(props: {
               <div class="sidebar-controls">
                 <NavigationEntry
                   name="Overview"
-                  selected={selection().kind === "overview"}
+                  selected={!options() && selection().kind === "overview"}
                   onSelect={() => select({ kind: "overview" })}
                 />
                 <GroupingTabs
@@ -438,7 +439,9 @@ function Body(props: {
                     <NavigationEntry
                       name={entry.name}
                       secondary={entry.ticker ?? undefined}
-                      selected={key(entry.selection) === key(selection())}
+                      selected={
+                        !options() && key(entry.selection) === key(selection())
+                      }
                       onSelect={() => select(entry.selection)}
                       value={money(entry.summary.current_value)}
                       rate={<Apy figure={entry.summary.current_apy} />}
@@ -457,7 +460,7 @@ function Body(props: {
                 <Show when={data()!.dust_count > 0}>
                   <NavigationEntry
                     name="Dust"
-                    selected={selection().kind === "dust"}
+                    selected={!options() && selection().kind === "dust"}
                     onSelect={() => select({ kind: "dust" })}
                     value={money(data()!.dust.summary.current_value)}
                     rate={<Apy figure={data()!.dust.summary.current_apy} />}
@@ -476,6 +479,7 @@ function Body(props: {
               <div class="sidebar-footer">
                 <Button
                   intent="ghost"
+                  aria-current={options() ? "page" : undefined}
                   disabled={!data()}
                   onClick={(e) => openOptions(e.currentTarget)}
                 >
@@ -485,86 +489,215 @@ function Body(props: {
               </div>
             </nav>
             <main class="main-pane" tabindex="0" aria-label="Portfolio content">
-              <div class="selection-summary">
-                <h2>
-                  {selection().kind === "overview"
-                    ? "Overview"
-                    : (selectedEntry()?.name ?? "Allocation")}
-                </h2>
-                <Show when={selectedEntry()?.issues.length}>
-                  <WarningButton
-                    label="Selected allocation warnings"
-                    onClick={(e) =>
-                      entryWarnings(selectedEntry()!, e.currentTarget)
-                    }
-                  />
-                </Show>
-              </div>
-              <div class="summaries">
-                <SummaryValue
-                  label="Current value"
-                  figure={figure(summary().current_value)}
-                  currency={props.settings.reporting_currency}
-                  primary
-                />
-                <SummaryValue
-                  label="Currently earning · per year"
-                  figure={figure(summary().net_annual_earnings)}
-                  currency={props.settings.reporting_currency}
-                />
-              </div>
-              <Show when={selection().kind !== "overview"}>
-                <div class="quantity-list">
-                  <For each={selectedEntry()?.quantities}>
-                    {([role, q]) => (
-                      <span>
-                        <Quantity
-                          units={q.units}
-                          scale={q.scale}
-                          asset={q.asset_id}
-                        />{" "}
-                        {role === "liability" ? "borrowed" : ""}
-                      </span>
-                    )}
-                  </For>
+              <Show
+                when={!options()}
+                fallback={
+                  <section aria-label="Settings">
+                    <h2>Settings</h2>
+                    <form
+                      class="settings"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void save(draft());
+                      }}
+                    >
+                      <label>
+                        Privacy
+                        <select
+                          aria-label="Privacy mode"
+                          value={draft().privacy_mode}
+                          onChange={(e) =>
+                            setDraft({
+                              ...draft(),
+                              privacy_mode: e.currentTarget
+                                .value as Settings["privacy_mode"],
+                            })
+                          }
+                        >
+                          <option value="normal">Normal</option>
+                          <option value="hidden">Hidden</option>
+                          <option value="scaled">Scaled</option>
+                        </select>
+                      </label>
+                      <label>
+                        Theme
+                        <select
+                          aria-label="Theme"
+                          value={draft().theme}
+                          onChange={(e) =>
+                            setDraft({
+                              ...draft(),
+                              theme: e.currentTarget.value as Settings["theme"],
+                            })
+                          }
+                        >
+                          <option value="system">System</option>
+                          <option value="light">Light</option>
+                          <option value="dark">Dark</option>
+                        </select>
+                      </label>
+                      <TextField
+                        label="Reporting currency"
+                        disabled={reviewMode}
+                        value={draft().reporting_currency}
+                        onInput={(e) =>
+                          setDraft({
+                            ...draft(),
+                            reporting_currency: e.currentTarget.value,
+                          })
+                        }
+                      />
+                      <TextField
+                        label="Privacy scale (fraction)"
+                        disabled={reviewMode}
+                        value={draft().privacy_scale}
+                        onInput={(e) =>
+                          setDraft({
+                            ...draft(),
+                            privacy_scale: e.currentTarget.value,
+                          })
+                        }
+                      />
+                      <TextField
+                        label="Dust threshold in reporting currency"
+                        disabled={reviewMode}
+                        value={draft().dust_threshold}
+                        onInput={(e) =>
+                          setDraft({
+                            ...draft(),
+                            dust_threshold: e.currentTarget.value,
+                          })
+                        }
+                      />
+                      <p class="muted">
+                        Refresh preferences are saved for the later scheduler;
+                        this stage only reads cached data.
+                      </p>
+                      <TextField
+                        label="Refresh interval (seconds)"
+                        disabled={reviewMode}
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={draft().refresh_interval_seconds}
+                        onInput={(e) =>
+                          setDraft({
+                            ...draft(),
+                            refresh_interval_seconds: Number(
+                              e.currentTarget.value,
+                            ),
+                          })
+                        }
+                      />
+                      <label>
+                        <span>
+                          <input
+                            type="checkbox"
+                            disabled={reviewMode}
+                            checked={draft().refresh_on_open}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft(),
+                                refresh_on_open: e.currentTarget.checked,
+                              })
+                            }
+                          />{" "}
+                          Refresh on open (when scheduler is implemented)
+                        </span>
+                      </label>
+                      <Button type="submit" disabled={busy()}>
+                        Save settings
+                      </Button>
+                    </form>
+                  </section>
+                }
+              >
+                <div class="selection-summary">
+                  <h2>
+                    {selection().kind === "overview"
+                      ? "Overview"
+                      : (selectedEntry()?.name ?? "Allocation")}
+                  </h2>
+                  <Show when={selectedEntry()?.issues.length}>
+                    <WarningButton
+                      label="Selected allocation warnings"
+                      onClick={(e) =>
+                        entryWarnings(selectedEntry()!, e.currentTarget)
+                      }
+                    />
+                  </Show>
                 </div>
-                <Show
-                  when={!treeBusy()}
-                  fallback={
-                    <StateMessage kind="loading" title="Reading allocation…" />
-                  }
-                >
+                <div class="summaries">
+                  <SummaryValue
+                    label="Current value"
+                    figure={figure(summary().current_value)}
+                    currency={props.settings.reporting_currency}
+                    primary
+                  />
+                  <SummaryValue
+                    label="Currently earning · per year"
+                    figure={figure(summary().net_annual_earnings)}
+                    currency={props.settings.reporting_currency}
+                  />
+                </div>
+                <Show when={selection().kind !== "overview"}>
+                  <div class="quantity-list">
+                    <For each={selectedEntry()?.quantities}>
+                      {([role, q]) => (
+                        <span>
+                          <Quantity
+                            units={q.units}
+                            scale={q.scale}
+                            asset={q.asset_id}
+                          />{" "}
+                          {role === "liability" ? "borrowed" : ""}
+                        </span>
+                      )}
+                    </For>
+                  </div>
                   <Show
-                    when={rows().length}
+                    when={!treeBusy()}
                     fallback={
                       <StateMessage
-                        kind="empty"
-                        title="No current allocations"
+                        kind="loading"
+                        title="Reading allocation…"
                       />
                     }
                   >
-                    <AllocationTable
-                      rows={rows()}
-                      onExpand={expand}
-                      onDetails={(id, trigger) => void openDetails(id, trigger)}
-                      caption="Current allocations"
-                    />
+                    <Show
+                      when={rows().length}
+                      fallback={
+                        <StateMessage
+                          kind="empty"
+                          title="No current allocations"
+                        />
+                      }
+                    >
+                      <AllocationTable
+                        rows={rows()}
+                        onExpand={expand}
+                        onDetails={(id, trigger) =>
+                          void openDetails(id, trigger)
+                        }
+                        caption="Current allocations"
+                      />
+                    </Show>
                   </Show>
                 </Show>
-              </Show>
-              <Show when={data()!.holding_count === 0}>
-                <StateMessage
-                  kind="empty"
-                  title="No imported holdings yet"
-                  description="Import using the CLI. Account connections and CSV imports in the app will follow later."
-                />
+                <Show when={data()!.holding_count === 0}>
+                  <StateMessage
+                    kind="empty"
+                    title="No imported holdings yet"
+                    description="Import using the CLI. Account connections and CSV imports in the app will follow later."
+                  />
+                </Show>
               </Show>
             </main>
           </div>
         </Show>
       </Show>
       <DetailsPanel
-        open={!!panel() || options()}
+        open={!!panel()}
         onOpenChange={(open) => {
           if (!open) {
             detailRequest++;
@@ -572,227 +705,108 @@ function Body(props: {
             setOptions(false);
           }
         }}
-        title={options() ? "Settings" : (panel()?.name ?? "Details")}
+        title={panel()?.name ?? "Details"}
         returnFocus={() => returnFocus}
       >
-        <Show
-          when={options()}
-          fallback={
-            <Show when={panel()}>
-              {(d) => (
-                <>
-                  <Warnings issues={d().issues} />
-                  <div class="detail-block">
-                    <p>Gross assets: {money(d().summary.gross_assets)}</p>
-                    <p>Liabilities: {money(d().summary.liabilities)}</p>
-                    <p>
-                      Gross earnings per year:{" "}
-                      {money(d().summary.gross_annual_earnings)}
-                    </p>
+        <Show when={panel()}>
+          {(d) => (
+            <>
+              <Warnings issues={d().issues} />
+              <div class="detail-block">
+                <p>Gross assets: {money(d().summary.gross_assets)}</p>
+                <p>Liabilities: {money(d().summary.liabilities)}</p>
+                <p>
+                  Gross earnings per year:{" "}
+                  {money(d().summary.gross_annual_earnings)}
+                </p>
+                <p>
+                  Borrowing costs per year:{" "}
+                  {money(d().summary.annual_borrowing_costs)}
+                </p>
+                <p>
+                  Net earnings per year:{" "}
+                  {money(d().summary.net_annual_earnings)}
+                </p>
+                <Apy figure={d().summary.current_apy} />
+                <Show when={d().original_name}>
+                  <p class="source">Original account: {d().original_name}</p>
+                </Show>
+                <Show when={d().source_reference}>
+                  <p class="source">
+                    Provider reference: {d().source_reference}
+                  </p>
+                </Show>
+              </div>
+              <For each={d().holdings}>
+                {(holding) => (
+                  <section class="detail-block">
+                    <strong>{holding.label}</strong>
+                    <Show when={holding.role === "liability"}>
+                      <Badge tone="danger">Liability · borrowed amount</Badge>
+                    </Show>
+                    <Quantity
+                      units={holding.quantity.units}
+                      scale={holding.quantity.scale}
+                      asset={holding.quantity.asset_id}
+                    />
+                    <p>Current value: {money(holding.value)}</p>
+                    <p>Earnings per year: {money(holding.annual_earnings)}</p>
                     <p>
                       Borrowing costs per year:{" "}
-                      {money(d().summary.annual_borrowing_costs)}
+                      {money(holding.annual_borrowing_cost)}
                     </p>
-                    <p>
-                      Net earnings per year:{" "}
-                      {money(d().summary.net_annual_earnings)}
+                    <p class="muted">
+                      {holding.verification_current
+                        ? "Independent balance evidence at this cutoff"
+                        : "Ledger balance · independent verification unavailable at this cutoff"}
                     </p>
-                    <Apy figure={d().summary.current_apy} />
-                    <Show when={d().original_name}>
-                      <p class="source">
-                        Original account: {d().original_name}
-                      </p>
+                    <Show when={holding.subscription}>
+                      {(s) => (
+                        <>
+                          <p>Lock: {s().lock_status}</p>
+                          <p>Maturity: {s().maturity ?? "Unknown"}</p>
+                          <p>
+                            Auto-renew:{" "}
+                            {s().auto_renew === null
+                              ? "Unknown"
+                              : s().auto_renew
+                                ? "On"
+                                : "Off"}
+                          </p>
+                        </>
+                      )}
                     </Show>
-                    <Show when={d().source_reference}>
-                      <p class="source">
-                        Provider reference: {d().source_reference}
-                      </p>
-                    </Show>
-                  </div>
-                  <For each={d().holdings}>
-                    {(holding) => (
-                      <section class="detail-block">
-                        <strong>{holding.label}</strong>
-                        <Show when={holding.role === "liability"}>
-                          <Badge tone="danger">
-                            Liability · borrowed amount
-                          </Badge>
-                        </Show>
-                        <Quantity
-                          units={holding.quantity.units}
-                          scale={holding.quantity.scale}
-                          asset={holding.quantity.asset_id}
-                        />
-                        <p>Current value: {money(holding.value)}</p>
-                        <p>
-                          Earnings per year: {money(holding.annual_earnings)}
-                        </p>
-                        <p>
-                          Borrowing costs per year:{" "}
-                          {money(holding.annual_borrowing_cost)}
-                        </p>
+                    <Show when={holding.rate}>
+                      {(r) => (
                         <p class="muted">
-                          {holding.verification_current
-                            ? "Independent balance evidence at this cutoff"
-                            : "Ledger balance · independent verification unavailable at this cutoff"}
+                          Rate evidence updated {r().updated_at} · effective{" "}
+                          {r().effective_at} ·{" "}
+                          {r().pinned
+                            ? "pinned manual override"
+                            : r().evidence_id
+                              ? "source evidence"
+                              : "manual override"}
                         </p>
-                        <Show when={holding.subscription}>
-                          {(s) => (
-                            <>
-                              <p>Lock: {s().lock_status}</p>
-                              <p>Maturity: {s().maturity ?? "Unknown"}</p>
-                              <p>
-                                Auto-renew:{" "}
-                                {s().auto_renew === null
-                                  ? "Unknown"
-                                  : s().auto_renew
-                                    ? "On"
-                                    : "Off"}
-                              </p>
-                            </>
-                          )}
-                        </Show>
-                        <Show when={holding.rate}>
-                          {(r) => (
-                            <p class="muted">
-                              Rate evidence updated {r().updated_at} · effective{" "}
-                              {r().effective_at} ·{" "}
-                              {r().pinned
-                                ? "pinned manual override"
-                                : r().evidence_id
-                                  ? "source evidence"
-                                  : "manual override"}
-                            </p>
-                          )}
-                        </Show>
-                        <Show when={holding.price}>
-                          {(p) => (
-                            <p class="muted">
-                              Price as of {p().as_of} ·{" "}
-                              {p().pinned
-                                ? "pinned manual override"
-                                : p().evidence_id
-                                  ? "source evidence"
-                                  : "manual override"}
-                            </p>
-                          )}
-                        </Show>
-                        <Warnings issues={holding.issues} />
-                      </section>
-                    )}
-                  </For>
-                </>
-              )}
-            </Show>
-          }
-        >
-          <form
-            class="settings"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void save(draft());
-            }}
-          >
-            <label>
-              Privacy
-              <select
-                aria-label="Privacy mode"
-                value={draft().privacy_mode}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft(),
-                    privacy_mode: e.currentTarget
-                      .value as Settings["privacy_mode"],
-                  })
-                }
-              >
-                <option value="normal">Normal</option>
-                <option value="hidden">Hidden</option>
-                <option value="scaled">Scaled</option>
-              </select>
-            </label>
-            <label>
-              Theme
-              <select
-                aria-label="Theme"
-                value={draft().theme}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft(),
-                    theme: e.currentTarget.value as Settings["theme"],
-                  })
-                }
-              >
-                <option value="system">System</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
-            </label>
-            <TextField
-              label="Reporting currency"
-              disabled={reviewMode}
-              value={draft().reporting_currency}
-              onInput={(e) =>
-                setDraft({
-                  ...draft(),
-                  reporting_currency: e.currentTarget.value,
-                })
-              }
-            />
-            <TextField
-              label="Privacy scale (fraction)"
-              disabled={reviewMode}
-              value={draft().privacy_scale}
-              onInput={(e) =>
-                setDraft({ ...draft(), privacy_scale: e.currentTarget.value })
-              }
-            />
-            <TextField
-              label="Dust threshold in reporting currency"
-              disabled={reviewMode}
-              value={draft().dust_threshold}
-              onInput={(e) =>
-                setDraft({ ...draft(), dust_threshold: e.currentTarget.value })
-              }
-            />
-            <p class="muted">
-              Refresh preferences are saved for the later scheduler; this stage
-              only reads cached data.
-            </p>
-            <TextField
-              label="Refresh interval (seconds)"
-              disabled={reviewMode}
-              type="number"
-              min="1"
-              step="1"
-              value={draft().refresh_interval_seconds}
-              onInput={(e) =>
-                setDraft({
-                  ...draft(),
-                  refresh_interval_seconds: Number(e.currentTarget.value),
-                })
-              }
-            />
-            <label>
-              <span>
-                <input
-                  type="checkbox"
-                  disabled={reviewMode}
-                  checked={draft().refresh_on_open}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft(),
-                      refresh_on_open: e.currentTarget.checked,
-                    })
-                  }
-                />{" "}
-                Refresh on open (when scheduler is implemented)
-              </span>
-            </label>
-            <Button type="submit" disabled={busy()}>
-              Save settings
-            </Button>
-          </form>
+                      )}
+                    </Show>
+                    <Show when={holding.price}>
+                      {(p) => (
+                        <p class="muted">
+                          Price as of {p().as_of} ·{" "}
+                          {p().pinned
+                            ? "pinned manual override"
+                            : p().evidence_id
+                              ? "source evidence"
+                              : "manual override"}
+                        </p>
+                      )}
+                    </Show>
+                    <Warnings issues={holding.issues} />
+                  </section>
+                )}
+              </For>
+            </>
+          )}
         </Show>
       </DetailsPanel>
     </div>

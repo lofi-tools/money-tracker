@@ -1,7 +1,12 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { Startup, Selection, Tree, Details, Settings } from "./contracts";
+export const reviewMode = import.meta.env.MODE === "review";
 // One typed transport boundary. A browser preview never substitutes synthetic money.
 function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  if (reviewMode)
+    return import("./review-api").then(({ reviewCall }) =>
+      reviewCall<T>(command, args),
+    );
   if (!isTauri())
     return Promise.reject(new Error("Desktop runtime unavailable"));
   return invoke<T>(command, args);

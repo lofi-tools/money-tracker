@@ -30,7 +30,7 @@ import type {
   CurrencyFigure,
   Rational,
 } from "@money-tracker/design-system";
-import { api } from "./api";
+import { api, reviewMode } from "./api";
 import { defaultSettings } from "./contracts";
 import type {
   Startup,
@@ -343,11 +343,21 @@ function Body(props: {
           >
             Settings
           </Button>
-          <Button intent="ghost" onClick={() => void api.quit().catch(failure)}>
+          <Button
+            intent="ghost"
+            disabled={reviewMode}
+            onClick={() => void api.quit().catch(failure)}
+          >
             Quit
           </Button>
         </div>
       </header>
+      <Show when={reviewMode}>
+        <aside class="banner" aria-label="Review notice">
+          Local portfolio preview · appearance changes are temporary ·
+          desktop-only actions are unavailable
+        </aside>
+      </Show>
       <Show when={props.settings.privacy_mode === "scaled"}>
         <aside class="banner" aria-label="Privacy notice">
           Scaled amounts for privacy. Percentage rates remain unchanged.
@@ -725,6 +735,7 @@ function Body(props: {
             </label>
             <TextField
               label="Reporting currency"
+              disabled={reviewMode}
               value={draft().reporting_currency}
               onInput={(e) =>
                 setDraft({
@@ -735,6 +746,7 @@ function Body(props: {
             />
             <TextField
               label="Privacy scale (fraction)"
+              disabled={reviewMode}
               value={draft().privacy_scale}
               onInput={(e) =>
                 setDraft({ ...draft(), privacy_scale: e.currentTarget.value })
@@ -742,6 +754,7 @@ function Body(props: {
             />
             <TextField
               label="Dust threshold in reporting currency"
+              disabled={reviewMode}
               value={draft().dust_threshold}
               onInput={(e) =>
                 setDraft({ ...draft(), dust_threshold: e.currentTarget.value })
@@ -753,6 +766,7 @@ function Body(props: {
             </p>
             <TextField
               label="Refresh interval (seconds)"
+              disabled={reviewMode}
               type="number"
               min="1"
               step="1"
@@ -768,6 +782,7 @@ function Body(props: {
               <span>
                 <input
                   type="checkbox"
+                  disabled={reviewMode}
                   checked={draft().refresh_on_open}
                   onChange={(e) =>
                     setDraft({

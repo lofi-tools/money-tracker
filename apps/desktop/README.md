@@ -32,3 +32,15 @@ cargo test --locked -p money-tracker-desktop --test portfolio cached_imported_po
 ```
 
 `pnpm test:desktop` builds assets, then regenerates the Rust fixture before browser checks; it requires the native Tauri prerequisites. The fixture-generation helper works across Node-supported platforms. Browser tests mock only Tauri IPC and consume serialized Rust Session results. Native lifecycle/build checks are separate; a browser test does not prove native picker or OS shutdown behavior. Snapshot IDs reject stale view requests; every allocation/detail retains the same cutoff and exact Rust calculation as its navigation summary. Close and Quit await worker shutdown and exit, with no tray/background process.
+
+## Local web preview for UI annotations
+
+A review mode displays this same frontend in a local browser, backed by serialized Rust results from a validated temporary copy of an imported DB. It is a frozen snapshot, with no provider requests, database writes, cloud hosting or synthetic substitutions. Theme/privacy-mode changes are temporary; financial/configuration changes and native-only actions are disabled. Normal browser mode still reports the missing desktop runtime.
+
+```sh
+pnpm --filter @money-tracker/design-system build
+cargo run --locked -p money-tracker-desktop --example export_preview -- /path/to/imported.duckdb .cache/portfolio-review.json
+PORTFOLIO_REVIEW_FILE="$PWD/.cache/portfolio-review.json" pnpm --filter @money-tracker/desktop dev:review
+```
+
+Open `http://127.0.0.1:1420` in the chat's browser panel for annotation. The dev server listens only on loopback; the review JSON endpoint rejects other origins/hosts and never takes a file path from a request. The ignored JSON contains private portfolio data: it stays local and is not included in production builds. Restart/re-export to update the snapshot. This review transport is not the future cloud/web service.

@@ -1,0 +1,27 @@
+{
+  "name": "money-tracker-workspace",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.27.0",
+  "engines": {
+    "node": ">=24",
+    "pnpm": "11.27.0"
+  },
+  "scripts": {
+    "codegen": "pnpm --filter @money-tracker/design-system codegen",
+    "build": "pnpm --filter @money-tracker/design-system build && pnpm --filter @money-tracker/design-system-showcase build",
+    "typecheck": "pnpm codegen && pnpm -r typecheck && tsc -p tsconfig.json",
+    "test": "pnpm --filter @money-tracker/design-system test",
+    "test:browser": "pnpm build && playwright test",
+    "dev:showcase": "pnpm --filter @money-tracker/design-system build && pnpm --filter @money-tracker/design-system-showcase dev",
+    "format": "prettier --write package.json pnpm-workspace.yaml tsconfig.base.json tsconfig.json playwright.config.ts libs/web-design-system apps/design-system-showcase tests/design-system",
+    "format:check": "prettier --check package.json pnpm-workspace.yaml tsconfig.base.json tsconfig.json playwright.config.ts libs/web-design-system apps/design-system-showcase tests/design-system"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@types/node": "26.6.5",
+    "typescript": "7.0.2",
+    "@axe-core/playwright": "4.13.0",
+    "prettier": "3.9.10"
+  }
+}

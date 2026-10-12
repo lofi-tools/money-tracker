@@ -15,6 +15,10 @@ Setup deps using `direnv allow` (needs Nix and nix-direnv), then:
 - Run unit tests: `utest`
 - Run program: `run`
 
+## Design-system showcase
+
+With Node 24.21.0 and pnpm 11.27.0, run `pnpm install --frozen-lockfile` then `pnpm dev:showcase`. This is an isolated synthetic SolidJS/Panda CSS/Ark UI preview, not the real portfolio/Tauri app. See [package commands and exports](libs/web-design-system/README.md), [the showcase guide](apps/design-system-showcase/README.md) and [the implemented contract](docs/spec/web-design-system.md). `pnpm typecheck`, `pnpm test` and `pnpm build` check the package and its consumer; browser installation/checks are documented in the package guide.
+
 ## Nexo amounts and historical net worth
 
 From the repository root, import `.cache/imports/nexo_transactions_05-10-2026_10-36-53.csv` and fetch prices into a local DuckDB file:

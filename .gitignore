@@ -8,7 +8,6 @@ tarpaulin-report.html
 # JAVASCRIPT
 **/node_modules/
 **/coverage/
-**/pnpm-lock.yaml
 
 # LOCAL TOOLS: SYSTEM, GIT, NIX, EDITORS
 **/*.~undo-tree~
@@ -25,4 +24,8 @@ tarpaulin-report.html
 **/**.env.**
 **/dist/
 
-    
+
+# DESIGN SYSTEM: REGENERATED / TEST OUTPUT
+libs/web-design-system/styled-system/
+playwright-report/
+test-results/

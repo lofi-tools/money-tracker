@@ -1,0 +1,6 @@
+packages:
+  - libs/web-design-system
+  - apps/design-system-showcase
+allowBuilds:
+  "@parcel/watcher": true
+  esbuild: true

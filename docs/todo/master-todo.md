@@ -13,10 +13,10 @@ The product sequence remains **holdings → received/current annual earnings →
 Deliverable: a running local app displaying balances, allocations and current earnings from the already-imported portfolio DB; account connections, CSV imports and transaction-history UI come later. The first-build scope and proposed acceptance scenarios are documented in [the desktop spec](../spec/desktop-app.md). Follow the [ordered implementation plan](first-ui-implementation-plan.md); this master list remains the canonical completion checklist. Supporting calculation/configuration details need implementation-stage review.
 
 - [x] Document the first-build UI scope: primary journey, initial screens, setup/import scope, navigation, financial detail, reconciliation states, visual direction and proposed acceptance scenarios. Implementation remains deferred; supporting calculation/configuration choices are tracked separately.
-- [ ] Implement the [planned separate pnpm TypeScript design-system package](../spec/web-design-system.md) at `libs/web-design-system`, with a reproducible workspace/committed lockfile and stable exports; the Solid app consumes it via `workspace:*`. Planning only for now; implementation remains outstanding.
+- [x] Implement the [separate pnpm TypeScript design-system package](../spec/web-design-system.md) at `libs/web-design-system`, with a committed lockfile, stable TSX/formatting/CSS exports and an isolated Solid showcase consuming `workspace:*`. The real app binding remains stage 6.
 - [x] Add the [shared Rust application-service layer and exact typed JSON DTOs](../spec/application-services.md), consumed by the CLI and available to future desktop hosts; extract provider adapters independently of the CLI executable.
 - [ ] Bind the selected SolidJS + Panda CSS + Ark UI frontend to that service contract through the future Tauri shell; stage-4 read models are available; TypeScript bindings remain later work.
-- [ ] Define tokens, typography, colors, spacing, themes, responsive behavior, and accessible focus/keyboard states; use balanced density with compact readable rows and enough padding/whitespace for a polished appearance. Use neutral surfaces/text with one primary accent plus accessible semantic status cues. Support light/dark themes, default to the system preference, and persist a System/Light/Dark override in settings.
+- [x] Define tokens, typography, colors, spacing, themes, responsive behavior, and accessible focus/keyboard states; use balanced density with compact readable rows and enough padding/whitespace for a polished appearance. Use neutral surfaces/text with one primary accent plus accessible semantic status cues. Support light/dark themes, default to the system preference, the stage-2 settings store persists System/Light/Dark; stage 6 must bind the real app controls.
 - [ ] Build the first Tauri desktop shell using the shared Solid frontend and typed Rust/frontend contracts.
 - [x] Implement shared CLI/desktop database configuration: Unix default `~/.data/money-tracker/portfolio.duckdb`, `APP_DATA_DIR` → config `data_dir` → default precedence, and real config-file loading. JSON format/location and native Windows default documented in [database startup](../spec/database-startup.md); preserve databases at previous locations.
 - [x] Implement Rust startup services to open the resolved database for one explicitly scoped portfolio, detect missing/legacy files, and explicitly copy an existing DB or create a new one; serialize access through a dedicated managed worker and persist validated local preferences.
@@ -36,7 +36,8 @@ Deliverable: a running local app displaying balances, allocations and current ea
 - [ ] Extend Rust CI build/test lanes to macOS and Windows.
 - [x] Remove the unused external `typed-ids` dependency, replace Rust workspace globs with explicit members and track Cargo.lock; isolated checkout metadata excludes TypeScript directories and needs no sibling repository.
 - [ ] Register the future Tauri Rust crate explicitly when it is created.
-- [ ] Add TypeScript codegen/typecheck/test/site build lanes when those packages exist; add all-platform Tauri builds when the desktop shell exists.
+- [x] Configure the Linux design-system/showcase CI lane for frozen installation, codegen/typechecking, formatting, unit/browser accessibility tests and production build; hosted execution remains unverified.
+- [ ] Extend TypeScript CI to the future public site and all-platform Tauri builds when those apps exist.
 - [ ] Validate the agreed UI journey against a deterministic acceptance dataset and the existing local DB; cover empty, loading, offline, missing-price, excluded-token and unreconciled-provider states.
 
 Historical graphs and earnings remain early product goals in section 8. Decide what the first UI milestone can truthfully display before treating those calculation features as ready. General design-system components, website work, packaging and remaining holdings workflow tasks retain their canonical entries below.
@@ -127,16 +128,18 @@ Implemented Spot foundation uses existing idempotent startup migrations and does
 
 The package/stack/token foundation is promoted to section 0. These remaining components support the app first, then the public website.
 
-Package design: [proposed Solid/Panda/Ark pnpm plan](../spec/web-design-system.md). No package implementation is complete.
+Package foundation and first-app primitives are implemented in [stage 5](../spec/web-design-system.md). The showcase is synthetic; real application and broader website components remain outstanding.
 
 Reference: [Taskstream structure notes](../findings/taskstream-reference.md). Its root package is named `taskstream` at `/Users/me/src/me/todo-lofi`; this is a structure reference, not a runtime dependency on that checkout.
 
-- [ ] Add reusable controls, tables, filters, settings, navigation, warnings, empty/loading/error states, and public/paid feature indicators.
-- [ ] Add holdings/earnings/price formatting with full currency amounts with thousands separators; USD uses two decimals below $100, whole dollars at $100 or more, and “<$0.01” for positive nonzero sub-cent amounts, preserving signs for costs and exact underlying values; trim token quantity trailing zeros, retain small nonzero quantities and expose exact quantities in details subject to privacy mode. Add chart primitives, accessible chart summaries, dates, currencies, signed amounts, and missing-data states.
+- [x] Add reusable first-app buttons/fields, grouping/search/navigation, expandable allocation tables, inline edit/pin, nonmodal details, warning/value and empty/loading/offline/error states.
+- [ ] Add broader filter/settings widgets and public/paid feature indicators as the real app/site needs them.
+- [x] Add holdings/earnings/price formatting with full currency amounts with thousands separators; USD uses two decimals below $100, whole dollars at $100 or more, and “<$0.01” for positive nonzero sub-cent amounts, preserving signs for costs and exact underlying values; trim token quantity trailing zeros, retain small nonzero quantities and expose exact quantities in details subject to privacy mode. Exact rational/BigInt formatting and known/partial/unknown/not-applicable states are implemented; no financial calculations move into the package.
+- [ ] Add chart primitives, accessible chart summaries and reusable date displays with the planned history/site work.
 - [ ] Add marketing/docs components, navigation/sidebar/TOC, prose, callouts, code blocks, and shared page layouts.
-- [ ] Provide clean Panda codegen/import conventions usable by the public site, Solid web app, and Tauri frontend; keep generated output reproducible.
-- [ ] Add an isolated showcase/demo plus typechecking and focused component/interaction/accessibility checks.
-- [ ] Check reuse/license boundaries if adapting Taskstream components; do not copy its product-specific content or add sibling-path dependencies.
+- [x] Provide clean Panda codegen/import conventions usable by the public site, Solid web app, and Tauri frontend; keep generated output reproducible.
+- [x] Add an isolated synthetic consumer, typechecking, exact formatting tests, production-build/browser/axe checks and light/dark/narrow visual review; confirm a clean frozen offline rebuild.
+- [x] Keep Taskstream as structure reference only: new components are implemented here with no copied source/product content or sibling runtime dependency. Public release/licensing decisions remain in the release tasks.
 
 ## 5. Near term: homepage and documentation site
 

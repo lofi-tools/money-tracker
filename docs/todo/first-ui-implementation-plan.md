@@ -1,6 +1,6 @@
 # First UI — ordered implementation plan
 
-Status: **stages 1–4 implemented; stages 5–9 remain proposed and deferred**. The user authorized stages 1, 2, 3 and 4 separately; inclusion here does not authorize the remaining stages. Grounded in repository source on 12 October 2026. The [master todo](master-todo.md#0-now-first-usable-desktop-app--ui) remains the canonical completion checklist. This document sequences its existing tasks and defines dependencies and completion evidence; it is not a second backlog.
+Status: **stages 1–5 implemented; stages 6–9 remain proposed and deferred**. The user authorized stages 1, 2, 3, 4 and 5 separately; inclusion here does not authorize the remaining stages. Grounded in repository source on 12 October 2026. The [master todo](master-todo.md#0-now-first-usable-desktop-app--ui) remains the canonical completion checklist. This document sequences its existing tasks and defines dependencies and completion evidence; it is not a second backlog.
 
 The master todo covers the agreed feature scope. What it lacked was an explicit implementation order, a minimum schema/query slice, and intermediate working milestones. Follow the [desktop contract and acceptance scenarios](../spec/desktop-app.md), [design-system package plan](../spec/web-design-system.md), and [data-model proposal](../spec/data-model-proposal.md).
 
@@ -97,6 +97,8 @@ Parent summaries include direct holdings plus descendants once. Product APY is a
 Completion evidence: deterministic Rust query fixtures match financial examples, two portfolios/accounts remain isolated, warning scopes are structured and no fake products/rates or double-counted receipt/underlying holdings appear. Supply documented fixture DTOs to frontend development.
 
 ## 5. Create the separate design-system package
+
+Implemented: [package/component contract](../spec/web-design-system.md), explicit pnpm workspace with pinned dependencies/lockfile, SolidJS/Panda 2/Ark wrappers, prefixed full stylesheet and exact display/privacy helpers. A separate Vite/Solid consumer uses `workspace:*` with synthetic fixtures and no Panda config. Validation passed: 8 formatting tests, 6 Chromium interaction/accessibility tests, light/dark/narrow visual review, typechecking, production build and an isolated frozen offline rebuild. A Linux CI lane is configured but hosted execution remains unverified. No real Tauri app, persistent edit binding, homepage, charts or publication is included.
 
 Canonical tasks: master todo sections 0 and 4; follow the [package plan](../spec/web-design-system.md).
 

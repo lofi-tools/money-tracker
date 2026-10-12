@@ -6,7 +6,7 @@ Documentation is organized by purpose. Specifications describe implemented contr
 
 - [Product questions, pain points, and proposed solutions](spec/product-goals.md)
 - [First desktop app: proposed scope and UI interview](spec/desktop-app.md)
-- [Web design-system package: proposed pnpm/Solid/Panda/Ark plan](spec/web-design-system.md)
+- [Web design-system package: implemented Solid/Panda/Ark components and showcase](spec/web-design-system.md)
 - [Project context and conventions](spec/project.md)
 - [Core data model](spec/data-model.md)
 - [Shared Rust application services and exact DTOs](spec/application-services.md)

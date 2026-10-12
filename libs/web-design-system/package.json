@@ -1,0 +1,37 @@
+{
+  "name": "@money-tracker/design-system",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./formatting": "./src/formatting/index.ts",
+    "./styles.css": "./dist/styles.css"
+  },
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "src",
+    "styled-system",
+    "dist/styles.css"
+  ],
+  "scripts": {
+    "codegen": "panda codegen",
+    "build": "panda codegen && panda cssgen --outfile dist/styles.css",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test tests/*.test.ts",
+    "prepack": "pnpm build"
+  },
+  "peerDependencies": {
+    "solid-js": "^1.9.17"
+  },
+  "dependencies": {
+    "@ark-ui/solid": "5.39.3"
+  },
+  "devDependencies": {
+    "solid-js": "1.9.17",
+    "@pandacss/dev": "2.2.0",
+    "@pandacss/preset-base": "2.2.0"
+  }
+}

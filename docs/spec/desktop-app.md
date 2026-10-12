@@ -354,3 +354,7 @@ The first-version UI scope is sufficiently specified for planning. No implementa
 10. **Package boundary:** The future Solid app consumes the separate pnpm Solid/Panda/Ark design system with stable exports and reproducible builds. It presents existing portfolio data through typed core/application contracts; synthetic showcase values are never represented as imported portfolio facts.
 
 The shared design-system compact follow-up uses 4–12px corners, smaller typography and tighter spacing throughout controls, navigation, cards and tables. The header is 48–56px tall; the viewport containment and independently scrollable panes remain in effect. Sage colors, exact formatting and unknown/partial financial states are unchanged.
+
+Navigation placement refinement: Overview stays in the fixed controls area above the By asset / By provider tabs and search. Only asset/provider entries scroll. Settings remains at the navbar bottom, with a decorative gear icon and transparent background/border at rest; its background appears on hover and its keyboard focus outline remains visible.
+
+The portfolio pane no longer displays the local-snapshot/current-rate explanatory footnote. Calculation assumptions remain documented, and scoped unknown/partial states and warning details remain visible in the UI.

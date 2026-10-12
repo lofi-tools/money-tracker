@@ -81,14 +81,9 @@ select {
   border-radius: 8px;
   background: var(--mt-colors-surface);
 }
-.muted,
-.footnote {
+.muted {
   color: var(--mt-colors-muted);
   font-size: 11px;
-}
-.footnote {
-  margin-top: 15px;
-  line-height: 1.7;
 }
 .detail-block {
   display: grid;

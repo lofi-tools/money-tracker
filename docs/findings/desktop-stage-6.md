@@ -41,3 +41,7 @@ Privacy moved into the Settings form, Settings moved to the fixed bottom of the 
 The subsequent density review applies compact shared tokens (4–12px corners, 11–30px type, 28/32px buttons) and tighter host spacing to the real portfolio and both synthetic showcase views. It retains the reference palette and existing financial behavior.
 
 Validation for the combined navigation/density follow-up: workspace TypeScript checks and both consumer builds passed; all nine exact-formatting unit tests, ten design-system browser tests and four desktop browser tests passed. Browser coverage includes light/dark contrast, keyboard controls, privacy, narrow layouts and independent pane containment at 647×724. The imported Nexo web preview was visually checked as well.
+
+The next annotation refinement moves Overview above grouping/search and uses the shared ghost button plus a gear icon for Settings. Overview and Settings stay accessible independently of list scrolling.
+
+The portfolio pane no longer displays the local-snapshot/current-rate explanatory footnote. Calculation assumptions remain documented, and scoped unknown/partial states and warning details remain visible in the UI.

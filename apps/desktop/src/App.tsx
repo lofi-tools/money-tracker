@@ -11,6 +11,7 @@ import {
   ThemeRoot,
   PrivacyProvider,
   Button,
+  Icon,
   SearchField,
   GroupingTabs,
   NavigationEntry,
@@ -402,6 +403,11 @@ function Body(props: {
           <div class="workspace">
             <nav class="sidebar" aria-label="Portfolio navigation">
               <div class="sidebar-controls">
+                <NavigationEntry
+                  name="Overview"
+                  selected={selection().kind === "overview"}
+                  onSelect={() => select({ kind: "overview" })}
+                />
                 <GroupingTabs
                   value={group()}
                   onChange={(value) => {
@@ -427,11 +433,6 @@ function Body(props: {
                 tabindex="0"
                 aria-label="Assets and providers"
               >
-                <NavigationEntry
-                  name="Overview"
-                  selected={selection().kind === "overview"}
-                  onSelect={() => select({ kind: "overview" })}
-                />
                 <For each={entries()}>
                   {(entry) => (
                     <NavigationEntry
@@ -474,9 +475,11 @@ function Body(props: {
               </div>
               <div class="sidebar-footer">
                 <Button
+                  intent="ghost"
                   disabled={!data()}
                   onClick={(e) => openOptions(e.currentTarget)}
                 >
+                  <Icon name="gear" />
                   Settings
                 </Button>
               </div>
@@ -556,15 +559,6 @@ function Body(props: {
                   description="Import using the CLI. Account connections and CSV imports in the app will follow later."
                 />
               </Show>
-              <p class="footnote">
-                Local snapshot · {new Date(data()!.cutoff).toLocaleString()}
-                <br />
-                Current-rate annual estimate; principal and available prices
-                held constant. Includes evidenced borrowing costs. Additional
-                fees and historical reward-currency performance are not
-                estimated. Unknown inputs remain unknown. Provider refresh
-                follows in a later stage.
-              </p>
             </main>
           </div>
         </Show>

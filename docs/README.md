@@ -4,7 +4,7 @@ Documentation is organized by purpose. Specifications describe implemented contr
 
 ## Specifications
 
-- [Product questions, pain points, and proposed solutions](spec/product-goals.md)
+- [Product questions, pain points, solutions and homepage source material](spec/product-goals.md)
 - [First desktop app: delivered slice, remaining scope and UI interview](spec/desktop-app.md)
 - [Web design-system package: Sage styles, Solid/Panda/Ark components and full catalog](spec/web-design-system.md)
 - [Project context and conventions](spec/project.md)

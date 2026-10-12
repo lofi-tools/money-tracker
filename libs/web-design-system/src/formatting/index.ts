@@ -52,6 +52,9 @@ function currencyString(
   const grouped = new Intl.NumberFormat(locale, {
     maximumFractionDigits: 0,
   }).format(BigInt(whole));
+  // Reporting assets can also be crypto IDs, outside Intl's ISO currency syntax.
+  if (!/^[A-Za-z]{3}$/.test(currency))
+    return `${grouped}${fraction ? "." + fraction : ""} ${currency}`;
   const formatter = new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
@@ -77,11 +80,12 @@ export function formatMoney(
 ): string {
   if (privacy.mode === "hidden") return "••••";
   const [n, d] = scaled(value, privacy);
-  const minor =
-    new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency,
-    }).resolvedOptions().maximumFractionDigits ?? 2;
+  const minor = !/^[A-Za-z]{3}$/.test(currency)
+    ? 2
+    : (new Intl.NumberFormat(locale, {
+        style: "currency",
+        currency,
+      }).resolvedOptions().maximumFractionDigits ?? 2);
   const sign = n < 0n ? "−" : "";
   const a = abs(n);
   if (a !== 0n && a * 10n ** BigInt(minor) < d)

@@ -17,6 +17,7 @@ members = [
     "libs/coingecko-client",
     "libs/nexo-csv",
     "apps/cli",
+    "apps/desktop/src-tauri",
     "demos/try-polars",
 ]
 

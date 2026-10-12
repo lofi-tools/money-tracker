@@ -28,7 +28,9 @@ jobs:
         run: cargo fmt --all --check
       # Private/live tests are ignored except the legacy cache-first Binance
       # test, explicitly skipped here. No financial credentials/caches in CI.
+      # Tauri native OS dependencies/build lane arrive in stage 9. Desktop
+      # service and macOS build checks run locally in stage 6.
       - name: Deterministic Rust tests
-        run: cargo test --locked --workspace --exclude try-polars -- --skip adapters::binance::tests::cached_binance_account_reconciles
+        run: cargo test --locked --workspace --exclude try-polars --exclude money-tracker-desktop -- --skip adapters::binance::tests::cached_binance_account_reconciles
       - name: CLI help smoke check
         run: cargo run --locked -p cli -- --help

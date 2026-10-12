@@ -94,3 +94,9 @@ test("reject lossy inputs and invalid scales/ratios rather than guessing", () =>
   assert.throws(() => formatQuantity("1.0", 18));
   assert.throws(() => formatQuantity(123 as unknown as string, 18));
 });
+
+test("non-ISO reporting assets retain their denomination and privacy", () => {
+  assert.equal(formatMoney("1.25", "USDT"), "1.25 USDT");
+  assert.equal(formatMoney("1000", "crypto:asset"), "1,000 crypto:asset");
+  assert.equal(formatMoney("1000", "USDT", { mode: "hidden" }), "••••");
+});

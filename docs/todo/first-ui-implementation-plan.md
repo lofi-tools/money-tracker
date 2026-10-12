@@ -1,6 +1,6 @@
 # First UI — ordered implementation plan
 
-Status: **stages 1–5 implemented; stages 6–9 remain proposed and deferred**. The user authorized stages 1, 2, 3, 4 and 5 separately; inclusion here does not authorize the remaining stages. Grounded in repository source on 12 October 2026. The [master todo](master-todo.md#0-now-first-usable-desktop-app--ui) remains the canonical completion checklist. This document sequences its existing tasks and defines dependencies and completion evidence; it is not a second backlog.
+Status: **stages 1–6 implemented; stages 7–9 remain proposed and deferred**. The user authorized stages 1, 2, 3, 4, 5 and 6 separately; inclusion here does not authorize the remaining stages. Grounded in repository source on 12 October 2026. The [master todo](master-todo.md#0-now-first-usable-desktop-app--ui) remains the canonical completion checklist. This document sequences its existing tasks and defines dependencies and completion evidence; it is not a second backlog.
 
 The master todo covers the agreed feature scope. What it lacked was an explicit implementation order, a minimum schema/query slice, and intermediate working milestones. Follow the [desktop contract and acceptance scenarios](../spec/desktop-app.md), [design-system package plan](../spec/web-design-system.md), and [data-model proposal](../spec/data-model-proposal.md).
 
@@ -109,6 +109,8 @@ Implement the neutral light/dark/system token foundation and minimum app primiti
 Completion evidence: isolated synthetic showcase, typecheck and consuming build; keyboard/focus, expansion-versus-details, reduced motion, supported style variants and light/dark visual review. A showcase alone is not the portfolio app milestone. Website/marketing components and charts stay later.
 
 ## 6. Deliver the first real-data desktop slice
+
+Implemented: [local Tauri/Solid portfolio browser](../findings/desktop-stage-6.md), using the shared design system and one Rust-owned exact snapshot. Includes missing-DB copy/new flow, Overview, asset/provider search/navigation, scoped expandable allocations and details/warnings, liabilities, saved settings, system theme and privacy. No provider/data-model mutation or new migration. Current rate/price edit UI remains stage 7, refresh remains stage 8, and cross-platform native acceptance remains stage 9. The requirements below record this stage’s design; final validation is recorded in the findings.
 
 Canonical tasks: master todo section 0 shell/navigation/allocation/details entries.
 

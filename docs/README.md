@@ -5,7 +5,7 @@ Documentation is organized by purpose. Specifications describe implemented contr
 ## Specifications
 
 - [Product questions, pain points, and proposed solutions](spec/product-goals.md)
-- [First desktop app: proposed scope and UI interview](spec/desktop-app.md)
+- [First desktop app: delivered slice, remaining scope and UI interview](spec/desktop-app.md)
 - [Web design-system package: implemented Solid/Panda/Ark components and showcase](spec/web-design-system.md)
 - [Project context and conventions](spec/project.md)
 - [Core data model](spec/data-model.md)
@@ -25,6 +25,8 @@ Documentation is organized by purpose. Specifications describe implemented contr
 - [Binance account history and rate limiting](spec/binance-account-history.md)
 
 ## Findings
+
+- [Desktop stage 6: real-data browser, typed IPC and validation](findings/desktop-stage-6.md)
 
 - [User needs interview and confirmed portfolio questions](findings/user-needs.md)
 - [Older product draft: comparison and follow-up decisions](findings/older-spec-comparison.md)

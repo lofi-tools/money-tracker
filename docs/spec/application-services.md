@@ -1,6 +1,6 @@
 # Shared Rust application services and exact DTOs
 
-Implemented stages 1–4 of the [first-UI plan](../todo/first-ui-implementation-plan.md). Stage 1 introduced the [application library](../../libs/lib-app/src/lib.rs), [service](../../libs/lib-app/src/service.rs) and [exact JSON contracts](../../libs/lib-app/src/dto.rs); [stage 2](database-startup.md) provides startup/configuration, [stage 3](ui-metadata.md) metadata/action storage, and [stage 4](portfolio-queries.md) snapshot current-value/earnings queries. Provider evidence acquisition, historical earnings and the frontend remain later work.
+Implemented stages 1–4 of the [first-UI plan](../todo/first-ui-implementation-plan.md). Stage 1 introduced the [application library](../../libs/lib-app/src/lib.rs), [service](../../libs/lib-app/src/service.rs) and [exact JSON contracts](../../libs/lib-app/src/dto.rs); [stage 2](database-startup.md) provides startup/configuration, [stage 3](ui-metadata.md) metadata/action storage, and [stage 4](portfolio-queries.md) snapshot current-value/earnings queries. The [stage-6 desktop browser](../findings/desktop-stage-6.md) now consumes these services; provider evidence acquisition and historical earnings remain later work.
 
 ## Application boundary
 

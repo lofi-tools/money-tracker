@@ -1,0 +1,6 @@
+{
+  "identifier": "main",
+  "description": "Local main window; filesystem, network, shell and dialog IPC are not exposed.",
+  "windows": ["main"],
+  "permissions": []
+}

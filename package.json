@@ -9,13 +9,16 @@
   },
   "scripts": {
     "codegen": "pnpm --filter @money-tracker/design-system codegen",
-    "build": "pnpm --filter @money-tracker/design-system build && pnpm --filter @money-tracker/design-system-showcase build",
+    "build": "pnpm --filter @money-tracker/design-system build && pnpm --filter @money-tracker/design-system-showcase build && pnpm --filter @money-tracker/desktop build",
     "typecheck": "pnpm codegen && pnpm -r typecheck && tsc -p tsconfig.json",
     "test": "pnpm --filter @money-tracker/design-system test",
     "test:browser": "pnpm build && playwright test",
     "dev:showcase": "pnpm --filter @money-tracker/design-system build && pnpm --filter @money-tracker/design-system-showcase dev",
-    "format": "prettier --write package.json pnpm-workspace.yaml tsconfig.base.json tsconfig.json playwright.config.ts libs/web-design-system apps/design-system-showcase tests/design-system",
-    "format:check": "prettier --check package.json pnpm-workspace.yaml tsconfig.base.json tsconfig.json playwright.config.ts libs/web-design-system apps/design-system-showcase tests/design-system"
+    "format": "prettier --write package.json pnpm-workspace.yaml tsconfig.base.json tsconfig.json playwright.config.ts libs/web-design-system apps/design-system-showcase tests/design-system apps/desktop/src apps/desktop/package.json apps/desktop/tsconfig.json apps/desktop/vite.config.ts apps/desktop/index.html apps/desktop/src-tauri/tauri.conf.json apps/desktop/src-tauri/capabilities tests/desktop playwright.desktop.config.ts scripts/desktop-fixture.mjs",
+    "format:check": "prettier --check package.json pnpm-workspace.yaml tsconfig.base.json tsconfig.json playwright.config.ts libs/web-design-system apps/design-system-showcase tests/design-system apps/desktop/src apps/desktop/package.json apps/desktop/tsconfig.json apps/desktop/vite.config.ts apps/desktop/index.html apps/desktop/src-tauri/tauri.conf.json apps/desktop/src-tauri/capabilities tests/desktop playwright.desktop.config.ts scripts/desktop-fixture.mjs",
+    "dev:desktop": "pnpm --filter @money-tracker/design-system build && pnpm --filter @money-tracker/desktop tauri dev",
+    "build:desktop": "pnpm --filter @money-tracker/desktop tauri build --no-bundle",
+    "test:desktop": "pnpm build && node scripts/desktop-fixture.mjs && playwright test --config playwright.desktop.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0",

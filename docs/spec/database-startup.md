@@ -1,6 +1,6 @@
 # Database startup and local settings
 
-Implemented first-UI stage 2 on 11 October 2026. Sources: [configuration](../../libs/lib-app/src/config.rs), [database startup](../../libs/lib-app/src/startup.rs), [managed worker](../../libs/lib-app/src/worker.rs), and [startup tests](../../libs/lib-app/tests/startup.rs). These are shared Rust services; the Tauri chooser/settings screens and refresh scheduler remain later stages.
+Implemented first-UI stage 2 on 11 October 2026. Sources: [configuration](../../libs/lib-app/src/config.rs), [database startup](../../libs/lib-app/src/startup.rs), [managed worker](../../libs/lib-app/src/worker.rs), and [startup tests](../../libs/lib-app/tests/startup.rs). These shared Rust services now power the [stage-6 Tauri chooser/settings screens](../findings/desktop-stage-6.md); refresh execution remains stage 8.
 
 ## Paths and configuration
 
@@ -35,7 +35,7 @@ Example version-1 config (all omitted settings default):
 
 Settings are local preferences in this file, separate from provider credentials, source transactions and portfolio metadata. Theme accepts `system`, `light`, `dark`; privacy accepts `normal`, `hidden`, `scaled`. Privacy scale is an exact string strictly between zero and one. Dust threshold is a nonnegative exact string denominated in the reporting currency (USD by default). Reporting currency must be nonempty; this preference does not establish available pricing for an arbitrary asset. Refresh interval is a positive number of seconds. No rate/price selection, display formatting or refresh execution is implemented by these settings alone.
 
-`AppConfig::save` validates first, writes and syncs a temporary file in the same directory, then replaces the configuration file. The worker updates its in-memory settings only after this succeeds. Existing `data_dir` and `active_portfolio` configuration survive a settings save. Environment/CLI directory overrides are not silently persisted as config values. Configuration is loaded at startup; external edits take effect on the next open. DB-backed manual-action/Undo and refresh scheduling records remain stage 3/8 work.
+`AppConfig::save` validates first, writes and syncs a temporary file in the same directory, then replaces the configuration file. The worker updates its in-memory settings only after this succeeds. Existing `data_dir` and `active_portfolio` configuration survive a settings save. Environment/CLI directory overrides are not silently persisted as config values. Configuration is loaded at startup; external edits take effect on the next open. DB-backed manual-action/Undo and refresh scheduling records were added in stage 3; their UI and execution remain stages 7 and 8.
 
 ## Explicit database opening
 
@@ -45,7 +45,7 @@ Settings are local preferences in this file, separate from provider credentials,
 - `CopyExisting(source)`: copy a selected Money Tracker DB into the resolved destination, preserving the source. Refuse an existing destination, including a destination equal to the source.
 - `StartNew`: explicitly create an empty Money Tracker DB at the resolved destination; refuse overwriting an existing file.
 
-The previous location is `dirs::data_dir()/money-tracker/portfolio.duckdb`, when different from the new destination. The future UI can show that path as a suggested copy source. The CLI now loads shared configuration and uses the new default; if its destination is missing and the previous DB exists, it stops with instructions to select the old `--data-dir` or copy the DB. It retains its prior explicit command/import/create behavior where no previous DB would be abandoned. CLI provider portfolio flags remain unchanged; `active_portfolio` scopes the managed desktop worker, not provider command flags.
+The previous location is `dirs::data_dir()/money-tracker/portfolio.duckdb`, when different from the new destination. The desktop startup screen shows that path as a suggested copy source. The CLI now loads shared configuration and uses the new default; if its destination is missing and the previous DB exists, it stops with instructions to select the old `--data-dir` or copy the DB. It retains its prior explicit command/import/create behavior where no previous DB would be abandoned. CLI provider portfolio flags remain unchanged; `active_portfolio` scopes the managed desktop worker, not provider command flags.
 
 Existing/copy files must be nonempty regular DuckDB files containing the Money Tracker ledger tables. Unrelated DuckDB files, corrupt files, directories and inaccessible files produce errors rather than empty portfolios. Ordered idempotent migrations still run through `Store::open` on every accepted opening. A settings change does not rewrite existing portfolio reporting metadata.
 

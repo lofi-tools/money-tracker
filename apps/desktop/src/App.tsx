@@ -317,40 +317,6 @@ function Body(props: {
     <div class={`desktop ${panel() || options() ? "panel-open" : ""}`}>
       <header class="app-header">
         <h1>Money Tracker</h1>
-        <div class="tools">
-          <label class="muted">
-            Privacy{" "}
-            <select
-              aria-label="Privacy mode"
-              value={props.settings.privacy_mode}
-              disabled={busy() || !data()}
-              onChange={(e) =>
-                void save({
-                  ...props.settings,
-                  privacy_mode: e.currentTarget
-                    .value as Settings["privacy_mode"],
-                })
-              }
-            >
-              <option value="normal">Normal</option>
-              <option value="hidden">Hidden</option>
-              <option value="scaled">Scaled</option>
-            </select>
-          </label>
-          <Button
-            disabled={!data()}
-            onClick={(e) => openOptions(e.currentTarget)}
-          >
-            Settings
-          </Button>
-          <Button
-            intent="ghost"
-            disabled={reviewMode}
-            onClick={() => void api.quit().catch(failure)}
-          >
-            Quit
-          </Button>
-        </div>
       </header>
       <Show when={reviewMode}>
         <aside class="banner" aria-label="Review notice">
@@ -435,70 +401,87 @@ function Body(props: {
         >
           <div class="workspace">
             <nav class="sidebar" aria-label="Portfolio navigation">
-              <GroupingTabs
-                value={group()}
-                onChange={(value) => {
-                  setGroup(value);
-                  setSearch("");
-                  select({ kind: "overview" });
-                }}
-                label="Group portfolio"
-                items={[
-                  { value: "asset", label: "By asset" },
-                  { value: "provider", label: "By provider" },
-                ]}
-              />
-              <SearchField
-                value={search()}
-                onChange={setSearch}
-                label="Search assets or providers"
-              />
-              <NavigationEntry
-                name="Overview"
-                selected={selection().kind === "overview"}
-                onSelect={() => select({ kind: "overview" })}
-              />
-              <For each={entries()}>
-                {(entry) => (
+              <div class="sidebar-controls">
+                <GroupingTabs
+                  value={group()}
+                  onChange={(value) => {
+                    setGroup(value);
+                    setSearch("");
+                    select({ kind: "overview" });
+                  }}
+                  label="Group portfolio"
+                  items={[
+                    { value: "asset", label: "By asset" },
+                    { value: "provider", label: "By provider" },
+                  ]}
+                />
+                <SearchField
+                  value={search()}
+                  onChange={setSearch}
+                  label="Search assets or providers"
+                />
+              </div>
+              <div
+                class="sidebar-list"
+                role="region"
+                tabindex="0"
+                aria-label="Assets and providers"
+              >
+                <NavigationEntry
+                  name="Overview"
+                  selected={selection().kind === "overview"}
+                  onSelect={() => select({ kind: "overview" })}
+                />
+                <For each={entries()}>
+                  {(entry) => (
+                    <NavigationEntry
+                      name={entry.name}
+                      secondary={entry.ticker ?? undefined}
+                      selected={key(entry.selection) === key(selection())}
+                      onSelect={() => select(entry.selection)}
+                      value={money(entry.summary.current_value)}
+                      rate={<Apy figure={entry.summary.current_apy} />}
+                      warning={
+                        entry.issues.length
+                          ? {
+                              label: `Warnings for ${entry.name}`,
+                              onClick: (e) =>
+                                entryWarnings(entry, e.currentTarget),
+                            }
+                          : undefined
+                      }
+                    />
+                  )}
+                </For>
+                <Show when={data()!.dust_count > 0}>
                   <NavigationEntry
-                    name={entry.name}
-                    secondary={entry.ticker ?? undefined}
-                    selected={key(entry.selection) === key(selection())}
-                    onSelect={() => select(entry.selection)}
-                    value={money(entry.summary.current_value)}
-                    rate={<Apy figure={entry.summary.current_apy} />}
+                    name="Dust"
+                    selected={selection().kind === "dust"}
+                    onSelect={() => select({ kind: "dust" })}
+                    value={money(data()!.dust.summary.current_value)}
+                    rate={<Apy figure={data()!.dust.summary.current_apy} />}
                     warning={
-                      entry.issues.length
+                      data()!.dust.issues.length
                         ? {
-                            label: `Warnings for ${entry.name}`,
+                            label: "Warnings for Dust",
                             onClick: (e) =>
-                              entryWarnings(entry, e.currentTarget),
+                              entryWarnings(data()!.dust, e.currentTarget),
                           }
                         : undefined
                     }
                   />
-                )}
-              </For>
-              <Show when={data()!.dust_count > 0}>
-                <NavigationEntry
-                  name="Dust"
-                  selected={selection().kind === "dust"}
-                  onSelect={() => select({ kind: "dust" })}
-                  value={money(data()!.dust.summary.current_value)}
-                  rate={<Apy figure={data()!.dust.summary.current_apy} />}
-                  warning={
-                    data()!.dust.issues.length
-                      ? {
-                          label: "Warnings for Dust",
-                          onClick: (e) =>
-                            entryWarnings(data()!.dust, e.currentTarget),
-                        }
-                      : undefined
-                  }
-                />
-              </Show>
+                </Show>
+              </div>
+              <div class="sidebar-footer">
+                <Button
+                  disabled={!data()}
+                  onClick={(e) => openOptions(e.currentTarget)}
+                >
+                  Settings
+                </Button>
+              </div>
             </nav>
-            <main class="main-pane">
+            <main class="main-pane" tabindex="0" aria-label="Portfolio content">
               <div class="selection-summary">
                 <h2>
                   {selection().kind === "overview"
@@ -716,6 +699,24 @@ function Body(props: {
               void save(draft());
             }}
           >
+            <label>
+              Privacy
+              <select
+                aria-label="Privacy mode"
+                value={draft().privacy_mode}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft(),
+                    privacy_mode: e.currentTarget
+                      .value as Settings["privacy_mode"],
+                  })
+                }
+              >
+                <option value="normal">Normal</option>
+                <option value="hidden">Hidden</option>
+                <option value="scaled">Scaled</option>
+              </select>
+            </label>
             <label>
               Theme
               <select

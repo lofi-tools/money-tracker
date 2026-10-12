@@ -27,7 +27,7 @@ export function IconButton(props: ButtonProps & { label: string }) {
     <Button
       {...rest}
       aria-label={local.label}
-      class={[css({ borderRadius: "sm", minWidth: "40px" }), local.class]
+      class={[css({ borderRadius: "sm", minWidth: "32px" }), local.class]
         .filter(Boolean)
         .join(" ")}
     />
@@ -53,7 +53,7 @@ export function PinButton(props: {
   );
 }
 const inputClass = css({
-  minHeight: "40px",
+  minHeight: "32px",
   border: "1px solid",
   borderColor: "border",
   borderRadius: "sm",
@@ -127,8 +127,8 @@ export function SearchField(props: {
       <span
         class={css({
           position: "absolute",
-          left: "12px",
-          top: "12px",
+          left: "9px",
+          top: "8px",
           color: "muted",
           pointerEvents: "none",
         })}

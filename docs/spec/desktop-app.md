@@ -20,6 +20,12 @@ These come from [the user interview](../findings/user-needs.md), [product goals]
 - Track and suggest actions; transfer/staking/renewal execution is outside the first-version scope. Notifications are opt-in and disabled by default.
 - Single-user tracking first; family/client portfolios follow. Do not require sharing or cloud login for the local app.
 
+## Navigation and settings follow-up
+
+Implemented from browser annotations: Privacy mode lives inside Settings, and Settings is pinned at the bottom of the left navbar. Saving applies the selected privacy mode through the existing settings service; it is no longer a header control. The app has no Quit button: use native window controls or the OS Quit command, retaining the existing awaited worker shutdown.
+
+The desktop shell fits the viewport instead of growing with portfolio rows. Grouping/search remain above the independently scrollable asset/provider list, with Settings always reachable below it. The right content pane scrolls independently; table horizontal overflow stays inside its wrapper. Scroll panes are keyboard-focusable with visible focus. At narrow widths, navbar values move below names to keep asset/provider labels readable. The 647×724 annotation viewport is covered by browser acceptance.
+
 ## Source boundaries
 
 [Store](../../libs/lib-core/src/storage.rs) provides local identities, exact quantities, reviewed exclusions and valuation queries. [Provider adapters](../../libs/lib-app/src/adapters) now live in the shared application library and are consumed by the CLI. The [stage-1 service and exact JSON DTOs](application-services.md) are implemented; exact current portfolio projections and the local read-only desktop browser are implemented. Existing CLI environment/key setup does not constitute a finished desktop connection or credential-storage flow.
@@ -344,5 +350,7 @@ The first-version UI scope is sufficiently specified for planning. No implementa
 6. **Undo after restart:** Change a rate/name/parent/classification, close and reopen the app, then Undo. Restore the prior local state, refresh affected figures and retain both the change and its undo in the action log. A concurrent/newer conflicting change is surfaced without rolling back provider imports.
 7. **Details and presentation:** Names open the right-side panel while separate arrows expand children. Keep the table visible and preserve its state. Support neutral light/dark/system themes, accessible keyboard/focus behavior and reduced motion. Currency formatting and exact quantity detail follow the confirmed rules.
 8. **Privacy:** Hidden mode masks amounts/quantities in every visible/detail/hover/accessibility presentation. Scaled mode defaults to 10%, configurable, preserves proportions and percentage rates, and labels the figures as scaled. Neither mode changes financial calculations or dust classifications.
-9. **Refresh and lifecycle:** Daily automatic refresh is configurable; ordinary refresh-on-open defaults off. One catch-up refresh occurs after missed schedules, coalesced with any launch refresh. Manual refresh is in options. Closing the window or choosing Quit ends the process; cached data and warnings remain usable offline.
+9. **Refresh and lifecycle:** Daily automatic refresh is configurable; ordinary refresh-on-open defaults off. One catch-up refresh occurs after missed schedules, coalesced with any launch refresh. Manual refresh is in options. Closing the window or using the OS Quit command ends the process; cached data and warnings remain usable offline.
 10. **Package boundary:** The future Solid app consumes the separate pnpm Solid/Panda/Ark design system with stable exports and reproducible builds. It presents existing portfolio data through typed core/application contracts; synthetic showcase values are never represented as imported portfolio facts.
+
+The shared design-system compact follow-up uses 4–12px corners, smaller typography and tighter spacing throughout controls, navigation, cards and tables. The header is 48–56px tall; the viewport containment and independently scrollable panes remain in effect. Sage colors, exact formatting and unknown/partial financial states are unchanged.

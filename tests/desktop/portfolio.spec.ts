@@ -113,7 +113,9 @@ test("group/search, privacy across details, persisted settings and accessibility
       .getByRole("button", { name: "example", exact: true }),
   ).toHaveCount(0);
   await page.getByRole("button", { name: "My wallet", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByLabel("Privacy mode").selectOption("hidden");
+  await page.getByRole("button", { name: "Save settings" }).click();
   await page.getByRole("button", { name: "My wallet", exact: true }).click();
   await expect(
     page.getByRole("dialog").getByLabel("Quantity hidden").first(),
@@ -123,7 +125,9 @@ test("group/search, privacy across details, persisted settings and accessibility
   );
   expect(await page.getByRole("dialog").innerText()).not.toContain("$1,001");
   await page.getByRole("button", { name: "Close details" }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByLabel("Privacy mode").selectOption("scaled");
+  await page.getByRole("button", { name: "Save settings" }).click();
   await expect(
     page.getByText(
       "Scaled amounts for privacy. Percentage rates remain unchanged.",
@@ -154,4 +158,52 @@ test("missing DB chooser is explicit; browser alone never displays fixture money
   await expect(page.getByText("Choose your local portfolio")).toBeVisible();
   await page.getByRole("button", { name: "Start new portfolio" }).click();
   await expect(page.getByText("No imported holdings yet")).toBeVisible();
+});
+test("647px window contains independent panes and keeps Settings reachable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 647, height: 724 });
+  await install(page);
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: "Quit", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Privacy mode")).toHaveCount(0);
+  await page.getByRole("button", { name: /USD.*APY unknown/ }).click();
+  const nav = page.getByRole("navigation", { name: "Portfolio navigation" });
+  const settings = nav.getByRole("button", { name: "Settings", exact: true });
+  await expect(settings).toBeVisible();
+  const bounds = await settings.boundingBox();
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(724);
+  expect(
+    await page.evaluate(
+      () =>
+        document.documentElement.scrollHeight <= window.innerHeight &&
+        document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  const panes = await page
+    .locator(".sidebar-list,.main-pane")
+    .evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        client: node.clientHeight,
+        scroll: node.scrollHeight,
+        overflow: getComputedStyle(node).overflowY,
+      })),
+    );
+  expect(panes.every((p) => p.overflow === "auto" && p.client > 0)).toBe(true);
+  expect(panes[1].scroll).toBeGreaterThan(panes[1].client);
+  await page.locator(".main-pane").evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  await expect(settings).toBeVisible();
+  await settings.click();
+  await expect(page.getByLabel("Privacy mode")).toBeVisible();
+  await page.getByLabel("Privacy mode").selectOption("hidden");
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await expect(page.getByLabel("Quantity hidden").first()).toBeVisible();
+  await page.screenshot({
+    path: ".cache/desktop-647-review.png",
+    fullPage: true,
+  });
 });

@@ -15,7 +15,7 @@ test("public consumer loads styled variants, grouping keys and independent table
   await expect(page.getByText("Synthetic data", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Primary action", exact: true }),
-  ).toHaveCSS("border-radius", "999px");
+  ).toHaveCSS("border-radius", "4px");
   const tab = page.getByRole("tab", { name: "By asset", exact: true });
   await tab.focus();
   await page.keyboard.press("ArrowRight");

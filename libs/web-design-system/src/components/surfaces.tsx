@@ -53,9 +53,9 @@ export function IconTile(props: {
       })}
       style={{
         width:
-          props.size === "sm" ? "40px" : props.size === "lg" ? "62px" : "52px",
+          props.size === "sm" ? "28px" : props.size === "lg" ? "44px" : "36px",
         height:
-          props.size === "sm" ? "40px" : props.size === "lg" ? "62px" : "52px",
+          props.size === "sm" ? "28px" : props.size === "lg" ? "44px" : "36px",
       }}
     >
       {props.children}
@@ -119,7 +119,7 @@ export function ChipGroup(props: {
             class={css({
               border: "1px solid",
               borderColor: "border",
-              borderRadius: "pill",
+              borderRadius: "sm",
               px: "5",
               py: "3",
               fontSize: "xs",

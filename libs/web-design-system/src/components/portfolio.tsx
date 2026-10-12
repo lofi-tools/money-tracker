@@ -34,7 +34,7 @@ export function NavigationEntry(props: {
         onClick={props.onSelect}
         class={css({
           display: "grid",
-          gridTemplateColumns: "40px 1fr auto",
+          gridTemplateColumns: "32px 1fr auto",
           alignItems: "center",
           gap: "3",
           p: "3",
@@ -52,8 +52,8 @@ export function NavigationEntry(props: {
             placeItems: "center",
             bg: "accent",
             borderRadius: "sm",
-            width: "40px",
-            height: "40px",
+            width: "32px",
+            height: "32px",
             fontSize: "xs",
             fontWeight: "800",
             color: "onAccent",

@@ -266,15 +266,15 @@ function CatalogBody(props: {
           <Surface>
             <h3>Radius &amp; shape</h3>
             <p class="spec-note">
-              Tiles 16 · cards 20 · panels 26 · frames 34 · pills 999
+              Controls 4 · tiles 6 · cards 8 · panels 10 · frames 12
             </p>
             <div class="radius-row">
               <For
                 each={[
-                  ["Tile", "16px"],
-                  ["Card", "20px"],
-                  ["Panel", "26px"],
-                  ["Pill", "999px"],
+                  ["Tile", "6px"],
+                  ["Card", "8px"],
+                  ["Panel", "10px"],
+                  ["Frame", "12px"],
                 ]}
               >
                 {([label, radius]) => (

@@ -2,7 +2,7 @@ html,
 body,
 #root {
   margin: 0;
-  min-height: 100%;
+  height: 100%;
   font-family: "Manrope Variable", Manrope, system-ui, sans-serif;
 }
 button,
@@ -11,102 +11,110 @@ select {
   font: inherit;
 }
 .desktop {
-  min-height: 100vh;
+  min-height: 0;
   background: var(--mt-colors-surface);
   color: var(--mt-colors-text);
 }
 .app-header {
-  height: 72px;
-  padding: 0 28px;
+  height: 48px;
+  padding: 0 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--mt-colors-border);
 }
 .app-header h1 {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 800;
 }
 .tools {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 .tools select,
 .settings select {
   border: 1px solid var(--mt-colors-border);
   background: var(--mt-colors-surface);
   color: inherit;
-  border-radius: 12px;
-  padding: 8px;
+  border-radius: 4px;
+  padding: 6px;
 }
 .workspace {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
-  min-height: calc(100vh - 72px);
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
 }
 .sidebar {
-  padding: 24px 16px;
+  padding: 17px 11px;
   background: var(--mt-colors-inset);
   border-right: 1px solid var(--mt-colors-border);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 11px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 .main-pane {
-  padding: 36px;
+  padding: 25px;
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 .main-pane h2 {
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.03em;
-  margin: 0 0 24px;
+  margin: 0 0 17px;
 }
 .summaries {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 32px;
-  margin-bottom: 28px;
-  padding: 28px;
+  gap: 22px;
+  margin-bottom: 20px;
+  padding: 20px;
   border: 1px solid var(--mt-colors-border);
-  border-radius: 26px;
+  border-radius: 8px;
   background: var(--mt-colors-surface);
 }
 .muted,
 .footnote {
   color: var(--mt-colors-muted);
-  font-size: 13px;
+  font-size: 11px;
 }
 .footnote {
-  margin-top: 22px;
+  margin-top: 15px;
   line-height: 1.7;
 }
 .detail-block {
   display: grid;
-  gap: 12px;
-  padding-bottom: 20px;
+  gap: 8px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--mt-colors-border);
 }
 .settings {
   display: grid;
-  gap: 18px;
+  gap: 13px;
 }
 .settings label {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 .quantity-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 22px;
-  font-size: 13px;
+  gap: 8px;
+  margin-bottom: 15px;
+  font-size: 11px;
 }
 .warnings {
   display: grid;
-  gap: 10px;
-  font-size: 13px;
+  gap: 7px;
+  font-size: 11px;
 }
 .warnings li {
   line-height: 1.6;
@@ -114,24 +122,25 @@ select {
 .startup {
   max-width: 640px;
   margin: 0 auto;
-  padding: 64px 24px;
+  padding: 45px 17px;
 }
 .panel-open .main-pane {
   padding-right: calc(26rem + 28px);
 }
 .banner {
-  padding: 10px 28px;
+  padding: 7px 20px;
+  flex-shrink: 0;
   background: var(--mt-colors-accent-subtle);
-  font-size: 13px;
+  font-size: 11px;
 }
 .source {
   overflow-wrap: anywhere;
-  font-size: 12px;
+  font-size: 11px;
 }
 .selection-summary {
   display: flex;
   align-items: start;
-  gap: 12px;
+  gap: 8px;
 }
 @media (max-width: 1150px) {
   .panel-open .main-pane {
@@ -143,45 +152,48 @@ select {
     grid-template-columns: 220px minmax(0, 1fr);
   }
   .main-pane {
-    padding: 24px;
+    padding: 17px;
   }
   .summaries {
     grid-template-columns: 1fr;
   }
   .tools {
-    gap: 6px;
+    gap: 4px;
   }
   .app-header {
-    padding: 0 16px;
+    padding: 0 11px;
   }
 }
 
 .desktop-stage {
-  min-height: 100vh;
-  padding: 28px;
+  height: 100dvh;
+  box-sizing: border-box;
+  padding: 20px;
 }
 .desktop {
   max-width: 1480px;
   margin: 0 auto;
-  min-height: calc(100vh - 56px);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--mt-colors-border);
-  border-radius: 34px;
+  border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 24px 60px #00000038;
 }
 .workspace {
-  min-height: calc(100vh - 128px);
+  min-height: 0;
 }
 .summaries {
   padding: 0;
   border: 0;
   background: transparent;
-  gap: 20px;
+  gap: 14px;
 }
 .summaries > div {
-  padding: 28px;
+  padding: 20px;
   border: 1px solid var(--mt-colors-border);
-  border-radius: 26px;
+  border-radius: 8px;
   background: var(--mt-colors-inset);
 }
 .summaries > div:last-child {
@@ -191,8 +203,9 @@ select {
 }
 .app-header {
   border-bottom: 0;
-  padding: 0 28px;
-  height: 88px;
+  padding: 0 20px;
+  height: 56px;
+  flex-shrink: 0;
 }
 .app-header h1 {
   letter-spacing: -0.025em;
@@ -206,10 +219,10 @@ select {
 }
 @media (max-width: 900px) {
   .desktop-stage {
-    padding: 12px;
+    padding: 8px;
   }
   .desktop {
-    border-radius: 26px;
+    border-radius: 8px;
   }
 }
 @media (max-width: 720px) {
@@ -221,9 +234,83 @@ select {
     border: 0;
   }
   .app-header {
-    padding: 0 16px;
+    padding: 0 11px;
   }
   .sidebar {
-    padding: 20px 10px;
+    padding: 14px 7px;
   }
+}
+
+body {
+  overflow: hidden;
+}
+.sidebar-controls {
+  display: grid;
+  gap: 11px;
+  flex-shrink: 0;
+}
+.sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.sidebar-footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--mt-colors-border);
+  padding-top: 8px;
+}
+.sidebar-footer > button {
+  width: 100%;
+  justify-content: flex-start;
+}
+.desktop > .startup {
+  min-height: 0;
+  overflow: auto;
+  width: 100%;
+}
+.desktop > [role="alert"] {
+  flex-shrink: 0;
+  max-height: 25dvh;
+  overflow: auto;
+}
+@media (max-width: 720px) {
+  .workspace {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+  .main-pane {
+    padding: 14px;
+  }
+  .summaries > div {
+    padding: 14px;
+  }
+  .app-header {
+    height: 48px;
+  }
+}
+@media (max-width: 800px) {
+  .sidebar-list > div > button {
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 6px;
+  }
+  .sidebar-list > div > button > span:first-child {
+    grid-row: 1 / span 2;
+  }
+  .sidebar-list > div > button > span:last-child {
+    grid-column: 2;
+    text-align: left;
+  }
+}
+.sidebar-list:focus-visible,
+.main-pane:focus-visible {
+  outline: 2px solid var(--mt-colors-accent-text);
+  outline-offset: -2px;
+}
+
+.desktop-stage {
+  font-size: var(--mt-font-sizes-md);
 }

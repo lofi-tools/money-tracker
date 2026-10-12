@@ -1,5 +1,12 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import type { Startup, Selection, Tree, Details, Settings } from "./contracts";
+import type {
+  Startup,
+  Selection,
+  Tree,
+  Details,
+  Settings,
+  ManualEdit,
+} from "./contracts";
 export const reviewMode = import.meta.env.MODE === "review";
 // One typed transport boundary. A browser preview never substitutes synthetic money.
 function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -22,5 +29,7 @@ export const api = {
     call<Details>("details", { snapshotId, selection, nodeId }),
   saveSettings: (settings: Settings) =>
     call<Startup>("save_settings", { settings }),
+  manualEdit: (edit: ManualEdit) => call<Startup>("manual_edit", { edit }),
+  undoAction: (id: string) => call<Startup>("undo_action", { id }),
   quit: () => call<void>("quit"),
 };

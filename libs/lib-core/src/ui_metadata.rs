@@ -574,6 +574,13 @@ pub(crate) fn bump_revision(c: &Connection, portfolio: &PortfolioId, column: &st
     Ok(())
 }
 impl Store {
+    pub fn account_exists(&self, id: &AccountId) -> Result<bool> {
+        Ok(self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM accounts WHERE id=?)",
+            [&id.0],
+            |r| r.get::<_, bool>(0),
+        )?)
+    }
     pub fn account_structure(&self, id: &AccountId) -> Result<AccountStructure> {
         structure(&self.connection, id)
     }

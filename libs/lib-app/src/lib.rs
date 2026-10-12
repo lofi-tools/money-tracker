@@ -19,4 +19,5 @@ pub mod worker;
 pub use service::Application;
 
 pub mod exact;
+pub mod manual;
 pub mod portfolio;

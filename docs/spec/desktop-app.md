@@ -26,6 +26,18 @@ Implemented from browser annotations: Privacy mode lives inside Settings, and Se
 
 The desktop shell fits the viewport instead of growing with portfolio rows. Grouping/search remain above the independently scrollable asset/provider list, with Settings always reachable below it. The right content pane scrolls independently; table horizontal overflow stays inside its wrapper. Scroll panes are keyboard-focusable with visible focus. At narrow widths, navbar values move below names to keep asset/provider labels readable. The 647×724 annotation viewport is covered by browser acceptance.
 
+## Manual edits, organization and Undo
+
+Version 1 desktop wire contract, implemented in stage 7:
+
+- `manual_edit` accepts one typed edit: `rate`, `rate_pin`, `price`, `price_pin`, `account_name`, `subscription_name`, `group`, `move`, `dust` or `spam`. Scope, revision and value are validated in Rust; the frontend never writes local state directly.
+- `undo_action(id)` records a validated compensating action instead of deleting history. Restoring is rejected when a newer manual change or a provider-evidence fingerprint conflict makes the prior state invalid, and the UI surfaces that reason.
+- Each accepted edit rebuilds the snapshot. Snapshot IDs stay monotonically increasing, so stale allocation/detail requests are rejected instead of mixing cutoffs.
+- `Startup.edits` carries the account hierarchy, the local-state map (`LocalTarget`/`LocalRecord`) and the ordered action log with prior/resulting state, `undone`/`undo_of` flags and the resulting revision. Allocation trees attach `edits` to leaf holding nodes for inline rate/price editing; `details` returns per-holding edit slots (`rate`, `price`, `dust`, `spam`, subscription `name`) and account grouping controls.
+- Manual rates and prices are dated periods stored as exact decimal strings. Backdated corrections keep later periods, pins apply to the latest applicable manual period, and clearing a period falls back to source evidence. Blank rate entries record an explicit unknown. Future effective dates are rejected.
+- Dust classification (auto/dust/significant), asset-wide spam exclusion with a required reason and its restore, local account/subscription names, provider-scoped `Move to…` reparenting and group creation are persisted locally and never rewrite source labels or evidence.
+- A `Change history` navigation destination lists the action log newest-first with Undo links. Undo is offered only while the target's current revision still matches the action's resulting revision.
+
 ## Source boundaries
 
 [Store](../../libs/lib-core/src/storage.rs) provides local identities, exact quantities, reviewed exclusions and valuation queries. [Provider adapters](../../libs/lib-app/src/adapters) now live in the shared application library and are consumed by the CLI. The [stage-1 service and exact JSON DTOs](application-services.md) are implemented; exact current portfolio projections and the local read-only desktop browser are implemented. Existing CLI environment/key setup does not constitute a finished desktop connection or credential-storage flow.

@@ -312,6 +312,10 @@ export function InlineEdit(props: {
           <Editable.Label class={srOnly}>{props.label}</Editable.Label>
           <Editable.Area>
             <Editable.Preview
+              // Decorative: the label and input parts already carry the value, and
+              // Ark keeps the preview in the tab order, so it is hidden and removed.
+              aria-hidden="true"
+              tabIndex={-1}
               class={css({
                 display: "inline-block",
                 minWidth: "42px",

@@ -42,7 +42,7 @@ Local override state stores dated manual rate/price periods with update times an
 
 `PriceEvidence` stores exact asset/quote, as-of time, observed/update evidence and quote value. Manual prices use the same dated/pin policy, scoped to one portfolio. Zero can represent an explicit loss valuation; negative prices are invalid. Historical `asset_prices` doubles remain unchanged and are not relabelled as exact or copied automatically.
 
-`override_requires_review` detects changed relevant evidence or finer held-subscription/product/account/provider-asset data, including partial detail. It retains the override and its pin; the future UI must prompt review rather than automatically invalidate it. [Stage 4](portfolio-queries.md) resolves allocation precedence and avoids overlapping aggregate/subscription earnings; review/editing controls remain stage 7.
+`override_requires_review` detects changed relevant evidence or finer held-subscription/product/account/provider-asset data, including partial detail. It retains the override and its pin; the future UI must prompt review rather than automatically invalidate it. [Stage 4](portfolio-queries.md) resolves allocation precedence and avoids overlapping aggregate/subscription earnings; the stage-7 review prompt surfaces the same findings as scoped warnings next to the override controls.
 
 ## Tracking, verification and refresh state
 
@@ -62,7 +62,7 @@ Per-source `RefreshState` persists next due, last attempt and last successful up
 
 `undo_manual_action` applies a compensating action rather than deleting history. It rejects already-undone/other-portfolio actions, newer conflicting local state, invalid restored parents, or changed relevant rate/price source evidence. Validation and mutation are transactional. It never restores provider labels, snapshots, imports, source rates/prices or ledger effects. Source evidence conflicts require review; this stage does not provide a force-Undo UI. The action log and local state survive restarts, including explicit restoration of a missing override.
 
-`Application::ui_metadata` and `DatabaseWorker::ui_metadata` return scoped version-1 metadata with effective parents, source names/references, catalogue records, held subscriptions, revisions and local state. The worker exposes the low-level typed manual change/action-log/Undo primitives using its selected portfolio. Frontend editing commands, controls, warning clearing, display-name selection, Undo affordances and query invalidation remain stage 7; [current-value/earnings calculations](portfolio-queries.md) are now implemented in stage 4.
+`Application::ui_metadata` and `DatabaseWorker::ui_metadata` return scoped version-1 metadata with effective parents, source names/references, catalogue records, held subscriptions, revisions and local state. The worker exposes the low-level typed manual change/action-log/Undo primitives using its selected portfolio. Editing commands, controls, display-name selection, Undo affordances and query invalidation are implemented in stage 7 through `lib_app::manual::ManualEdit`, the desktop `manual_edit`/`undo_action` commands and the Change history pane; [current-value/earnings calculations](portfolio-queries.md) are implemented in stage 4.
 
 ## Validation
 

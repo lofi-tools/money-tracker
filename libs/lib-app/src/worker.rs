@@ -190,6 +190,15 @@ impl DatabaseWorker {
         self.request(move |app, _| app.ui_metadata(&portfolio))
             .await
     }
+    /// Typed host edit; the worker's portfolio and serialized access apply.
+    pub async fn apply_manual_edit(
+        &self,
+        edit: crate::manual::ManualEdit,
+    ) -> Result<Option<lib_core::ui_metadata::ManualAction>> {
+        let portfolio = self.portfolio_id.clone();
+        self.request(move |app, _| app.apply_manual_edit(&portfolio, &edit))
+            .await
+    }
     pub async fn manual_actions(&self) -> Result<Vec<lib_core::ui_metadata::ManualAction>> {
         let portfolio = self.portfolio_id.clone();
         self.request(move |app, _| app.store().manual_actions(&portfolio))

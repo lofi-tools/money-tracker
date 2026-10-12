@@ -3,16 +3,24 @@ use anyhow::{Result, ensure};
 use chrono::{DateTime, Utc};
 use lib_app::{
     config::{ResolvedConfig, Settings},
-    dto::{FigureDto, IssueDto, QuantityDto},
-    portfolio::{CalculatedMoney, NavigationEntry, PortfolioProjection, Selection, Summary},
+    dto::UiAccountDto,
+    manual::ManualEdit,
+    portfolio::{
+        AllocationTarget, CalculatedMoney, CurrentHolding, NavigationEntry, PortfolioProjection,
+        Selection, Summary,
+    },
     startup::{MissingDatabase, OpenAction},
     worker::{DatabaseWorker, StartupOutcome},
 };
 use lib_core::{
-    PositionRole,
-    ui_metadata::{SelectedPrice, SelectedRate, Subscription},
+    AccountId, PositionRole, ProviderId,
+    ui_metadata::{
+        LocalRecord, LocalTarget, LocalValue, ManualAction, NodeKind, RateScope, SelectedPrice,
+        SelectedRate, Subscription,
+    },
 };
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 #[derive(Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
@@ -26,6 +34,70 @@ pub enum Startup {
         settings: Settings,
     },
 }
+/// One typed local edit target with its current revision and stored value.
+#[derive(Clone, Serialize)]
+pub struct EditSlot {
+    pub target: LocalTarget,
+    pub revision: i64,
+    pub value: Option<LocalValue>,
+}
+/// Rate/price overrides for leaf holding rows in an allocation table.
+#[derive(Clone, Serialize, Default)]
+pub struct NodeEdits {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate: Option<EditSlot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price: Option<EditSlot>,
+    /// Selected quote the price editor starts from, when one is known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_price: Option<SelectedPrice>,
+}
+/// Every manual control available for one current holding.
+#[derive(Clone, Serialize)]
+pub struct HoldingEdits {
+    pub rate: Option<EditSlot>,
+    pub price: Option<EditSlot>,
+    pub dust: Option<EditSlot>,
+    pub spam: EditSlot,
+    pub name: Option<EditSlot>,
+}
+#[derive(Clone, Serialize)]
+pub struct AccountOption {
+    pub id: Option<AccountId>,
+    pub name: String,
+    pub group: bool,
+}
+/// Account grouping controls: rename, move and the valid-parent candidates.
+#[derive(Clone, Serialize)]
+pub struct NodeAccount {
+    pub id: AccountId,
+    pub provider_id: ProviderId,
+    pub parent: Option<AccountId>,
+    pub group: bool,
+    pub source_label: String,
+    pub local_label: Option<String>,
+    pub slot: EditSlot,
+    pub parent_options: Vec<AccountOption>,
+}
+#[derive(Clone, Serialize)]
+pub struct ActionEntry {
+    pub id: String,
+    pub at: DateTime<Utc>,
+    pub undone: bool,
+    pub target: LocalTarget,
+    pub undo_of: Option<String>,
+    /// Resulting local revision; Undo is offered only while it still matches.
+    pub revision: i64,
+    pub before: Option<LocalValue>,
+    pub after: Option<LocalValue>,
+}
+/// Persisted local state and the ordered action log behind Undo.
+#[derive(Clone, Serialize)]
+pub struct EditContext {
+    pub accounts: Vec<UiAccountDto>,
+    pub local_state: Vec<(LocalTarget, LocalRecord)>,
+    pub actions: Vec<ActionEntry>,
+}
 #[derive(Clone, Serialize)]
 pub struct Snapshot {
     pub contract_version: u32,
@@ -37,20 +109,23 @@ pub struct Snapshot {
     pub dust: NavigationEntry,
     pub holding_count: usize,
     pub dust_count: usize,
+    pub edits: EditContext,
 }
 #[derive(Serialize)]
 pub struct HoldingDetails {
     pub label: String,
     pub role: PositionRole,
-    pub quantity: QuantityDto,
-    pub value: FigureDto<CalculatedMoney>,
-    pub annual_earnings: FigureDto<CalculatedMoney>,
-    pub annual_borrowing_cost: FigureDto<CalculatedMoney>,
+    pub provider_id: ProviderId,
+    pub quantity: lib_app::dto::QuantityDto,
+    pub value: lib_app::dto::FigureDto<CalculatedMoney>,
+    pub annual_earnings: lib_app::dto::FigureDto<CalculatedMoney>,
+    pub annual_borrowing_cost: lib_app::dto::FigureDto<CalculatedMoney>,
     pub subscription: Option<Subscription>,
     pub rate: Option<SelectedRate>,
     pub price: Option<SelectedPrice>,
     pub verification_current: bool,
-    pub issues: Vec<IssueDto>,
+    pub issues: Vec<lib_app::dto::IssueDto>,
+    pub edits: HoldingEdits,
 }
 #[derive(Serialize)]
 pub struct NodeDetails {
@@ -59,7 +134,8 @@ pub struct NodeDetails {
     pub original_name: Option<String>,
     pub source_reference: Option<String>,
     pub holdings: Vec<HoldingDetails>,
-    pub issues: Vec<IssueDto>,
+    pub issues: Vec<lib_app::dto::IssueDto>,
+    pub account: Option<NodeAccount>,
 }
 
 #[derive(Serialize)]
@@ -67,6 +143,8 @@ pub struct DesktopNode {
     #[serde(flatten)]
     pub node: lib_app::portfolio::AllocationNode,
     pub liability: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edits: Option<NodeEdits>,
 }
 #[derive(Serialize)]
 pub struct DesktopTree {
@@ -142,8 +220,25 @@ impl Session {
             settings: self.settings().await?,
         })
     }
+    /// One typed manual edit; the snapshot is rebuilt so stale IDs are rejected.
+    pub async fn apply_edit(&mut self, edit: ManualEdit) -> Result<Startup> {
+        self.worker()?.apply_manual_edit(edit).await?;
+        Ok(Startup::Ready {
+            data: self.snapshot().await?,
+            settings: self.settings().await?,
+        })
+    }
+    /// Compensating action for one logged manual change.
+    pub async fn undo_action(&mut self, id: String) -> Result<Startup> {
+        self.worker()?.undo_manual_action(id).await?;
+        Ok(Startup::Ready {
+            data: self.snapshot().await?,
+            settings: self.settings().await?,
+        })
+    }
     pub async fn snapshot(&mut self) -> Result<Snapshot> {
         let p = self.worker()?.portfolio_projection(Utc::now()).await?;
+        let actions = self.worker()?.manual_actions().await?;
         self.snapshot_id = self
             .snapshot_id
             .checked_add(1)
@@ -173,6 +268,7 @@ impl Session {
             dust: p.dust.clone(),
             holding_count: p.holdings.len(),
             dust_count: p.holdings.iter().filter(|h| h.is_dust).count(),
+            edits: edit_context(&p, &actions),
         };
         self.projection = Some(p);
         Ok(out)
@@ -247,7 +343,21 @@ impl Session {
                             .iter()
                             .filter(|h| node.holding_ids.contains(&h.id))
                             .all(|h| h.role == PositionRole::Liability);
-                    DesktopNode { node, liability }
+                    // Leaf holding rows carry their own rate/price override controls;
+                    // rollup rows display derived figures that cannot be edited directly.
+                    let edits = match &node.target {
+                        AllocationTarget::Holding(id) => p
+                            .holdings
+                            .iter()
+                            .find(|h| &h.id == id)
+                            .map(|h| node_edits(p, h)),
+                        _ => None,
+                    };
+                    DesktopNode {
+                        node,
+                        liability,
+                        edits,
+                    }
                 })
                 .collect(),
         })
@@ -273,8 +383,10 @@ impl Session {
                 .into_iter()
                 .filter(|h| node.holding_ids.contains(&h.id))
                 .map(|h| HoldingDetails {
+                    edits: holding_edits(p, &h),
                     label: h.label,
                     role: h.role,
+                    provider_id: h.provider_id.clone(),
                     quantity: h.quantity,
                     value: h.value,
                     annual_earnings: h.annual_earnings,
@@ -286,6 +398,7 @@ impl Session {
                     issues: h.issues,
                 })
                 .collect(),
+            account: account_controls(p, &node.target),
         })
     }
     pub async fn close(&mut self) -> Result<()> {
@@ -295,6 +408,194 @@ impl Session {
             w.close().await?;
         }
         Ok(())
+    }
+}
+
+/// Local-state lookup keyed by the serialized target, so slots carry revisions.
+fn local_index(p: &PortfolioProjection) -> Vec<(String, LocalRecord)> {
+    p.metadata
+        .local_state
+        .iter()
+        .map(|(target, record)| {
+            (
+                serde_json::to_string(target).unwrap_or_default(),
+                record.clone(),
+            )
+        })
+        .collect()
+}
+fn slot(index: &[(String, LocalRecord)], target: LocalTarget) -> EditSlot {
+    let key = serde_json::to_string(&target).unwrap_or_default();
+    let record = index
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, r)| r.clone())
+        .unwrap_or(LocalRecord {
+            revision: 0,
+            value: None,
+        });
+    EditSlot {
+        target,
+        revision: record.revision,
+        value: record.value,
+    }
+}
+/// The editable scope for a holding: the resolved evidence scope when one applies,
+/// otherwise the finest valid manual override scope for this position.
+fn rate_scope_for(h: &CurrentHolding) -> Option<RateScope> {
+    if let Some(scope) = &h.rate_scope {
+        return Some(scope.clone());
+    }
+    if h.role == PositionRole::Liability {
+        return (h.position_ids.len() == 1)
+            .then(|| RateScope::BorrowingPosition(h.position_ids[0].clone()));
+    }
+    if let Some(subscription) = &h.subscription {
+        return Some(RateScope::Subscription(subscription.id.clone()));
+    }
+    Some(RateScope::AccountAsset {
+        account: h.account_id.clone(),
+        asset: h.quantity.asset_id.clone(),
+    })
+}
+fn price_target(h: &CurrentHolding, reporting: &lib_core::AssetId) -> Option<LocalTarget> {
+    (h.quantity.asset_id != *reporting).then(|| LocalTarget::Price {
+        asset: h.quantity.asset_id.clone(),
+        quote: reporting.clone(),
+    })
+}
+fn node_edits(p: &PortfolioProjection, h: &CurrentHolding) -> NodeEdits {
+    let index = local_index(p);
+    NodeEdits {
+        rate: rate_scope_for(h).map(|scope| slot(&index, LocalTarget::Rate { scope })),
+        price: price_target(h, &p.request.reporting_asset).map(|target| slot(&index, target)),
+        selected_price: h.price.clone(),
+    }
+}
+fn holding_edits(p: &PortfolioProjection, h: &CurrentHolding) -> HoldingEdits {
+    let index = local_index(p);
+    let dust = slot(
+        &index,
+        LocalTarget::Dust {
+            provider: h.provider_id.clone(),
+            asset: h.quantity.asset_id.clone(),
+        },
+    );
+    HoldingEdits {
+        rate: rate_scope_for(h).map(|scope| slot(&index, LocalTarget::Rate { scope })),
+        price: price_target(h, &p.request.reporting_asset).map(|target| slot(&index, target)),
+        dust: (h.role == PositionRole::Asset).then_some(dust),
+        spam: slot(
+            &index,
+            LocalTarget::Spam {
+                asset: h.quantity.asset_id.clone(),
+            },
+        ),
+        name: h
+            .subscription
+            .as_ref()
+            .map(|s| slot(&index, LocalTarget::Subscription { id: s.id.clone() })),
+    }
+}
+fn local_label(p: &PortfolioProjection, id: &AccountId) -> Option<String> {
+    p.metadata
+        .local_state
+        .iter()
+        .find_map(|(target, record)| match (target, &record.value) {
+            (LocalTarget::Account { id: target }, Some(LocalValue::Account(custom)))
+                if *target == *id =>
+            {
+                custom.local_label.clone()
+            }
+            _ => None,
+        })
+}
+fn account_name(p: &PortfolioProjection, id: &AccountId) -> String {
+    local_label(p, id).unwrap_or_else(|| {
+        p.metadata
+            .accounts
+            .iter()
+            .find(|a| &a.account.id == id)
+            .map(|a| a.account.label.clone())
+            .unwrap_or_else(|| id.0.clone())
+    })
+}
+fn is_descendant(candidate: &AccountId, ancestor: &AccountId, accounts: &[UiAccountDto]) -> bool {
+    let mut current = Some(candidate.clone());
+    while let Some(id) = current {
+        if id == *ancestor {
+            return true;
+        }
+        current = accounts
+            .iter()
+            .find(|a| a.account.id == id)
+            .and_then(|a| a.parent.clone());
+    }
+    false
+}
+/// Rename/move controls and the cycle-free valid-parent candidates for an account.
+fn account_controls(p: &PortfolioProjection, target: &AllocationTarget) -> Option<NodeAccount> {
+    let AllocationTarget::Account(id) = target else {
+        return None;
+    };
+    let entry = p.metadata.accounts.iter().find(|a| &a.account.id == id)?;
+    let index = local_index(p);
+    let same_provider: Vec<_> = p
+        .metadata
+        .accounts
+        .iter()
+        .filter(|a| a.account.provider_id == entry.account.provider_id)
+        .collect();
+    let mut parent_options = vec![AccountOption {
+        id: None,
+        name: "Top level".into(),
+        group: false,
+    }];
+    parent_options.extend(
+        same_provider
+            .iter()
+            .filter(|a| {
+                &a.account.id != id && !is_descendant(&a.account.id, id, &p.metadata.accounts)
+            })
+            .map(|a| AccountOption {
+                id: Some(a.account.id.clone()),
+                name: account_name(p, &a.account.id),
+                group: matches!(a.structure.kind, NodeKind::Group),
+            }),
+    );
+    Some(NodeAccount {
+        id: id.clone(),
+        provider_id: entry.account.provider_id.clone(),
+        parent: entry.parent.clone(),
+        group: matches!(entry.structure.kind, NodeKind::Group),
+        source_label: entry.account.label.clone(),
+        local_label: local_label(p, id),
+        slot: slot(&index, LocalTarget::Account { id: id.clone() }),
+        parent_options,
+    })
+}
+fn edit_context(p: &PortfolioProjection, actions: &[ManualAction]) -> EditContext {
+    let undone: BTreeMap<_, _> = actions
+        .iter()
+        .filter_map(|a| a.undo_of.clone().map(|id| (id, a.id.clone())))
+        .collect();
+    EditContext {
+        accounts: p.metadata.accounts.clone(),
+        local_state: p.metadata.local_state.clone(),
+        actions: actions
+            .iter()
+            .rev()
+            .map(|a| ActionEntry {
+                id: a.id.clone(),
+                at: a.at,
+                undone: undone.contains_key(&a.id),
+                target: a.target.clone(),
+                undo_of: a.undo_of.clone(),
+                revision: a.after.revision,
+                before: a.before.value.clone(),
+                after: a.after.value.clone(),
+            })
+            .collect(),
     }
 }
 

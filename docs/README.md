@@ -26,6 +26,7 @@ Documentation is organized by purpose. Specifications describe implemented contr
 
 ## Findings
 
+- [Desktop stage 7: manual edits, organization and persistent Undo](findings/desktop-stage-7.md)
 - [Desktop stage 6: real-data browser, typed IPC and validation](findings/desktop-stage-6.md)
 
 - [User needs interview and confirmed portfolio questions](findings/user-needs.md)

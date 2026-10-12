@@ -1,6 +1,6 @@
 # Money Tracker desktop
 
-Stage 6: a local Tauri 2 host and Solid frontend consuming `@money-tracker/design-system` and the shared Rust application worker. Displays already-imported current holdings, allocations and evidenced current annual earnings. Missing inputs are labelled unknown/partial. No account connection, CSV-import, transaction-history, financial-edit or provider-refresh commands are exposed yet.
+Stage 7: a local Tauri 2 host and Solid frontend consuming `@money-tracker/design-system` and the shared Rust application worker. Displays already-imported current holdings, allocations and evidenced current annual earnings, and exposes typed manual edits (APY, borrowing rates, prices, local names, dust/spam, grouping) with persistent Undo. Missing inputs are labelled unknown/partial. Account connection, CSV-import and transaction-history commands are not exposed yet.
 
 From the repository root:
 

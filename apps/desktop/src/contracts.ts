@@ -40,17 +40,6 @@ export interface Entry {
   issues: Issue[];
   quantities: [string, QuantityValue][];
 }
-export interface Snapshot {
-  contract_version: 1;
-  snapshot_id: number;
-  cutoff: string;
-  overview: Summary;
-  assets: Entry[];
-  providers: Entry[];
-  dust: Entry;
-  holding_count: number;
-  dust_count: number;
-}
 export interface Settings {
   reporting_currency: string;
   theme: "system" | "light" | "dark";
@@ -67,14 +56,162 @@ export type Startup =
       database: { destination: string; legacy_database: string | null };
       settings: Settings;
     };
+/** Manual overrides are dated and pinned; source evidence is never replaced. */
+export interface AnnualRate {
+  fraction: string;
+  basis: "apr" | "apy";
+  compounds_per_year: number | null;
+  reward_asset: string | null;
+}
+export interface ManualRate {
+  effective_at: string;
+  updated_at: string;
+  rate: AnnualRate | null;
+  pinned: boolean;
+}
+export interface ManualPrice {
+  effective_at: string;
+  updated_at: string;
+  price: string;
+  pinned: boolean;
+}
+export interface AccountCustomization {
+  local_label: string | null;
+  parent_is_custom: boolean;
+  parent: string | null;
+}
+export type LocalValue =
+  | { kind: "account"; value: AccountCustomization }
+  | { kind: "subscription_name"; value: string }
+  | { kind: "rates"; value: ManualRate[] }
+  | { kind: "prices"; value: ManualPrice[] }
+  | { kind: "spam"; value: { excluded: boolean; reason: string } }
+  | { kind: "dust"; value: "auto" | "dust" | "significant" };
+export type RateScope =
+  | { kind: "subscription"; id: string }
+  | { kind: "product"; id: string }
+  | { kind: "account_asset"; account: string; asset: string }
+  | { kind: "provider"; id: string }
+  | { kind: "asset"; id: string }
+  | { kind: "provider_asset"; provider: string; asset: string }
+  | { kind: "borrowing_position"; id: string };
+export type LocalTarget =
+  | { kind: "account"; id: string }
+  | { kind: "subscription"; id: string }
+  | { kind: "rate"; scope: RateScope }
+  | { kind: "price"; asset: string; quote: string }
+  | { kind: "spam"; asset: string }
+  | { kind: "dust"; provider: string; asset: string };
+export interface LocalRecord {
+  revision: number;
+  value: LocalValue | null;
+}
+/** One editable local target with the revision the host must send back. */
+export interface EditSlot {
+  target: LocalTarget;
+  revision: number;
+  value: LocalValue | null;
+}
+export interface SelectedPrice {
+  as_of: string;
+  updated_at: string;
+  pinned: boolean;
+  evidence_id: string | null;
+  price: string;
+}
+export interface NodeEdits {
+  rate?: EditSlot;
+  price?: EditSlot;
+  selected_price?: SelectedPrice;
+}
+export interface SelectedRate {
+  pinned: boolean;
+  effective_at: string;
+  updated_at: string;
+  evidence_id: string | null;
+  rate: AnnualRate | null;
+}
+export interface HoldingEdits {
+  rate: EditSlot | null;
+  price: EditSlot | null;
+  dust: EditSlot | null;
+  spam: EditSlot;
+  name: EditSlot | null;
+}
+export interface AccountOption {
+  id: string | null;
+  name: string;
+  group: boolean;
+}
+export interface NodeAccount {
+  id: string;
+  provider_id: string;
+  parent: string | null;
+  group: boolean;
+  source_label: string;
+  local_label: string | null;
+  slot: EditSlot;
+  parent_options: AccountOption[];
+}
+export interface AccountStructure {
+  account_id: string;
+  kind: "source" | "group";
+  source_parent: string | null;
+  mapping_version: number;
+}
+export interface UiAccount {
+  account: {
+    id: string;
+    provider_id: string;
+    label: string;
+    source_reference: string | null;
+  };
+  structure: AccountStructure;
+  parent: string | null;
+}
+export interface ActionEntry {
+  id: string;
+  at: string;
+  undone: boolean;
+  target: LocalTarget;
+  undo_of: string | null;
+  revision: number;
+  before: LocalValue | null;
+  after: LocalValue | null;
+}
+export interface EditContext {
+  accounts: UiAccount[];
+  local_state: [LocalTarget, LocalRecord][];
+  actions: ActionEntry[];
+}
+export interface Snapshot {
+  contract_version: 1;
+  snapshot_id: number;
+  cutoff: string;
+  overview: Summary;
+  assets: Entry[];
+  providers: Entry[];
+  dust: Entry;
+  holding_count: number;
+  dust_count: number;
+  edits: EditContext;
+}
+export type AllocationTarget =
+  | { kind: "provider"; id: string }
+  | { kind: "account"; id: string }
+  | { kind: "product"; account: string; product: string }
+  | { kind: "subscription"; id: string }
+  | { kind: "holding"; id: string };
 export interface Node {
   id: string;
+  target: AllocationTarget;
   name: string;
   parent: string | null;
   children: string[];
   summary: Summary;
   issues: Issue[];
   liability: boolean;
+  edits?: NodeEdits;
 }
 export interface Tree {
   initially_expanded: string[];
@@ -85,6 +222,7 @@ export interface Tree {
 export interface Holding {
   label: string;
   role: string;
+  provider_id: string;
   quantity: QuantityValue;
   value: Figure<MoneyValue>;
   annual_earnings: Figure<MoneyValue>;
@@ -97,19 +235,9 @@ export interface Holding {
     auto_renew: boolean | null;
     source_reference: string;
   } | null;
-  rate: {
-    pinned: boolean;
-    effective_at: string;
-    updated_at: string;
-    evidence_id: string | null;
-    rate: { fraction: string; basis: string } | null;
-  } | null;
-  price: {
-    as_of: string;
-    updated_at: string;
-    pinned: boolean;
-    evidence_id: string | null;
-  } | null;
+  rate: SelectedRate | null;
+  price: SelectedPrice | null;
+  edits: HoldingEdits;
 }
 export interface Details {
   name: string;
@@ -118,7 +246,45 @@ export interface Details {
   original_name?: string | null;
   source_reference?: string | null;
   holdings: Holding[];
+  account?: NodeAccount | null;
 }
+/** Typed manual edit requests; Rust validates scope, dates and revisions. */
+export type ManualEdit =
+  | {
+      kind: "rate";
+      scope: RateScope;
+      rate: AnnualRate | null;
+      effective_at: string;
+      pinned: boolean;
+      clear: boolean;
+    }
+  | { kind: "rate_pin"; scope: RateScope; pinned: boolean }
+  | {
+      kind: "price";
+      asset: string;
+      quote: string;
+      price: string | null;
+      effective_at: string;
+      pinned: boolean;
+      clear: boolean;
+    }
+  | { kind: "price_pin"; asset: string; quote: string; pinned: boolean }
+  | { kind: "account_name"; account: string; name: string | null }
+  | { kind: "subscription_name"; id: string; name: string | null }
+  | { kind: "group"; provider: string; name: string; parent: string | null }
+  | {
+      kind: "move";
+      account: string;
+      parent: string | null;
+      source_default: boolean;
+    }
+  | {
+      kind: "dust";
+      provider: string;
+      asset: string;
+      mode: "auto" | "dust" | "significant";
+    }
+  | { kind: "spam"; asset: string; excluded: boolean; reason: string };
 export const defaultSettings: Settings = {
   reporting_currency: "USD",
   theme: "system",

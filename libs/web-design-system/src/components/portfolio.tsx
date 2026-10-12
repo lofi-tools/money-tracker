@@ -117,6 +117,8 @@ export interface AllocationRow {
   rate: JSX.Element;
   annual: JSX.Element;
   liability?: boolean;
+  /** Row-scoped manual controls, e.g. inline rate/price editing with pins. */
+  actions?: JSX.Element;
   warning?: {
     label: string;
     onClick: JSX.EventHandler<HTMLButtonElement, MouseEvent>;
@@ -129,6 +131,8 @@ export function AllocationTable(props: {
   onDetails: (id: string, trigger: HTMLButtonElement) => void;
   caption: string;
 }) {
+  // The controls column exists only when a row actually carries row-scoped edits.
+  const withActions = props.rows.some((row) => row.actions);
   return (
     <div
       class={css({
@@ -188,7 +192,15 @@ export function AllocationTable(props: {
             </th>
             <th
               scope="col"
-              class={css({ px: "4", py: "3", fontWeight: "500" })}
+              class={css({
+                px: "4",
+                py: "3",
+                fontWeight: "500",
+                // Row controls (dated rate/price edits) need one unbroken line.
+                ...(withActions
+                  ? { width: "26%", whiteSpace: "nowrap" }
+                  : undefined),
+              })}
             >
               Current rate
             </th>
@@ -198,6 +210,21 @@ export function AllocationTable(props: {
             >
               Per year
             </th>
+            <Show when={withActions}>
+              <th
+                scope="col"
+                class={css({
+                  // Narrow windows keep the single readable rate column.
+                  display: "none",
+                  "@media (min-width: 900px)": { display: "table-cell" },
+                  px: "4",
+                  py: "3",
+                  fontWeight: "500",
+                })}
+              >
+                Manual edits
+              </th>
+            </Show>
           </tr>
         </thead>
         <tbody>
@@ -306,12 +333,34 @@ export function AllocationTable(props: {
                 >
                   {row.value}
                 </td>
-                <td class={css({ textAlign: "right", px: "4", py: "3" })}>
+                <td
+                  class={css({
+                    textAlign: "right",
+                    px: "4",
+                    py: "3",
+                    ...(withActions ? { whiteSpace: "nowrap" } : undefined),
+                  })}
+                >
                   {row.rate}
                 </td>
                 <td class={css({ textAlign: "right", px: "5", py: "3" })}>
                   {row.annual}
                 </td>
+                <Show when={withActions}>
+                  <td
+                    class={css({
+                      display: "none",
+                      "@media (min-width: 900px)": { display: "table-cell" },
+                      textAlign: "right",
+                      px: "4",
+                      py: "3",
+                      whiteSpace: "nowrap",
+                    })}
+                  >
+                    {/* Hosts hide empty controls themselves on narrow windows. */}
+                    {row.actions}
+                  </td>
+                </Show>
               </tr>
             )}
           </For>

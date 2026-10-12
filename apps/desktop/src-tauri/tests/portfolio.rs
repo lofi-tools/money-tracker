@@ -1,4 +1,5 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
+use chrono::Utc;
 use lib_app::{
     Application,
     config::{AppConfig, DATABASE_FILENAME, ResolvedConfig},
@@ -179,6 +180,24 @@ async fn real_wire_fixture_scopes_unknowns_debt_and_exact_quantities() -> Result
     session.close().await?;
     Ok(())
 }
+fn amount(
+    figure: &lib_app::dto::FigureDto<lib_app::portfolio::CalculatedMoney>,
+) -> Option<(&'static str, &'static str)> {
+    // Only the deterministic fixture ratios are compared here.
+    match figure {
+        lib_app::dto::FigureDto::Known { value, .. }
+        | lib_app::dto::FigureDto::Partial { value, .. } => match (
+            value.amount.numerator().as_str(),
+            value.amount.denominator().as_str(),
+        ) {
+            ("50", "1") => Some(("50", "1")),
+            ("60", "1") => Some(("60", "1")),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 trait Status {
     fn status_for_test(&self) -> &str;
 }
@@ -192,6 +211,182 @@ impl<T> Status for lib_app::dto::FigureDto<T> {
         }
     }
 }
+/// Stage 7 evidence: a manual rate edit changes the projection, Undo restores the
+/// source figure, and both the action log and compensations survive a restart.
+#[tokio::test]
+async fn manual_rate_edit_then_undo_restores_source_earnings() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let config = resolved(temp.path());
+    seed(&config.database)?;
+    let mut session = Session::new(config.clone());
+    let Startup::Ready { data, .. } = session.startup().await? else {
+        panic!()
+    };
+    assert_eq!(
+        amount(&data.overview.gross_annual_earnings),
+        Some(("50", "1"))
+    );
+    let scope = RateScope::AccountAsset {
+        account: "wallet".into(),
+        asset: AssetId::str("USD"),
+    };
+    let rate = AnnualRate {
+        fraction: "0.06".parse()?,
+        basis: AnnualRateBasis::Apy,
+        compounds_per_year: None,
+        reward_asset: None,
+    };
+    let Startup::Ready { data, .. } = session
+        .apply_edit(lib_app::manual::ManualEdit::Rate {
+            scope: scope.clone(),
+            rate: Some(rate),
+            effective_at: Utc::now(),
+            pinned: false,
+            clear: false,
+        })
+        .await?
+    else {
+        panic!()
+    };
+    assert_eq!(
+        amount(&data.overview.gross_annual_earnings),
+        Some(("60", "1"))
+    );
+    let undoable = data
+        .edits
+        .actions
+        .iter()
+        .find(|a| !a.undone)
+        .context("logged action")?;
+    let Startup::Ready { data, .. } = session.undo_action(undoable.id.clone()).await? else {
+        panic!()
+    };
+    assert_eq!(
+        amount(&data.overview.gross_annual_earnings),
+        Some(("50", "1"))
+    );
+    assert_eq!(data.edits.actions.len(), 2);
+    assert!(
+        data.edits
+            .actions
+            .iter()
+            .any(|a| a.undone && a.id == undoable.id)
+    );
+    assert!(
+        data.edits
+            .actions
+            .iter()
+            .any(|a| a.undo_of.as_deref() == Some(undoable.id.as_str()))
+    );
+    session.close().await?;
+    // Reopening keeps the source figure and the full action history.
+    let mut reopened = Session::new(config);
+    let Startup::Ready { data, .. } = reopened.startup().await? else {
+        panic!()
+    };
+    assert_eq!(
+        amount(&data.overview.gross_annual_earnings),
+        Some(("50", "1"))
+    );
+    assert_eq!(data.edits.actions.len(), 2);
+    assert!(
+        data.edits
+            .actions
+            .iter()
+            .any(|a| a.undo_of.as_deref() == Some(undoable.id.as_str()))
+    );
+    reopened.close().await?;
+    Ok(())
+}
+/// Dust classification, spam exclusion and local grouping change only presentation.
+#[tokio::test]
+async fn dust_spam_and_grouping_controls_change_the_projection() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let config = resolved(temp.path());
+    seed(&config.database)?;
+    let mut session = Session::new(config.clone());
+    let Startup::Ready { data, .. } = session.startup().await? else {
+        panic!()
+    };
+    assert_eq!(data.dust_count, 1);
+    let Startup::Ready { data, .. } = session
+        .apply_edit(lib_app::manual::ManualEdit::Dust {
+            provider: "tiny".into(),
+            asset: AssetId::str("USD"),
+            mode: DustMode::Significant,
+        })
+        .await?
+    else {
+        panic!()
+    };
+    assert_eq!(data.dust_count, 0);
+    let Startup::Ready { data, .. } = session
+        .apply_edit(lib_app::manual::ManualEdit::Spam {
+            asset: AssetId::str("MYSTERY"),
+            excluded: true,
+            reason: "unwanted airdrop".into(),
+        })
+        .await?
+    else {
+        panic!()
+    };
+    assert!(!data.assets.iter().any(|e| e.name == "MYSTERY"));
+    // A local group becomes a valid parent and reparents the account.
+    session
+        .apply_edit(lib_app::manual::ManualEdit::Group {
+            provider: "example".into(),
+            name: "Fixed terms".into(),
+            parent: None,
+        })
+        .await?;
+    let Startup::Ready { data, .. } = session
+        .apply_edit(lib_app::manual::ManualEdit::Move {
+            account: "wallet".into(),
+            parent: None,
+            source_default: false,
+        })
+        .await?
+    else {
+        panic!()
+    };
+    let group = data
+        .edits
+        .accounts
+        .iter()
+        .find(|a| a.account.label == "Fixed terms")
+        .map(|a| a.account.id.clone())
+        .context("group account")?;
+    let Startup::Ready { data, .. } = session
+        .apply_edit(lib_app::manual::ManualEdit::Move {
+            account: "wallet".into(),
+            parent: Some(group.clone()),
+            source_default: false,
+        })
+        .await?
+    else {
+        panic!()
+    };
+    let tree = session.tree(data.snapshot_id, Selection::Asset(AssetId::str("USD")))?;
+    let wallet = tree
+        .nodes
+        .iter()
+        .find(|n| n.node.name == "My wallet")
+        .context("wallet node")?;
+    let parent = wallet
+        .node
+        .parent
+        .as_ref()
+        .and_then(|id| tree.nodes.iter().find(|n| &n.node.id == id))
+        .context("parent node")?;
+    assert!(matches!(
+        parent.node.target,
+        lib_app::portfolio::AllocationTarget::Account(_)
+    ));
+    assert_eq!(parent.node.name, "Fixed terms");
+    session.close().await?;
+    Ok(())
+}
+
 #[tokio::test]
 #[ignore = "offline smoke on temporary copies of private imported databases"]
 async fn cached_imported_portfolios_are_browsable() -> Result<()> {

@@ -7,11 +7,53 @@ async function install(page: Page, missing = false) {
   await page.addInitScript(
     ({ fixture, missing }) => {
       let state = structuredClone(fixture.startup);
+      const applied: Record<string, unknown>[] = [];
       const selectionKey = (s: { kind: string; id?: string }) =>
         JSON.stringify(
           s.id === undefined ? { kind: s.kind } : { kind: s.kind, id: s.id },
         );
       Object.defineProperty(window, "isTauri", { value: true });
+      Object.defineProperty(window, "__edits", { value: applied });
+      const targetOf = (edit: Record<string, any>) => {
+        switch (edit.kind) {
+          case "rate":
+          case "rate_pin":
+            return { kind: "rate", scope: edit.scope };
+          case "price":
+          case "price_pin":
+            return { kind: "price", asset: edit.asset, quote: edit.quote };
+          case "dust":
+            return { kind: "dust", provider: edit.provider, asset: edit.asset };
+          case "spam":
+            return { kind: "spam", asset: edit.asset };
+          case "subscription_name":
+            return { kind: "subscription", id: edit.id };
+          default:
+            return { kind: "account", id: edit.account ?? "local group" };
+        }
+      };
+      const withAction = (target: Record<string, unknown>) => {
+        state.data = {
+          ...state.data,
+          edits: {
+            ...state.data.edits,
+            actions: [
+              {
+                id: "manual-action-1",
+                at: new Date().toISOString(),
+                undone: false,
+                target,
+                undo_of: null,
+                revision: 1,
+                before: null,
+                after: null,
+              },
+              ...state.data.edits.actions,
+            ],
+            local_state: [[target, { revision: 1, value: null }]],
+          },
+        };
+      };
       Object.defineProperty(window, "__TAURI_INTERNALS__", {
         value: {
           invoke: async (command: string, args: Record<string, any>) => {
@@ -49,6 +91,24 @@ async function install(page: Page, missing = false) {
                 );
               case "save_settings":
                 state.settings = args.settings;
+                return copy(state);
+              // Browser previews echo the request into the ordered action log.
+              case "manual_edit":
+                applied.push(args.edit);
+                withAction(targetOf(args.edit));
+                return copy(state);
+              case "undo_action":
+                state.data = {
+                  ...state.data,
+                  edits: {
+                    ...state.data.edits,
+                    actions: state.data.edits.actions.map((action: any) =>
+                      action.id === args.id
+                        ? { ...action, undone: true }
+                        : action,
+                    ),
+                  },
+                };
                 return copy(state);
               case "quit":
                 return;
@@ -232,4 +292,96 @@ test("failed explicit price refresh retains cached navbar figures", async ({
     "Existing cached figures are retained",
   );
   expect(await usd.innerText()).toBe(before);
+});
+
+test("manual rate, price, dust and spam edits commit typed requests", async ({
+  page,
+}) => {
+  await install(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /US USD/ }).click();
+  await expect(page.getByRole("table")).toBeVisible();
+  // Inline APY editing lives on leaf holding rows with a dated, pinned override.
+  const rateEdit = page
+    .getByRole("button", { name: "Edit Annual rate" })
+    .first();
+  await expect(rateEdit).toBeVisible();
+  await rateEdit.click();
+  const rateInput = page.getByRole("textbox", { name: "Annual rate" }).first();
+  await rateInput.fill("6.5");
+  await rateInput.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__edits.length))
+    .toBe(1);
+  const sent = await page.evaluate(() => (window as any).__edits[0]);
+  expect(sent.kind).toBe("rate");
+  expect(sent.rate).toMatchObject({
+    fraction: "0.065",
+    basis: "apy",
+    compounds_per_year: null,
+    reward_asset: null,
+  });
+  expect(sent.effective_at).toMatch(/^\d{4}-\d{2}-\d{2}T00:00:00Z$/);
+  expect(sent.pinned).toBe(false);
+  expect(sent.clear).toBe(false);
+  // The effective date is editable and defaults to today.
+  const effective = page.getByLabel("Effective from").first();
+  await expect(effective).toHaveValue(new Date().toISOString().slice(0, 10));
+  // Prices are edited in the reporting currency alongside their pin; the
+  // reporting asset itself has no quote and therefore no price override.
+  await page.getByRole("button", { name: "MY MYSTERY Unknown" }).click();
+  const priceEdit = page
+    .getByRole("button", { name: "Edit Current price" })
+    .first();
+  await priceEdit.click();
+  const priceInput = page
+    .getByRole("textbox", { name: "Current price" })
+    .first();
+  await priceInput.fill("1.25");
+  await priceInput.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__edits.length))
+    .toBe(2);
+  expect(await page.evaluate(() => (window as any).__edits[1])).toMatchObject({
+    kind: "price",
+    price: "1.25",
+  });
+  await page.getByRole("button", { name: "My wallet", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  // Dust, spam and subscription naming are scoped manual controls.
+  const dust = page.getByRole("group", { name: "Dust classification" }).first();
+  await expect(dust).toBeVisible();
+  await dust.getByRole("button", { name: "Significant" }).click();
+  const spam = page.getByRole("group", { name: "Spam exclusion" }).first();
+  await expect(spam).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__edits.length))
+    .toBe(3);
+  expect(await page.evaluate(() => (window as any).__edits[2])).toMatchObject({
+    kind: "dust",
+    mode: "significant",
+  });
+  await spam.getByRole("textbox").fill("unwanted airdrop");
+  await spam.getByRole("button", { name: "Exclude as spam" }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__edits.length))
+    .toBe(4);
+  expect(await page.evaluate(() => (window as any).__edits[3])).toMatchObject({
+    kind: "spam",
+    excluded: true,
+    reason: "unwanted airdrop",
+  });
+  await page.getByRole("button", { name: "Close details" }).click();
+  // The action log exposes the change with a working undo link.
+  await page.getByRole("button", { name: "Change history" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Change history" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Manual rate", { exact: false }).first(),
+  ).toBeVisible();
+  const undo = page.getByRole("button", { name: "Undo" }).first();
+  await expect(undo).toBeVisible();
+  await undo.click();
+  await expect(page.getByText("Undone").first()).toBeVisible();
 });

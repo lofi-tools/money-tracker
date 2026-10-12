@@ -113,6 +113,31 @@ async fn refresh_prices(state: State<'_, Host>) -> Result<Startup, String> {
     )
 }
 #[tauri::command]
+async fn manual_edit(
+    state: State<'_, Host>,
+    edit: lib_app::manual::ManualEdit,
+) -> Result<Startup, String> {
+    safe(
+        session(&state)
+            .await?
+            .as_mut()
+            .unwrap()
+            .apply_edit(edit)
+            .await,
+    )
+}
+#[tauri::command]
+async fn undo_action(state: State<'_, Host>, id: String) -> Result<Startup, String> {
+    safe(
+        session(&state)
+            .await?
+            .as_mut()
+            .unwrap()
+            .undo_action(id)
+            .await,
+    )
+}
+#[tauri::command]
 async fn save_settings(state: State<'_, Host>, settings: Settings) -> Result<Startup, String> {
     safe(
         session(&state)
@@ -154,6 +179,8 @@ fn main() {
             details,
             save_settings,
             refresh_prices,
+            manual_edit,
+            undo_action,
             quit
         ])
         .on_window_event(|window, event| {

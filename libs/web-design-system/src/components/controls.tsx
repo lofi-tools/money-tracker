@@ -22,8 +22,16 @@ export function Button(props: ButtonProps) {
   );
 }
 export function IconButton(props: ButtonProps & { label: string }) {
-  const [local, rest] = splitProps(props, ["label"]);
-  return <Button {...rest} aria-label={local.label} />;
+  const [local, rest] = splitProps(props, ["label", "class"]);
+  return (
+    <Button
+      {...rest}
+      aria-label={local.label}
+      class={[css({ borderRadius: "sm", minWidth: "40px" }), local.class]
+        .filter(Boolean)
+        .join(" ")}
+    />
+  );
 }
 export function PinButton(props: {
   pinned: boolean;
@@ -51,7 +59,7 @@ const inputClass = css({
   borderRadius: "sm",
   px: "3",
   py: "2",
-  bg: "surface",
+  bg: "subtle",
   color: "text",
   fontSize: "sm",
   width: "100%",
@@ -171,17 +179,17 @@ export function GroupingTabs(props: {
                 py: "2",
                 borderRadius: "sm",
                 fontSize: "sm",
-                fontWeight: "600",
+                fontWeight: "700",
                 color: "muted",
                 cursor: "pointer",
                 _selected: {
-                  bg: "surface",
-                  color: "text",
+                  bg: "accent",
+                  color: "onAccent",
                   boxShadow: "0 1px 3px #00000014",
                 },
                 _focusVisible: {
                   outline: "2px solid",
-                  outlineColor: "accent",
+                  outlineColor: "accentText",
                   outlineOffset: "2px",
                 },
               })}

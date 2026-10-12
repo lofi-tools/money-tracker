@@ -2,7 +2,7 @@ import { defineConfig, defineRecipe } from "@pandacss/dev";
 import { tokens, semanticTokens } from "./src/tokens/index";
 const focus = {
   outline: "2px solid",
-  outlineColor: "accent",
+  outlineColor: "accentText",
   outlineOffset: "3px",
 };
 export default defineConfig({
@@ -36,13 +36,13 @@ export default defineConfig({
             alignItems: "center",
             justifyContent: "center",
             gap: "2",
-            borderRadius: "sm",
-            fontWeight: "600",
+            borderRadius: "pill",
+            fontWeight: "700",
             cursor: "pointer",
             whiteSpace: "nowrap",
             border: "1px solid",
             borderColor: "transparent",
-            transition: "background-color 120ms",
+            transition: "box-shadow 180ms, transform 180ms",
             _focusVisible: focus,
             _disabled: { opacity: 0.5, cursor: "not-allowed" },
           },
@@ -54,7 +54,7 @@ export default defineConfig({
                 _hover: { filter: "brightness(0.94)" },
               },
               secondary: {
-                bg: "surface",
+                bg: "subtle",
                 color: "text",
                 borderColor: "border",
                 _hover: { bg: "subtle" },
@@ -83,7 +83,7 @@ export default defineConfig({
             display: "inline-flex",
             alignItems: "center",
             gap: "1",
-            borderRadius: "sm",
+            borderRadius: "pill",
             px: "2",
             py: "1",
             fontSize: "xs",
@@ -92,7 +92,7 @@ export default defineConfig({
           variants: {
             tone: {
               neutral: { color: "muted", bg: "subtle" },
-              accent: { color: "accent", bg: "accentSubtle" },
+              accent: { color: "accentText", bg: "accentSubtle" },
               warning: { color: "warning", bg: "warningSurface" },
               danger: { color: "danger", bg: "dangerSurface" },
             },
@@ -104,10 +104,16 @@ export default defineConfig({
   },
   staticCss: { recipes: "*" },
   globalCss: {
-    ":root": { fontFamily: "body" },
+    ":root": { fontFamily: "body", WebkitFontSmoothing: "antialiased" },
     body: { margin: 0 },
-    "[data-theme]": { color: "text", bg: "canvas", colorScheme: "light" },
+    "[data-theme]": {
+      color: "text",
+      bg: "canvas",
+      fontFamily: "body",
+      colorScheme: "light",
+    },
     "[data-theme=dark]": { colorScheme: "dark" },
+    "::selection": { bg: "accent", color: "onAccent" },
     "button, input, select": { fontFamily: "inherit" },
     "button, a, input, select": { _focusVisible: focus },
     "@media (prefers-reduced-motion: reduce)": {

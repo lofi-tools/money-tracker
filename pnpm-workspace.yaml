@@ -1,6 +1,6 @@
 packages:
   - libs/web-design-system
-  - apps/design-system-showcase
+  - demos/design-system-showcase
   - apps/desktop
 allowBuilds:
   "@parcel/watcher": true

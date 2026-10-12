@@ -34,7 +34,7 @@ export function NavigationEntry(props: {
         onClick={props.onSelect}
         class={css({
           display: "grid",
-          gridTemplateColumns: "32px 1fr auto",
+          gridTemplateColumns: "40px 1fr auto",
           alignItems: "center",
           gap: "3",
           p: "3",
@@ -42,21 +42,21 @@ export function NavigationEntry(props: {
           textAlign: "left",
           borderRadius: "md",
           cursor: "pointer",
-          _currentPage: { bg: "accentSubtle", color: "accent" },
-          _focusVisible: { outline: "2px solid", outlineColor: "accent" },
+          _currentPage: { bg: "accentSubtle", color: "accentText" },
+          _focusVisible: { outline: "2px solid", outlineColor: "accentText" },
         })}
       >
         <span
           class={css({
             display: "grid",
             placeItems: "center",
-            bg: "subtle",
+            bg: "accent",
             borderRadius: "sm",
-            width: "32px",
-            height: "32px",
+            width: "40px",
+            height: "40px",
             fontSize: "xs",
-            fontWeight: "700",
-            color: "muted",
+            fontWeight: "800",
+            color: "onAccent",
           })}
         >
           {props.icon ?? props.name.slice(0, 2).toUpperCase()}
@@ -65,7 +65,7 @@ export function NavigationEntry(props: {
           <span
             class={css({
               fontSize: "sm",
-              fontWeight: "600",
+              fontWeight: "700",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -80,7 +80,7 @@ export function NavigationEntry(props: {
           </Show>
         </span>
         <span class={css({ display: "grid", gap: "1", textAlign: "right" })}>
-          <span class={css({ fontSize: "sm", fontWeight: "600" })}>
+          <span class={css({ fontSize: "sm", fontWeight: "700" })}>
             {props.value}
           </span>
           <Show when={props.rate}>
@@ -128,8 +128,8 @@ export function AllocationTable(props: {
         overflowX: "auto",
         border: "1px solid",
         borderColor: "border",
-        borderRadius: "md",
-        bg: "surface",
+        borderRadius: "panel",
+        bg: "inset",
       })}
     >
       <table
@@ -145,7 +145,7 @@ export function AllocationTable(props: {
             textAlign: "left",
             px: "5",
             py: "4",
-            fontWeight: "600",
+            fontWeight: "700",
             borderBottom: "1px solid",
             borderColor: "border",
           })}
@@ -256,14 +256,14 @@ export function AllocationTable(props: {
                         }
                         class={css({
                           textAlign: "left",
-                          fontWeight: "600",
+                          fontWeight: "700",
                           cursor: "pointer",
                           color: "text",
-                          _hover: { color: "accent" },
+                          _hover: { color: "accentText" },
                           borderRadius: "sm",
                           _focusVisible: {
                             outline: "2px solid",
-                            outlineColor: "accent",
+                            outlineColor: "accentText",
                             outlineOffset: "3px",
                           },
                         })}
@@ -371,8 +371,10 @@ export function DetailsPanel(props: {
             bg: "surface",
             color: "text",
             borderLeft: "1px solid",
+            borderTopLeftRadius: "panel",
+            borderBottomLeftRadius: "panel",
             borderColor: "border",
-            boxShadow: "-8px 0 32px #00000018",
+            boxShadow: "-8px 0 48px #00000038",
             pointerEvents: "auto",
             overflowY: "auto",
             animation: "mt-panel-in 180ms ease-out",
@@ -392,7 +394,7 @@ export function DetailsPanel(props: {
           >
             <div>
               <Dialog.Title
-                class={css({ fontSize: "lg", fontWeight: "600", mb: "2" })}
+                class={css({ fontSize: "lg", fontWeight: "700", mb: "2" })}
               >
                 {props.title}
               </Dialog.Title>
@@ -431,7 +433,7 @@ export function StateMessage(props: {
       class={css({
         border: "1px solid",
         borderColor: "border",
-        borderRadius: "md",
+        borderRadius: "lg",
         p: "5",
         bg: "surface",
         display: "grid",

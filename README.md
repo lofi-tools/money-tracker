@@ -19,9 +19,9 @@ Setup deps using `direnv allow` (needs Nix and nix-direnv), then:
 
 Run `pnpm install --frozen-lockfile` and `pnpm dev:desktop` to open the local Tauri app. It displays the already-imported database with exact quantities, allocations, current earnings when evidenced, and clear partial/unknown figures. Unix default: `~/.data/money-tracker/portfolio.duckdb`; `APP_DATA_DIR` overrides its directory. Missing databases offer Copy existing or Start new. See [desktop setup and checks](apps/desktop/README.md) and [stage-6 scope](docs/findings/desktop-stage-6.md). Manual financial edits and provider refresh come next.
 
-## Design-system showcase
+## Full design-system showcase
 
-With Node 24.21.0 and pnpm 11.27.0, run `pnpm install --frozen-lockfile` then `pnpm dev:showcase`. This is an isolated synthetic SolidJS/Panda CSS/Ark UI preview, not the real portfolio/Tauri app. See [package commands and exports](libs/web-design-system/README.md), [the showcase guide](apps/design-system-showcase/README.md) and [the implemented contract](docs/spec/web-design-system.md). `pnpm typecheck`, `pnpm test` and `pnpm build` check the package and its consumer; browser installation/checks are documented in the package guide.
+With Node 24.21.0 and pnpm 11.27.0, run `pnpm install --frozen-lockfile` then `pnpm dev:showcase`. The pnpm package lives at `demos/design-system-showcase`: `/` is the full Sage-style component catalog, and `/portfolio` is the synthetic portfolio walkthrough. Both consume the shared SolidJS/Panda CSS/Ark UI design system and are separate from real portfolio data. See [package commands and exports](libs/web-design-system/README.md), [the showcase guide](demos/design-system-showcase/README.md) and [the implemented contract](docs/spec/web-design-system.md). `pnpm typecheck`, `pnpm test` and `pnpm build` check the package and its consumer; browser installation/checks are documented in the package guide.
 
 ## Nexo amounts and historical net worth
 

@@ -1,10 +1,7 @@
 import { defineTokens, defineSemanticTokens } from "@pandacss/dev";
 export const tokens = defineTokens({
   fonts: {
-    body: {
-      value:
-        'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    },
+    body: { value: '"Manrope Variable", Manrope, system-ui, sans-serif' },
   },
   fontSizes: {
     xs: { value: "0.75rem" },
@@ -27,26 +24,35 @@ export const tokens = defineTokens({
     12: { value: "3rem" },
   },
   radii: {
-    sm: { value: "0.375rem" },
-    md: { value: "0.625rem" },
-    lg: { value: "0.875rem" },
+    sm: { value: "12px" },
+    md: { value: "16px" },
+    lg: { value: "20px" },
+    panel: { value: "26px" },
+    frame: { value: "34px" },
+    pill: { value: "999px" },
+  },
+  shadows: {
+    panel: { value: "0 24px 60px #00000038" },
+    tile: { value: "0 10px 24px #00000024" },
   },
 });
 export const semanticTokens = defineSemanticTokens({
   colors: {
-    canvas: { value: { base: "#f7f9fc", _dark: "#10141b" } },
-    surface: { value: { base: "#ffffff", _dark: "#171e28" } },
-    subtle: { value: { base: "#eef2f7", _dark: "#202936" } },
-    hover: { value: { base: "#e5ebf2", _dark: "#283443" } },
-    text: { value: { base: "#1b2735", _dark: "#edf2f7" } },
-    muted: { value: { base: "#596577", _dark: "#adb8c5" } },
-    border: { value: { base: "#cdd6e1", _dark: "#364357" } },
-    accent: { value: { base: "#00796e", _dark: "#7ce2ce" } },
-    onAccent: { value: { base: "#ffffff", _dark: "#082822" } },
-    accentSubtle: { value: { base: "#e1f4ef", _dark: "#173b36" } },
-    warning: { value: { base: "#85581a", _dark: "#f7cf82" } },
-    warningSurface: { value: { base: "#fff7e6", _dark: "#292014" } },
-    danger: { value: { base: "#b32e39", _dark: "#ffacb4" } },
-    dangerSurface: { value: { base: "#fff0f2", _dark: "#34171f" } },
+    canvas: { value: { base: "#deded5", _dark: "#6e6e6a" } },
+    surface: { value: { base: "#f8f8f2", _dark: "#191918" } },
+    inset: { value: { base: "#f0f0e9", _dark: "#141413" } },
+    subtle: { value: { base: "#e7e9e0", _dark: "#232321" } },
+    hover: { value: { base: "#dbe2d6", _dark: "#2c2c2a" } },
+    text: { value: { base: "#20221e", _dark: "#f4f4f1" } },
+    muted: { value: { base: "#5b6055", _dark: "#a3a39e" } },
+    border: { value: { base: "#bfc5b7", _dark: "#ffffff18" } },
+    accent: { value: { base: "#b7d3bf", _dark: "#b7d3bf" } },
+    accentText: { value: { base: "#35583f", _dark: "#b7d3bf" } },
+    onAccent: { value: { base: "#22332a", _dark: "#22332a" } },
+    accentSubtle: { value: { base: "#dcebdd", _dark: "#2b342d" } },
+    warning: { value: { base: "#80551b", _dark: "#edc78d" } },
+    warningSurface: { value: { base: "#f3e7cd", _dark: "#3a3022" } },
+    danger: { value: { base: "#9e3942", _dark: "#edacaf" } },
+    dangerSurface: { value: { base: "#f5e0df", _dark: "#3b2627" } },
   },
 });

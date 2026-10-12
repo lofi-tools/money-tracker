@@ -30,7 +30,7 @@ import "@money-tracker/design-system/styles.css";
 import fixture from "../../../docs/spec/fixtures/current-portfolio.json";
 import "./showcase.css";
 
-function App() {
+export function PortfolioShowcase() {
   const [theme, setTheme] = createSignal<ThemeMode>("system");
   const [privacy, setPrivacy] = createSignal<Privacy["mode"]>("normal");
   const [scale, setScale] = createSignal("0.1");
@@ -658,4 +658,3 @@ function App() {
     </ThemeRoot>
   );
 }
-render(() => <App />, document.getElementById("root")!);

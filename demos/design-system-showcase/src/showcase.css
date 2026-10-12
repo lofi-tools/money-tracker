@@ -22,9 +22,9 @@
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: 20px;
   background: var(--mt-colors-accent-subtle);
-  color: var(--mt-colors-accent);
+  color: var(--mt-colors-on-accent);
 }
 .brand-subtitle {
   display: block;
@@ -45,13 +45,13 @@
   gap: 5px;
   font-size: 11px;
   color: var(--mt-colors-muted);
-  font-weight: 600;
+  font-weight: 700;
 }
 .toolbar select {
   color: var(--mt-colors-text);
   border: 1px solid var(--mt-colors-border);
   background: var(--mt-colors-surface);
-  border-radius: 6px;
+  border-radius: 26px;
   padding: 7px 26px 7px 9px;
   font-size: 12px;
 }
@@ -85,7 +85,7 @@
   padding: 20px 16px;
   background: var(--mt-colors-surface);
   border: 1px solid var(--mt-colors-border);
-  border-radius: 12px;
+  border-radius: 26px;
   align-self: start;
   position: sticky;
   top: 24px;
@@ -95,7 +95,7 @@
 .eyebrow {
   font-size: 10px;
   letter-spacing: 0.1em;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--mt-colors-muted);
 }
 .nav-heading {
@@ -134,18 +134,18 @@
 h1 {
   font-size: 30px;
   line-height: 1.25;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.035em;
   margin: 8px 0;
 }
 h2 {
   font-size: 17px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.02em;
 }
 h3 {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
 }
 p {
   line-height: 1.6;
@@ -163,7 +163,7 @@ p {
   padding: 30px;
   background: var(--mt-colors-surface);
   border: 1px solid var(--mt-colors-border);
-  border-radius: 12px;
+  border-radius: 26px;
 }
 .summary-card > div + div {
   border-left: 1px solid var(--mt-colors-border);
@@ -198,7 +198,7 @@ p {
   padding: 24px;
   background: var(--mt-colors-surface);
   border: 1px solid var(--mt-colors-border);
-  border-radius: 10px;
+  border-radius: 20px;
 }
 .specimen-actions {
   display: flex;
@@ -305,5 +305,57 @@ p {
   }
   .page-footer {
     flex-direction: column;
+  }
+}
+
+.showcase-root {
+  padding: 28px;
+}
+.topbar {
+  max-width: 1320px;
+  margin: 0 auto;
+  border-radius: 34px 34px 0 0;
+  border: 1px solid var(--mt-colors-border);
+  box-shadow: 0 24px 60px #00000024;
+}
+.showcase-shell {
+  background: var(--mt-colors-surface);
+  padding: 24px 28px 32px;
+  border-radius: 0 0 34px 34px;
+  border: 1px solid var(--mt-colors-border);
+  gap: 24px;
+}
+.sidebar {
+  background: var(--mt-colors-inset);
+  border-radius: 26px;
+}
+.summary-card {
+  background: var(--mt-colors-inset);
+  border-radius: 26px;
+}
+.specimen-card {
+  border-radius: 26px;
+  background: var(--mt-colors-inset);
+}
+.synthetic-note {
+  background: var(--mt-colors-surface);
+  border-left: 1px solid var(--mt-colors-border);
+  border-right: 1px solid var(--mt-colors-border);
+}
+h1 {
+  font-weight: 800;
+}
+.brand {
+  font-weight: 800;
+}
+@media (max-width: 760px) {
+  .showcase-root {
+    padding: 12px;
+  }
+  .topbar {
+    border-radius: 26px 26px 0 0;
+  }
+  .showcase-shell {
+    border-radius: 0 0 26px 26px;
   }
 }

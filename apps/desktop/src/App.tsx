@@ -97,7 +97,7 @@ function Warnings(props: { issues: Issue[] }) {
 export function App() {
   const [settings, setSettings] = createSignal<Settings>(defaultSettings);
   return (
-    <ThemeRoot mode={settings().theme}>
+    <ThemeRoot mode={settings().theme} class="desktop-stage">
       <PrivacyProvider
         value={{
           mode: settings().privacy_mode,

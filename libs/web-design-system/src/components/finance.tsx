@@ -138,7 +138,7 @@ export function SummaryValue(props: {
 }) {
   return (
     <div class={css({ display: "grid", gap: "2" })}>
-      <span class={css({ fontSize: "sm", color: "muted", fontWeight: "500" })}>
+      <span class={css({ fontSize: "sm", color: "muted", fontWeight: "600" })}>
         {props.label}
       </span>
       <div
@@ -146,12 +146,12 @@ export function SummaryValue(props: {
           props.primary
             ? css({
                 fontSize: "display",
-                fontWeight: "600",
+                fontWeight: "800",
                 letterSpacing: "-0.04em",
               })
             : css({
                 fontSize: "xl",
-                fontWeight: "600",
+                fontWeight: "800",
                 letterSpacing: "-0.025em",
               })
         }

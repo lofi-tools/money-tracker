@@ -10,7 +10,16 @@ export function Icon(props: {
     | "undo"
     | "wallet"
     | "eye"
-    | "check";
+    | "check"
+    | "leaf"
+    | "clock"
+    | "home"
+    | "user"
+    | "sliders"
+    | "more"
+    | "up"
+    | "down"
+    | "card";
   size?: number;
 }): JSX.Element {
   const paths = {
@@ -23,6 +32,16 @@ export function Icon(props: {
     undo: "M4 10h10a6 6 0 0 1 0 12 M4 10l6-6 M4 10l6 6",
     wallet: "M3 7h18v13H3V7z M3 7V4h14v3 M16 12h5v4h-5v-4z",
     eye: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0",
+    leaf: "M6 21c0-9 5-14 14-15-1 9-6 14-14 15z M6 21c4-6 8-10 12-13",
+    clock: "M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0 M12 8v4l3 2",
+    home: "M4 11l8-7 8 7 M6 10v10h12V10",
+    user: "M15.5 8a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0 M5 20a7 7 0 0 1 14 0",
+    sliders:
+      "M4 7h3 M11 7h9 M4 17h9 M17 17h3 M11 7a2 2 0 1 1-4 0 2 2 0 0 1 4 0 M17 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0",
+    more: "M12 5h.01 M12 12h.01 M12 19h.01",
+    up: "M7 17 17 7 M10 7h7v7",
+    down: "m7 7 10 10 M17 10v7h-7",
+    card: "M3 6h18v13H3z M3 10h18 M6 15h3",
     check: "m5 12 4 4L19 6",
   };
   return (

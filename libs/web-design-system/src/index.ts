@@ -36,3 +36,14 @@ export {
   defaultScale,
 } from "./formatting/index";
 export type { Rational, ExactValue, Privacy } from "./formatting/index";
+export {
+  Surface,
+  IconTile,
+  ScreenHeader,
+  ChipGroup,
+  StatRow,
+  ListRow,
+  TimePill,
+  TrendChart,
+  PaginationDots,
+} from "./components/surfaces";

@@ -8,14 +8,14 @@ test("public consumer loads styled variants, grouping keys and independent table
   page.on("request", (request) => requests.push(request.url()));
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto("/");
+  await page.goto("/portfolio");
   await expect(
     page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Synthetic data", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Primary action", exact: true }),
-  ).toHaveCSS("border-radius", "6px");
+  ).toHaveCSS("border-radius", "999px");
   const tab = page.getByRole("tab", { name: "By asset", exact: true });
   await tab.focus();
   await page.keyboard.press("ArrowRight");
@@ -51,6 +51,9 @@ test("public consumer loads styled variants, grouping keys and independent table
   await expect(
     page.getByRole("button", { name: "Collapse Fixed-term earn", exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Close details", exact: true }),
+  ).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(term).toBeFocused();
@@ -77,7 +80,7 @@ test("public consumer loads styled variants, grouping keys and independent table
 test("inline validation, commit, cancel, pin and Undo are keyboard accessible", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/portfolio");
   await page
     .getByRole("button", { name: "Edit Demo subscription APY", exact: true })
     .click();
@@ -136,7 +139,7 @@ test("inline validation, commit, cancel, pin and Undo are keyboard accessible", 
 test("hidden/scaled modes cover visible text, attributes and details without masking percentages", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/portfolio");
   await page.getByRole("button", { name: /Ethereum/ }).click();
   await page
     .getByRole("button", { name: "Expand Fixed-term earn", exact: true })
@@ -177,7 +180,7 @@ for (const theme of ["light", "dark"] as const) {
     page,
   }) => {
     await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
-    await page.goto("/");
+    await page.goto("/portfolio");
     await expect(page.locator("[data-theme]")).toHaveAttribute(
       "data-theme",
       theme,
@@ -237,7 +240,7 @@ test("narrow windows keep controls usable and table overflow contained", async (
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await page.goto("/portfolio");
   await page.getByRole("button", { name: /Ethereum/ }).click();
   expect(
     await page.evaluate(

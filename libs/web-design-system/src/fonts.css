@@ -1,0 +1,2 @@
+/* Bundled locally: desktop/offline consumers never depend on a font CDN. */
+@import "@fontsource-variable/manrope";

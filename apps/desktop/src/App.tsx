@@ -624,11 +624,18 @@ function Body(props: {
           <div class="workspace">
             <nav class="sidebar" aria-label="Portfolio navigation">
               <div class="sidebar-controls">
-                <NavigationEntry
-                  name="Overview"
-                  selected={!options() && selection().kind === "overview"}
-                  onSelect={() => select({ kind: "overview" })}
-                />
+                <div class="overview-card">
+                  <NavigationEntry
+                    name="Overview"
+                    selected={!options() && selection().kind === "overview"}
+                    onSelect={() => select({ kind: "overview" })}
+                    value={
+                      <span class="overview-total">
+                        {money(data()!.overview.current_value)}
+                      </span>
+                    }
+                  />
+                </div>
                 <GroupingTabs
                   value={group()}
                   onChange={(value) => {

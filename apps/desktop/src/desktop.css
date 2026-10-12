@@ -48,7 +48,8 @@ select {
   overflow: hidden;
 }
 .sidebar {
-  padding: 17px 11px;
+  --sidebar-inline-space: 11px;
+  padding: 17px var(--sidebar-inline-space);
   background: var(--mt-colors-inset);
   border-right: 1px solid var(--mt-colors-border);
   display: flex;
@@ -56,7 +57,7 @@ select {
   gap: 11px;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 .main-pane {
   padding: 25px;
@@ -217,7 +218,8 @@ select {
     padding: 0 11px;
   }
   .sidebar {
-    padding: 14px 7px;
+    --sidebar-inline-space: 7px;
+    padding: 14px var(--sidebar-inline-space);
   }
 }
 
@@ -426,4 +428,34 @@ body {
   .wide-only {
     display: inline-flex;
   }
+}
+
+.overview-card {
+  position: relative;
+  z-index: 2;
+  margin-right: calc(-12px - var(--sidebar-inline-space));
+  border: 1px solid var(--mt-colors-border);
+  border-radius: 8px;
+  background: var(--mt-colors-subtle);
+  box-shadow: 0 6px 16px #00000030;
+}
+.overview-card > div > button {
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 6px 9px;
+  padding: 12px;
+}
+.overview-card > div > button > span:first-child {
+  grid-row: 1 / span 2;
+}
+.overview-card > div > button > span:last-child {
+  grid-column: 2;
+  text-align: left;
+}
+.overview-total {
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.overview-total > span {
+  flex-wrap: wrap;
 }

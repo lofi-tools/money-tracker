@@ -26,6 +26,17 @@ test("review navigation works after reload, fills the viewport and keeps history
   });
   await expect(frame).toHaveCSS("border-radius", "0px");
   const nav = page.getByRole("navigation", { name: "Portfolio navigation" });
+  const card = page.locator(".overview-card");
+  await expect(card).toContainText("$901");
+  const cardBounds = await card.boundingBox();
+  const navBounds = await nav.boundingBox();
+  expect(cardBounds!.x + cardBounds!.width).toBeGreaterThan(
+    navBounds!.x + navBounds!.width,
+  );
+  expect(cardBounds!.x + cardBounds!.width).toBeLessThan(
+    navBounds!.x + navBounds!.width + 20,
+  );
+
   await expect(nav.getByRole("button", { name: "Change history" })).toHaveCount(
     0,
   );
@@ -53,7 +64,7 @@ test("review navigation works after reload, fills the viewport and keeps history
     await expect(
       page.getByText("Change history unavailable", { exact: true }),
     ).toHaveCount(1);
-    await nav.getByRole("button", { name: "OV Overview" }).click();
+    await nav.getByRole("button", { name: /^OV Overview/ }).click();
     await expect(
       page
         .getByRole("main")

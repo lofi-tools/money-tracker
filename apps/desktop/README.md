@@ -31,11 +31,16 @@ cargo run --locked -p money-tracker-desktop --example startup_smoke -- /tmp/mt-s
 UPDATE_DESKTOP_FIXTURE="$PWD/.cache/desktop-fixture.json" cargo test --locked -p money-tracker-desktop --test portfolio real_wire_fixture
 pnpm build
 PLAYWRIGHT_BROWSERS_PATH=.cache/playwright pnpm test:desktop
+# Launch the built app on temporary databases; needs `pnpm build:desktop` first and
+# opens real windows, so it never touches your portfolio:
+pnpm test:desktop-native
 # Opt-in offline check, only on temporary copies of private cached DBs:
 cargo test --locked -p money-tracker-desktop --test portfolio cached_imported_portfolios_are_browsable -- --ignored
 ```
 
-Linux, macOS and Windows run the shared foundation checks, these desktop tests plus the startup smoke, and a `--no-bundle` Tauri build in CI; see [CI and native build lanes](../../docs/findings/ci-lanes.md) for what is configured and what still needs a desktop session.
+`pnpm test:desktop-native` starts the release binary from `pnpm build:desktop` three times in throwaway directories: a fresh location must show the missing-database chooser and create an empty database when asked, the same location must reopen it, and a corrupt file must fail (exit 1) instead of becoming an empty portfolio. `MONEY_TRACKER_DESKTOP_BIN` overrides the binary. It needs a display; CI runs it under `xvfb` on Linux.
+
+Linux, macOS and Windows run the shared foundation checks, these desktop tests plus the startup smoke, a `--no-bundle` Tauri build and the native launch acceptance in CI; see [CI and native build lanes](../../docs/findings/ci-lanes.md) for what is configured and what still needs a human-observed desktop session.
 
 `pnpm test:desktop` builds assets, then regenerates the Rust fixture before browser checks; it requires the native Tauri prerequisites. The fixture-generation helper works across Node-supported platforms. Browser tests mock only Tauri IPC and consume serialized Rust Session results. Native lifecycle/build checks are separate; a browser test does not prove native picker or OS shutdown behavior. Snapshot IDs reject stale view requests; every allocation/detail retains the same cutoff and exact Rust calculation as its navigation summary. Close and Quit await worker shutdown and exit, with no tray/background process.
 

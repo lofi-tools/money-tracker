@@ -2,7 +2,7 @@
 
 Implemented contracts live in [types.rs](../../libs/lib-core/src/types.rs), [traits.rs](../../libs/lib-core/src/traits.rs), and [history.rs](../../libs/lib-core/src/history.rs). Provider clients and the CLI depend on `lib-core`; core does not depend on those clients or the binary. Provider conversions belong in adapters. Existing legacy migration recognition of Nexo credit IDs is described in [persistence](persistence.md).
 
-The [proposed evolution](data-model-proposal.md) maps confirmed features to future entities, exact-amount handling, event evidence, reconciliation, and phased migrations. Its A1 portfolio/account and exact-quantity foundation is now implemented; [stage-3 UI metadata](ui-metadata.md) now persists hierarchy/customization, product/subscription and dated evidence/action foundations. Event provenance, reviewed economic matching and later calculations remain proposed.
+The [proposed evolution](data-model-proposal.md) maps confirmed features to future entities, exact-amount handling, event evidence, reconciliation, and phased migrations. Its A1 portfolio/account and exact-quantity foundation is now implemented; [stage-3 UI metadata](ui-metadata.md) now persists hierarchy/customization, product/subscription and dated evidence/action foundations. [Stage-4 portfolio queries](portfolio-queries.md) now calculate exact current values/annual earnings and unique-position allocation rollups. Event provenance, reviewed economic matching and historical/forecast calculations remain proposed.
 
 ## Identity and metadata
 

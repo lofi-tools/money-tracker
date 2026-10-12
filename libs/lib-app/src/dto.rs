@@ -39,6 +39,9 @@ pub enum EntityScope {
     Account { account_id: AccountId },
     Position { position_id: PositionId },
     Asset { asset_id: AssetId },
+    Provider { provider_id: ProviderId },
+    Product { product_id: lib_core::ProductId },
+    Subscription { subscription_id: String },
 }
 
 /// Evidence distinguishes computed ledger quantities from independent observations.
@@ -107,7 +110,7 @@ pub enum RateBasis {
 }
 
 /// Annual fraction: 5% is "0.05". Compounding conventions remain explicit.
-/// These are transport contracts, not persisted rates or an earnings engine.
+/// Legacy transport vocabulary; portfolio projections expose selected persisted evidence.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RateDto {
     pub annual_fraction: ExactDecimal,

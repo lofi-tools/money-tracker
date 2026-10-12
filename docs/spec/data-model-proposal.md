@@ -1,6 +1,6 @@
 # Proposed data model evolution
 
-Status: **partially implemented: A1 portfolio/account identity, exact units/protected scales and the stage-3 minimum UI metadata/action slice; remaining phases proposed**. Reviewed against source on 11 October 2026. Delivery status belongs to [the master todo list](../todo/master-todo.md#1-first-data-model-review-and-minimum-supporting-changes). This document is the design deliverable for that review, not approval to implement every phase.
+Status: **partially implemented: A1 portfolio/account identity, exact units/protected scales and the stage-3 minimum UI metadata/action slice; the [stage-4 current query slice](portfolio-queries.md) is also implemented; remaining phases proposed**. Reviewed against source on 12 October 2026. Delivery status belongs to [the master todo list](../todo/master-todo.md#1-first-data-model-review-and-minimum-supporting-changes). This document is the design deliverable for that review, not approval to implement every phase.
 
 ## Recommendation
 
@@ -12,7 +12,7 @@ Implement this incrementally. [Kraken's Spot foundation](kraken.md) now uses the
 
 The first implementation adds portfolio/account storage and scoped import/query APIs, arbitrary-precision `Units` stored as signed integer text, protected scale registrations, exact Nexo/Binance decimal parsing and issuer-consistent `ExternalAssetId` equality/hash. Migrations `004_exact_units` and `005_portfolio_accounts` preserve legacy IDs, signed effects and completed source hashes and rerun safely at every open. See [current data model](data-model.md) and [persistence](persistence.md) for the authoritative implemented contract and validation.
 
-This is a core/API foundation, not a complete implementation of A1's proposed provider/connection/asset registry. Existing adapters keep legacy entry points; the new account-scoped import API supports independent future account instances. [Stage-3 UI metadata](ui-metadata.md) now persists minimal products/subscriptions, dated rates/prices, verification primitives and local action state. Event/source revisions, reviewed economic matching, provider coverage population, scale-change migrations and calculation conventions remain outstanding. Legacy float-derived balances are not automatically corrected.
+This is a core/API foundation, not a complete implementation of A1's proposed provider/connection/asset registry. Existing adapters keep legacy entry points; the new account-scoped import API supports independent future account instances. [Stage-3 UI metadata](ui-metadata.md) now persists minimal products/subscriptions, dated rates/prices, verification primitives and local action state. Event/source revisions, reviewed economic matching, provider coverage population, scale-change migrations and broader historical/opportunity calculation conventions remain outstanding. [Stage 4](portfolio-queries.md) defines and implements exact current held-rate calculations; it deliberately leaves historical reward adjustment, fee/tier/cap evaluation and provider population unavailable. Legacy float-derived balances are not automatically corrected.
 
 ## Baseline source and gaps before the first implementation
 

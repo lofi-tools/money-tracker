@@ -1,0 +1,167 @@
+{
+  "asset_quantity": {
+    "asset_id": "ETH",
+    "scale": 18,
+    "units": "100000000000000000000"
+  },
+  "calculation_basis": "current_rate_one_year; constant_principal_and_quotes; gross_yield_minus_evidenced_borrowing_costs; additional_fees_and_switching_not_estimated; historical_reward_adjustment_unavailable",
+  "context": {
+    "cutoff": "2026-01-20T00:00:00Z",
+    "portfolio_id": "local:default"
+  },
+  "contract_version": 1,
+  "overview": {
+    "annual_borrowing_costs": {
+      "evidence": [],
+      "status": "known",
+      "value": {
+        "amount": {
+          "denominator": "1",
+          "numerator": "0"
+        },
+        "asset_id": "USD"
+      }
+    },
+    "calculation_basis": "current_rate_one_year; constant_principal_and_quotes; net_of_evidenced_borrowing_only; additional_fees_and_historical_reward_adjustment_not_estimated",
+    "current_apy": {
+      "evidence": [
+        {
+          "cutoff": "2026-01-20T00:00:00Z",
+          "kind": "ledger_replay"
+        },
+        {
+          "effective_from": "2026-01-01T00:00:00Z",
+          "kind": "provider",
+          "observed_at": "2026-01-02T00:00:00Z",
+          "reference": "source:2",
+          "source": "fixture API"
+        }
+      ],
+      "status": "known",
+      "value": {
+        "denominator": "25",
+        "numerator": "1"
+      }
+    },
+    "current_value": {
+      "evidence": [
+        {
+          "cutoff": "2026-01-20T00:00:00Z",
+          "kind": "ledger_replay"
+        },
+        {
+          "effective_from": "2026-01-01T00:00:00Z",
+          "kind": "provider",
+          "observed_at": "2026-01-02T00:00:00Z",
+          "reference": "source:2",
+          "source": "fixture API"
+        }
+      ],
+      "status": "known",
+      "value": {
+        "amount": {
+          "denominator": "1",
+          "numerator": "1000"
+        },
+        "asset_id": "USD"
+      }
+    },
+    "gross_annual_earnings": {
+      "evidence": [
+        {
+          "cutoff": "2026-01-20T00:00:00Z",
+          "kind": "ledger_replay"
+        },
+        {
+          "effective_from": "2026-01-01T00:00:00Z",
+          "kind": "provider",
+          "observed_at": "2026-01-02T00:00:00Z",
+          "reference": "source:2",
+          "source": "fixture API"
+        }
+      ],
+      "status": "known",
+      "value": {
+        "amount": {
+          "denominator": "1",
+          "numerator": "40"
+        },
+        "asset_id": "USD"
+      }
+    },
+    "gross_assets": {
+      "evidence": [
+        {
+          "cutoff": "2026-01-20T00:00:00Z",
+          "kind": "ledger_replay"
+        },
+        {
+          "effective_from": "2026-01-01T00:00:00Z",
+          "kind": "provider",
+          "observed_at": "2026-01-02T00:00:00Z",
+          "reference": "source:2",
+          "source": "fixture API"
+        }
+      ],
+      "status": "known",
+      "value": {
+        "amount": {
+          "denominator": "1",
+          "numerator": "1000"
+        },
+        "asset_id": "USD"
+      }
+    },
+    "historical_effective_apy": {
+      "issues": [
+        {
+          "code": "historical_reward_adjustment_unavailable",
+          "message": "Historical reward retention/disposal and cash-flow analysis is not available",
+          "scope": {
+            "kind": "portfolio",
+            "portfolio_id": "local:default"
+          },
+          "withheld": [
+            "historical_earnings"
+          ]
+        }
+      ],
+      "status": "unknown"
+    },
+    "liabilities": {
+      "evidence": [],
+      "status": "known",
+      "value": {
+        "amount": {
+          "denominator": "1",
+          "numerator": "0"
+        },
+        "asset_id": "USD"
+      }
+    },
+    "net_annual_earnings": {
+      "evidence": [
+        {
+          "cutoff": "2026-01-20T00:00:00Z",
+          "kind": "ledger_replay"
+        },
+        {
+          "effective_from": "2026-01-01T00:00:00Z",
+          "kind": "provider",
+          "observed_at": "2026-01-02T00:00:00Z",
+          "reference": "source:2",
+          "source": "fixture API"
+        }
+      ],
+      "status": "known",
+      "value": {
+        "amount": {
+          "denominator": "1",
+          "numerator": "40"
+        },
+        "asset_id": "USD"
+      }
+    }
+  },
+  "reporting_asset": "USD"
+}

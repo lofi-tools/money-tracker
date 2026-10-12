@@ -137,6 +137,24 @@ impl DatabaseWorker {
         })
         .await
     }
+    /// Snapshot queries use the worker's selected portfolio and saved settings.
+    pub async fn portfolio_projection(
+        &self,
+        cutoff: DateTime<Utc>,
+    ) -> Result<crate::portfolio::PortfolioProjection> {
+        let portfolio_id = self.portfolio_id.clone();
+        self.request(move |app, resolved| {
+            app.portfolio_projection(crate::portfolio::PortfolioRequest {
+                context: ReadContext {
+                    portfolio_id,
+                    cutoff,
+                },
+                reporting_asset: resolved.config.settings.reporting_currency.clone(),
+                dust_threshold: resolved.config.settings.dust_threshold.clone(),
+            })
+        })
+        .await
+    }
     pub async fn ui_metadata(&self) -> Result<crate::dto::UiMetadataDto> {
         let portfolio = self.portfolio_id.clone();
         self.request(move |app, _| app.ui_metadata(&portfolio))

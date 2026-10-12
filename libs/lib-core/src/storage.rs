@@ -31,6 +31,14 @@ impl PriceRange {
 }
 
 impl Store {
+    /// A consistent read transaction; callers must not write or nest transactions.
+    pub fn read_snapshot<T>(&self, read: impl FnOnce() -> anyhow::Result<T>) -> anyhow::Result<T> {
+        let transaction = self.connection.unchecked_transaction()?;
+        let result = read()?;
+        transaction.commit()?;
+        Ok(result)
+    }
+
     pub fn open(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         Self::from_connection(Connection::open(path)?)
     }

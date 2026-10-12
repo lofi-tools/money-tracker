@@ -13,6 +13,7 @@ Documentation is organized by purpose. Specifications describe implemented contr
 - [Proposed data model evolution and implementation phases](spec/data-model-proposal.md)
 - [Persistence and ordered startup migrations](spec/persistence.md)
 - [Persistent UI metadata and manual actions](spec/ui-metadata.md)
+- [Portfolio read models and exact current earnings](spec/portfolio-queries.md)
 - [Database startup and local settings](spec/database-startup.md)
 - [CLI configuration](spec/cli.md)
 - [Nexo sources, ledger mapping, balance sums and diagnostics](spec/nexo.md)

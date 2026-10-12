@@ -1,6 +1,6 @@
 # Shared Rust application services and exact DTOs
 
-Implemented first-UI stage 1 on 11 October 2026. Source: [application library](../../libs/lib-app/src/lib.rs), [service](../../libs/lib-app/src/service.rs), [JSON contracts](../../libs/lib-app/src/dto.rs). Full current-value/earnings projections, [stage-3 metadata/action migrations](ui-metadata.md) are implemented; full financial projections and the frontend remain later stages; [stage 2 startup/configuration](database-startup.md) is now implemented of the [implementation plan](../todo/first-ui-implementation-plan.md).
+Implemented stages 1–4 of the [first-UI plan](../todo/first-ui-implementation-plan.md). Stage 1 introduced the [application library](../../libs/lib-app/src/lib.rs), [service](../../libs/lib-app/src/service.rs) and [exact JSON contracts](../../libs/lib-app/src/dto.rs); [stage 2](database-startup.md) provides startup/configuration, [stage 3](ui-metadata.md) metadata/action storage, and [stage 4](portfolio-queries.md) snapshot current-value/earnings queries. Provider evidence acquisition, historical earnings and the frontend remain later work.
 
 ## Application boundary
 
@@ -39,7 +39,7 @@ All DTOs use Serde with explicit string tags. Stable domain IDs serialize as str
 
 Example quantity: `{"asset_id":"TOKEN","units":"123456789012345678901234567890000000000000000001","scale":18}` renders `123456789012345678901234567890.000000000000000001` exactly. A borrowing liability of `"-2500"` at scale 2 remains `-25.00`.
 
-Money/rate/figure/evidence types establish the shared transport vocabulary; stage 3 now supplies separate persisted rate/price and observation records using the shared core exact decimal. These DTOs do not calculate annual earnings or select independent current observations. Mutating DTOs/commands, generated TypeScript bindings and current UI read models follow their planned stages. Existing historical floating-point price rows are not relabelled as exact.
+Money/rate/figure/evidence types establish the shared transport vocabulary; stage 3 now supplies separate persisted rate/price and observation records using the shared core exact decimal. The original ledger query remains independent of these calculations. [Stage-4 read models](portfolio-queries.md) now calculate exact rational current values/rates and select dated independent observations; full host editing commands and generated TypeScript bindings remain later stages. Existing historical floating-point price rows are not relabelled as exact.
 
 ## Workspace and checks
 
@@ -53,4 +53,4 @@ Checked locally: 129 deterministic production-workspace tests passed (private/li
 
 ## Stage-3 metadata and mutations
 
-[UI metadata](ui-metadata.md) extends the scoped managed worker with `ui_metadata`, `manual_actions`, low-level `apply_manual_change` and `undo_manual_action`. Version-1 metadata retains original account labels/references and separately exposes source hierarchy, effective parents, local state, held subscriptions and revisions. Amounts/rates still serialize exactly; `ExactDecimal` is reexported from core at its previous DTO path. Host editing controls and value/earnings projections remain later stages.
+[UI metadata](ui-metadata.md) extends the scoped managed worker with `ui_metadata`, `manual_actions`, low-level `apply_manual_change` and `undo_manual_action`. Version-1 metadata retains original account labels/references and separately exposes source hierarchy, effective parents, local state, held subscriptions and revisions. Amounts/rates still serialize exactly; `ExactDecimal` is reexported from core at its previous DTO path. Host editing controls remain later stages; [current value/earnings projections](portfolio-queries.md) are implemented in stage 4.

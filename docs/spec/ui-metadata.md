@@ -1,6 +1,6 @@
 # Persistent UI metadata and manual actions
 
-Implemented first-UI stage 3 on 11 October 2026. Sources: [typed records and Store APIs](../../libs/lib-core/src/ui_metadata.rs), [exact decimals](../../libs/lib-core/src/decimal.rs), [migrations](../../libs/lib-core/src/migrations.rs), [metadata service](../../libs/lib-app/src/service.rs), and [managed worker](../../libs/lib-app/src/worker.rs). Current-value/earnings projections, provider rate acquisition, refresh execution and frontend controls remain later stages.
+Implemented first-UI stage 3 on 11 October 2026. Sources: [typed records and Store APIs](../../libs/lib-core/src/ui_metadata.rs), [exact decimals](../../libs/lib-core/src/decimal.rs), [migrations](../../libs/lib-core/src/migrations.rs), [metadata service](../../libs/lib-app/src/service.rs), and [managed worker](../../libs/lib-app/src/worker.rs). [Current-value/earnings projections](portfolio-queries.md) are implemented in stage 4; provider rate acquisition, refresh execution and frontend controls remain later stages.
 
 ## Storage and upgrades
 
@@ -26,7 +26,7 @@ Source updates never change local state. Parent validation rejects self-parentin
 
 `ProductTemplate` is a provider/source-identified description, separate from the legacy transient `Product.apy: f64`. `Subscription` is an account-owned instance with its own ID, base asset, source reference/label, optional opening/closing dates, Unknown/Flexible/Locked status, nullable maturity/renewal state and linked ledger positions. Provider/account/product/base-asset identities cannot silently change. Positions must belong to that account and cannot link to two subscriptions; unsupported aggregate imports remain unattributed. No balances are copied into subscriptions, so grouping cannot introduce another economic value.
 
-Closed records remain stored. Filtering zero/closed holdings and producing unique-position allocation rollups belong to stage 4. Receipt/underlying exposure relationships and DeFi valuation routes remain separate later work.
+Closed records remain stored. [Stage 4](portfolio-queries.md) filters zero balances and closed subscription metadata while retaining any nonzero residual holdings, and produces unique-position allocation rollups. Receipt/underlying exposure relationships and DeFi valuation routes remain separate later work.
 
 Provider/asset display setters preserve exact identity; an established chain/contract locator cannot be edited into a different asset. `AssetAlias` records issuer + namespace + external ID + candidate asset ID and evidence. Multiple candidates are explicitly ambiguous; missing candidates are unknown. No lookup remaps effects, rescales units or selects a candidate by ticker. The first evidence for an identical alias candidate is retained; raw provider snapshots retain later source observations. Full reviewed mapping revision/validity and economic equivalence remain future work.
 
@@ -42,7 +42,7 @@ Local override state stores dated manual rate/price periods with update times an
 
 `PriceEvidence` stores exact asset/quote, as-of time, observed/update evidence and quote value. Manual prices use the same dated/pin policy, scoped to one portfolio. Zero can represent an explicit loss valuation; negative prices are invalid. Historical `asset_prices` doubles remain unchanged and are not relabelled as exact or copied automatically.
 
-`override_requires_review` detects changed relevant evidence or finer held-subscription/product/account/provider-asset data, including partial detail. It retains the override and its pin; the future UI must prompt review rather than automatically invalidate it. Allocation precedence and avoiding overlapping aggregate/subscription earnings are stage 4/7 responsibilities.
+`override_requires_review` detects changed relevant evidence or finer held-subscription/product/account/provider-asset data, including partial detail. It retains the override and its pin; the future UI must prompt review rather than automatically invalidate it. [Stage 4](portfolio-queries.md) resolves allocation precedence and avoids overlapping aggregate/subscription earnings; review/editing controls remain stage 7.
 
 ## Tracking, verification and refresh state
 
@@ -52,7 +52,7 @@ Dust state is per portfolio/provider/asset: Auto, Dust or Significant. It never 
 
 `BalanceEvidence` records source/reference, account/optional position, exact asset/units/protected scale, Total/Available/Locked/Debt basis, cutoff, completeness and independence. It never inserts effects. `VerificationRecord` retains account/portfolio/cutoff, observation IDs, ledger/policy revisions, outcome, explicit history completeness and structured position/account issues with expected/actual units and withheld figure names. A verified record requires complete independent observations, matching scope/cutoff, exact ledger equality, nonoverlapping coverage and every nonzero tracked position covered. Available/locked evidence alone cannot verify total holdings. A current balance match never sets historical completeness automatically; callers must supply that separately from supported evidence.
 
-Accepted financial writes increment affected portfolio ledger revisions atomically, including replacement effects' former portfolio scopes. Duplicate completed imports do not increment them. Existing account reviews and new global spam mutations increment policy revisions. Reports retain their evidence but `verification_is_current` becomes false after relevant ledger/policy changes. Metadata revision is separately retained; this conservative invalidation applies at portfolio level, not just one position. Existing provider reports are not automatically converted into these generic records; integrating their coverage/issues into the UI projection remains stage 4/8 work.
+Accepted financial writes increment affected portfolio ledger revisions atomically, including replacement effects' former portfolio scopes. Duplicate completed imports do not increment them. Existing account reviews and new global spam mutations increment policy revisions. Reports retain their evidence but `verification_is_current` becomes false after relevant ledger/policy changes. Metadata revision is separately retained; this conservative invalidation applies at portfolio level, not just one position. Existing provider reports are not automatically converted into these generic records; stage 4 consumes generic coverage/issues, while adapter population remains stage 8/provider work.
 
 Per-source `RefreshState` persists next due, last attempt and last successful update separately. Failed attempts may advance last attempt without advancing success. Scheduling/coalescing/network refresh remain stage 8. Stage-2 settings stay in their existing JSON file; there is no competing DB preference store.
 
@@ -62,7 +62,7 @@ Per-source `RefreshState` persists next due, last attempt and last successful up
 
 `undo_manual_action` applies a compensating action rather than deleting history. It rejects already-undone/other-portfolio actions, newer conflicting local state, invalid restored parents, or changed relevant rate/price source evidence. Validation and mutation are transactional. It never restores provider labels, snapshots, imports, source rates/prices or ledger effects. Source evidence conflicts require review; this stage does not provide a force-Undo UI. The action log and local state survive restarts, including explicit restoration of a missing override.
 
-`Application::ui_metadata` and `DatabaseWorker::ui_metadata` return scoped version-1 metadata with effective parents, source names/references, catalogue records, held subscriptions, revisions and local state. The worker exposes the low-level typed manual change/action-log/Undo primitives using its selected portfolio. Frontend editing commands, controls, warning clearing, display-name selection, Undo affordances and query invalidation remain stage 7; current-value/earnings calculations remain stage 4.
+`Application::ui_metadata` and `DatabaseWorker::ui_metadata` return scoped version-1 metadata with effective parents, source names/references, catalogue records, held subscriptions, revisions and local state. The worker exposes the low-level typed manual change/action-log/Undo primitives using its selected portfolio. Frontend editing commands, controls, warning clearing, display-name selection, Undo affordances and query invalidation remain stage 7; [current-value/earnings calculations](portfolio-queries.md) are now implemented in stage 4.
 
 ## Validation
 

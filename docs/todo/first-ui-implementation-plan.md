@@ -1,6 +1,6 @@
 # First UI — ordered implementation plan
 
-Status: **stages 1–3 implemented; stages 4–9 remain proposed and deferred**. The user authorized stages 1, 2 and 3 separately; inclusion here does not authorize the remaining stages. Grounded in repository source on 11 October 2026. The [master todo](master-todo.md#0-now-first-usable-desktop-app--ui) remains the canonical completion checklist. This document sequences its existing tasks and defines dependencies and completion evidence; it is not a second backlog.
+Status: **stages 1–4 implemented; stages 5–9 remain proposed and deferred**. The user authorized stages 1, 2, 3 and 4 separately; inclusion here does not authorize the remaining stages. Grounded in repository source on 12 October 2026. The [master todo](master-todo.md#0-now-first-usable-desktop-app--ui) remains the canonical completion checklist. This document sequences its existing tasks and defines dependencies and completion evidence; it is not a second backlog.
 
 The master todo covers the agreed feature scope. What it lacked was an explicit implementation order, a minimum schema/query slice, and intermediate working milestones. Follow the [desktop contract and acceptance scenarios](../spec/desktop-app.md), [design-system package plan](../spec/web-design-system.md), and [data-model proposal](../spec/data-model-proposal.md).
 
@@ -37,7 +37,7 @@ Completion evidence: documented service/DTO contracts, existing Rust checks pres
 
 Canonical tasks: master todo section 0 database/configuration/startup entries.
 
-Implemented: [shared configuration, database startup and settings contract](../spec/database-startup.md). JSON path/preferences loading, legacy-location detection, explicit copy/new actions, source-preserving validated installation, portfolio selection and a dedicated serialized DB worker are delivered. CLI configuration uses the shared resolver; the future Tauri screens remain stage 6, and refresh execution/scheduling remain stage 8. Settings live in the local config file; DB-backed action/scheduling state remains later work. Validation passed: 138 deterministic workspace tests, an offline preservation check on temporary copies of all three cached Nexo/Binance DBs, formatting, metadata and CLI help. Native Windows runtime checks remain for the cross-platform lane.
+Implemented: [shared configuration, database startup and settings contract](../spec/database-startup.md). JSON path/preferences loading, legacy-location detection, explicit copy/new actions, source-preserving validated installation, portfolio selection and a dedicated serialized DB worker are delivered. CLI configuration uses the shared resolver; the future Tauri screens remain stage 6, and refresh execution/scheduling remain stage 8. Settings live in the local config file; stage 3 now persists DB-backed action/scheduling state, while scheduler execution remains stage 8. Validation passed: 138 deterministic workspace tests, an offline preservation check on temporary copies of all three cached Nexo/Binance DBs, formatting, metadata and CLI help. Native Windows runtime checks remain for the cross-platform lane.
 
 Implement shared path/config resolution: Unix `~/.data/money-tracker/portfolio.duckdb`; desktop `APP_DATA_DIR` → config `data_dir` → default, while retaining explicit CLI flags as its highest priority. Specify config format/location and a native Windows default. Detect and explain the previous location; opening or copying an existing DB is an explicit choice, never a silent empty replacement.
 
@@ -49,7 +49,7 @@ Completion evidence: path precedence tests, temporary-file copy/new/error scenar
 
 ## 3. Persist the minimum UI metadata and action model
 
-Implemented: [minimum UI metadata and action contract](../spec/ui-metadata.md), migrations 007–009, conservative bootstrap and immutable evidence/typed local-state APIs. The managed worker exposes scoped metadata and atomic action/Undo primitives. Existing providers retain financial identities/data; the EVM snapshot supplies evidenced display locators/tickers. Settings remain in the stage-2 JSON file; refresh scheduling state is now persisted separately in DB. Full financial projections, provider rate/verification population and editing controls remain later stages. Validation passed: 149 deterministic workspace tests, an offline preservation check on temporary copies of all three cached Nexo/Binance databases, formatting, locked metadata and CLI help.
+Implemented: [minimum UI metadata and action contract](../spec/ui-metadata.md), migrations 007–009, conservative bootstrap and immutable evidence/typed local-state APIs. The managed worker exposes scoped metadata and atomic action/Undo primitives. Existing providers retain financial identities/data; the EVM snapshot supplies evidenced display locators/tickers. Settings remain in the stage-2 JSON file; refresh scheduling state is now persisted separately in DB. Current financial projections are delivered in stage 4; provider rate/verification population and editing controls remain later stages. Validation passed: 149 deterministic workspace tests, an offline preservation check on temporary copies of all three cached Nexo/Binance databases, formatting, locked metadata and CLI help.
 
 Canonical tasks: master todo sections 0 and 1; detailed entity rules in the data-model proposal. Append small ordered migrations in [migrations.rs](../../libs/lib-core/src/migrations.rs), rerun each at every open and keep changes transactional. The table below describes logical responsibilities; the linked implemented contract lists the actual tables and current boundaries.
 
@@ -72,11 +72,13 @@ Completion evidence: rerun/no-op, rollback/retry and DB-upgrade cases; counts an
 
 ## 4. Build portfolio read models and current earnings queries
 
+Implemented: [snapshot portfolio queries and calculation contract](../spec/portfolio-queries.md), exact BigInt rational money/annual fractions, scoped overview/navigation/allocation/details/issues, unique-position rollups, dust and selected metadata, independent quantity/verification selection, honest partial/unknown figures and gross-assets APY. The worker binds saved settings and selected portfolio; a synthetic wire fixture supports frontend work. Provider population, historical reward adjustment, tier/cap/qualification/fee evaluation and frontend controls remain deferred. There is no float-price upgrade or projection cache. Validation passed across 162 deterministic workspace tests, the offline three-database preservation check, formatting, locked metadata, CLI help and documentation links.
+
 Canonical tasks: master todo sections 0 and 1, with the minimum current-earnings slice of section 8.
 
 Provide one consistent projection per requested portfolio/cutoff/revision, using unique economic positions as the base. Resolve ledger-derived balances and usable independent observations explicitly; retain each source's timestamp and verification status. Display trusted current observations with warnings when history mismatches, without manufacturing balancing movements or calling mixed timestamps a common verified cutoff.
 
-Proposed application queries:
+Implemented application queries (the original proposed responsibilities retained below):
 
 | Query | Output |
 | --- | --- |
@@ -84,7 +86,7 @@ Proposed application queries:
 | `navigation` | Asset/provider summaries, names, value-weighted APY, Dust entry, ordering and scoped warnings; no heterogeneous quantity sum. |
 | `allocation_tree(selection)` | Account/product/subscription nodes, direct/root position references, quantities/values, rate and annual earnings/costs, metadata and child IDs. |
 | `details(target)` / `issues(scope)` | Local/original names, source references, applicable evidence/pin state, term metadata, exact quantities, affected warnings and withheld/partial figures. |
-| `settings` / `undo_state` | Persisted app preferences and available manual-action restoration information. |
+| `settings` / `manual_actions` (existing worker primitives) | Persisted app preferences and available manual-action restoration information. |
 
 Select current rates from resolved effective periods, not today's advertised offer or the newest timestamp in an unrelated historical period. Define APR-to-annual-earnings versus APY conventions, compounding, rate tiers/caps, costs and reward denomination with worked examples before calculation code. Current annual earnings answer what the current position earns per year, not a renewal/switching forecast. Preserve the agreed separate immediate rate and reward-relative historical adjustment: use transaction-derived evidence when available; show unavailable adjustment when it is insufficient. Completing the historical reward/lot engine is not required to show known immediate current earnings honestly.
 

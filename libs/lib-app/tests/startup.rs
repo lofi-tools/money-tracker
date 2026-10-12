@@ -429,3 +429,31 @@ async fn metadata_and_local_actions_use_the_selected_worker_portfolio_after_rest
     worker.close().await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn portfolio_projection_uses_worker_settings_and_selected_portfolio() -> Result<()> {
+    use lib_app::{dto::FigureDto, exact::ExactRatio};
+    let dir = TempDir::new()?;
+    let resolved = resolve(&dir)?;
+    let worker = ready(resolved, OpenAction::StartNew).await?;
+    let projection = worker
+        .portfolio_projection("2026-01-20T00:00:00Z".parse()?)
+        .await?;
+    assert_eq!(projection.request.reporting_asset, AssetId::str("USD"));
+    assert_eq!(projection.request.dust_threshold.as_str(), "1");
+    assert_eq!(projection.request.context.portfolio_id.0, DEFAULT_PORTFOLIO);
+    assert!(
+        matches!(projection.overview.current_value,FigureDto::Known{value,..} if value.amount==ExactRatio::zero())
+    );
+    let mut settings = worker.settings().await?;
+    settings.reporting_currency = AssetId::str("EUR");
+    settings.dust_threshold = "2".parse()?;
+    worker.save_settings(settings).await?;
+    let projection = worker
+        .portfolio_projection("2026-01-20T00:00:00Z".parse()?)
+        .await?;
+    assert_eq!(projection.request.reporting_asset, AssetId::str("EUR"));
+    assert_eq!(projection.request.dust_threshold.as_str(), "2");
+    worker.close().await?;
+    Ok(())
+}

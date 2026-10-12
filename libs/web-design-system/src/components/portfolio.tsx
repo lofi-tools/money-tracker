@@ -20,12 +20,17 @@ export function NavigationEntry(props: {
 }) {
   return (
     <div
+      data-selected={props.selected ? "true" : undefined}
       class={css({
         display: "flex",
         alignItems: "center",
         gap: "1",
         borderRadius: "md",
         _hover: { bg: "subtle" },
+        "&[data-selected=true], &[data-selected=true]:hover": {
+          bg: "accentSubtle",
+          color: "accentText",
+        },
       })}
     >
       <button
@@ -38,11 +43,13 @@ export function NavigationEntry(props: {
           alignItems: "center",
           gap: "3",
           p: "3",
-          width: "100%",
+          flex: "1",
+          minWidth: 0,
+          bg: "transparent",
           textAlign: "left",
           borderRadius: "md",
           cursor: "pointer",
-          _currentPage: { bg: "accentSubtle", color: "accentText" },
+          _currentPage: { color: "accentText" },
           _focusVisible: { outline: "2px solid", outlineColor: "accentText" },
         })}
       >

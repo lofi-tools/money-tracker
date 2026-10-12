@@ -28,11 +28,11 @@
         "tools": "tools"
       },
       "locked": {
-        "lastModified": 1791137443,
-        "narHash": "sha256-+g2Mb4lbdS/O/7IvVByhEcdp2hmMvNT0RRM0BDCVttU=",
+        "lastModified": 1791839952,
+        "narHash": "sha256-HGhOQU4oxZa+NYEzXwbRonwSre2eyIr3PyrxkKNtEvU=",
         "owner": "nmrshll",
         "repo": "my-nix",
-        "rev": "98d274cce251c24234397c6020c6d85d547082d4",
+        "rev": "1eea2fc62cc03fc1902218480349b11ef043c43d",
         "type": "github"
       },
       "original": {

@@ -36,7 +36,7 @@ Version 1 desktop wire contract, implemented in stage 7:
 - `Startup.edits` carries the account hierarchy, the local-state map (`LocalTarget`/`LocalRecord`) and the ordered action log with prior/resulting state, `undone`/`undo_of` flags and the resulting revision. Allocation trees attach `edits` to leaf holding nodes for inline rate/price editing; `details` returns per-holding edit slots (`rate`, `price`, `dust`, `spam`, subscription `name`) and account grouping controls.
 - Manual rates and prices are dated periods stored as exact decimal strings. Backdated corrections keep later periods, pins apply to the latest applicable manual period, and clearing a period falls back to source evidence. Blank rate entries record an explicit unknown. Future effective dates are rejected.
 - Dust classification (auto/dust/significant), asset-wide spam exclusion with a required reason and its restore, local account/subscription names, provider-scoped `Move to…` reparenting and group creation are persisted locally and never rewrite source labels or evidence.
-- A `Change history` navigation destination lists the action log newest-first with Undo links. Undo is offered only while the target's current revision still matches the action's resulting revision.
+- The `Change history` section inside Settings lists the action log newest-first with Undo links. Undo is offered only while the target's current revision still matches the action's resulting revision.
 
 ## Source boundaries
 
@@ -390,3 +390,11 @@ Scheduling is a pure decision over persisted per-source state, so tests inject a
 Acquisition never runs on the database thread: the host plans through the worker, contacts providers or reads local files on the async side, then commits exact evidence and the resulting schedule in one worker request. Provider text is not forwarded to the app or its storage; failures carry a code, a static explanation and nothing else. The app refreshes at the configured interval while it is running (daily by default) and closing the window or quitting ends all refresh work, with no tray or background process.
 
 Manual refresh is in Settings and refreshes every ready source. Settings also lists each source's last success, next refresh, stored failure and prerequisite. The frozen browser review cannot initiate a refresh, but its export can fetch into the validated temporary database copy with `--refresh`. Ordinary opening no longer triggers price acquisition on its own; the manual refresh belongs to options as agreed.
+
+## Viewport and review-navigation refinement
+
+The app fills the complete browser/native content viewport at every width: no outer canvas/backdrop, frame margin, rounded app container or frame shadow. Navigation and main content retain independent scrolling. Each portfolio/settings selection resets main content scrolling so its heading and first content are visible.
+
+Change history is now a section inside Settings, with the existing prior/resulting-state and Undo controls, rather than a separate navbar destination. An older frozen review snapshot without edit metadata shows “Change history unavailable”; it must not fail rendering or imply that no actions were ever recorded. Native manual-action persistence and Undo are unchanged.
+
+`pnpm test:review` exercises actual Vite review mode against synthetic Rust Session data, including a legacy snapshot, at 968×724. It checks selection/table rendering, Settings, return to Overview, navigation after reload, viewport bounds and absence of page errors. Production desktop tests continue to cover native IPC interactions and working Undo. The private annotation preview must also be checked after restarting a dev server or changing its dependencies; a visible stale tab alone is not evidence that current handlers work.

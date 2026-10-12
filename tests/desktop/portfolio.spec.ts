@@ -349,7 +349,7 @@ test("refresh reports each source and retains cached figures", async ({
   const status = page.getByRole("region", { name: "Refresh status" });
   await status.getByRole("button", { name: "Refresh now" }).click();
   // Failures name their source and carry redacted text, never provider detail.
-  const notice = page.getByRole("status");
+  const notice = page.getByRole("status", { name: "Operation result" });
   await expect(notice).toContainText("Nexo export: refresh failed");
   await expect(notice).toContainText("2 exact current prices");
   await expect(status).toContainText("Current prices (USD)");
@@ -437,7 +437,7 @@ test("manual rate, price, dust and spam edits commit typed requests", async ({
   });
   await page.getByRole("button", { name: "Close details" }).click();
   // The action log exposes the change with a working undo link.
-  await page.getByRole("button", { name: "Change history" }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Change history" }),
   ).toBeVisible();

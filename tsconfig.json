@@ -7,6 +7,8 @@
     "playwright.config.ts",
     "tests/design-system/**/*.ts",
     "playwright.desktop.config.ts",
-    "tests/desktop/**/*.ts"
+    "tests/desktop/**/*.ts",
+    "playwright.review.config.ts",
+    "tests/review/**/*.ts"
   ]
 }

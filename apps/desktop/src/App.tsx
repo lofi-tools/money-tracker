@@ -209,10 +209,20 @@ function Body(props: {
   const [panelNode, setPanelNode] = createSignal<{ id: string }>();
   const [panelWarnings, setPanelWarnings] = createSignal<Entry>();
   const [panel, setPanel] = createSignal<Details>();
-  const [options, setOptions] = createSignal<"" | "settings" | "history">("");
+  const [options, setOptions] = createSignal<"" | "settings">("");
   const [draft, setDraft] = createSignal<Settings>(defaultSettings);
   const [notice, setNotice] = createSignal("");
   let returnFocus: HTMLElement | undefined;
+  let mainPane: HTMLElement | undefined;
+  createEffect(() => {
+    selection();
+    options();
+    // Each navigation destination starts in view, even after scrolling the previous one.
+    if (mainPane) {
+      mainPane.scrollTop = 0;
+      mainPane.scrollLeft = 0;
+    }
+  });
   let treeRequest = 0;
   let detailRequest = 0;
   const failure = () =>
@@ -393,14 +403,6 @@ function Body(props: {
       setBusy(false);
     }
   }
-  const openHistory = (trigger: HTMLElement) => {
-    detailRequest++;
-    setPanelNode(undefined);
-    setPanelWarnings(undefined);
-    setPanel(undefined);
-    returnFocus = trigger;
-    setOptions("history");
-  };
   const openOptions = (trigger: HTMLElement) => {
     detailRequest++;
     setPanelNode(undefined);
@@ -736,20 +738,16 @@ function Body(props: {
                   <Icon name="gear" />
                   Settings
                 </Button>
-                <Button
-                  intent="ghost"
-                  aria-current={options() === "history" ? "page" : undefined}
-                  disabled={!data()}
-                  onClick={(e) => openHistory(e.currentTarget)}
-                >
-                  <Icon name="clock" />
-                  Change history
-                </Button>
               </div>
             </nav>
-            <main class="main-pane" tabindex="0" aria-label="Portfolio content">
+            <main
+              ref={mainPane}
+              class="main-pane"
+              tabindex="0"
+              aria-label="Portfolio content"
+            >
               <Show when={notice()}>
-                <div role="status" class="banner">
+                <div role="status" aria-label="Operation result" class="banner">
                   {notice()}
                 </div>
               </Show>
@@ -933,15 +931,24 @@ function Body(props: {
                         </table>
                       </Show>
                     </section>
-                  </section>
-                </Match>
-                <Match when={options() === "history"}>
-                  <section aria-label="Change history">
-                    <h2>Change history</h2>
-                    <HistoryPane
-                      data={data()!}
-                      onUndo={(id) => void undoAction(id)}
-                    />
+                    <section aria-label="Change history">
+                      <h3>Change history</h3>
+                      <Show
+                        when={data()?.edits}
+                        fallback={
+                          <StateMessage
+                            kind="empty"
+                            title="Change history unavailable"
+                            description="This snapshot does not contain manual change records."
+                          />
+                        }
+                      >
+                        <HistoryPane
+                          data={data()!}
+                          onUndo={(id) => void undoAction(id)}
+                        />
+                      </Show>
+                    </section>
                   </section>
                 </Match>
                 <Match when={true}>

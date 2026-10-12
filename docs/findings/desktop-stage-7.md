@@ -8,7 +8,7 @@ Stage 7 connects the persisted [manual action log](../spec/ui-metadata.md) to ty
 - **Prices.** Holdings whose asset is not the reporting asset carry an inline price editor (reporting currency) with pin and effective date. The reporting asset itself has no quote and therefore no price override.
 - **Dust and spam.** Dust classification offers Dust, Significant and Reset to auto per provider/asset. Spam exclusion requires a reason and carries a restore control; restoring clears the portfolio-wide decision while account reviews stay.
 - **Local names and organization.** Subscription names are editable with a `Use provider name` reset. Account nodes offer a local name, a `Move to…` selector listing only the cycle-free valid parents inside the same provider, a reset to the provider default, and group creation under the current node.
-- **Undo.** A `Change history` navbar destination lists every manual action newest-first with its prior and resulting state, Undo links, and `Undone`/`Compensating change` badges. Undo is offered only while the target's current revision still matches the action's resulting revision; a newer manual change on the same target disables the older Undo and the UI says so.
+- **Undo.** The `Change history` section (moved from the navbar into Settings in the later annotation follow-up) lists every manual action newest-first with its prior and resulting state, Undo links, and `Undone`/`Compensating change` badges. Undo is offered only while the target's current revision still matches the action's resulting revision; a newer manual change on the same target disables the older Undo and the UI says so.
 
 ## Commands
 

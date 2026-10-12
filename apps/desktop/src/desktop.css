@@ -329,3 +329,13 @@ body {
   color: var(--mt-colors-muted);
   overflow-wrap: anywhere;
 }
+
+.privacy-settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+.privacy-settings-row > :only-child {
+  grid-column: 1 / -1;
+}

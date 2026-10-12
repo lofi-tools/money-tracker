@@ -78,10 +78,17 @@ export function TextField(
   props: JSX.InputHTMLAttributes<HTMLInputElement> & {
     label: string;
     error?: string;
+    prefix?: string;
   },
 ) {
   const id = createUniqueId();
-  const [local, rest] = splitProps(props, ["label", "error", "class", "id"]);
+  const [local, rest] = splitProps(props, [
+    "label",
+    "error",
+    "class",
+    "id",
+    "prefix",
+  ]);
   return (
     <div class={css({ display: "grid", gap: "2" })}>
       <label
@@ -90,17 +97,46 @@ export function TextField(
       >
         {local.label}
       </label>
-      <input
-        {...rest}
-        id={local.id ?? id}
-        aria-invalid={local.error ? true : rest["aria-invalid"]}
-        aria-describedby={
-          [rest["aria-describedby"], local.error ? `${id}-error` : undefined]
+      <div
+        class={css({ position: "relative" })}
+        style={{
+          "--mt-input-prefix-width": `${(local.prefix?.length ?? 0) * 0.75 + 1.125}rem`,
+        }}
+      >
+        <Show when={local.prefix}>
+          <span
+            aria-hidden="true"
+            class={css({
+              position: "absolute",
+              left: "3",
+              top: "50%",
+              transform: "translateY(-50%)",
+              pointerEvents: "none",
+              color: "muted",
+              fontSize: "sm",
+            })}
+          >
+            {local.prefix}
+          </span>
+        </Show>
+        <input
+          {...rest}
+          id={local.id ?? id}
+          aria-invalid={local.error ? true : rest["aria-invalid"]}
+          aria-describedby={
+            [rest["aria-describedby"], local.error ? `${id}-error` : undefined]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+          class={[
+            inputClass,
+            local.prefix && css({ pl: "var(--mt-input-prefix-width)" }),
+            local.class,
+          ]
             .filter(Boolean)
-            .join(" ") || undefined
-        }
-        class={[inputClass, local.class].filter(Boolean).join(" ")}
-      />
+            .join(" ")}
+        />
+      </div>
       <Show when={local.error}>
         <span
           id={`${id}-error`}

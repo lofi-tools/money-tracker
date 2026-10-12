@@ -205,7 +205,11 @@ test("647px window contains independent panes and keeps Settings reachable", asy
   ).toBeVisible();
   await expect(page.getByRole("main").getByRole("table")).toHaveCount(0);
   await expect(page.getByLabel("Privacy mode")).toBeVisible();
+  await expect(page.getByLabel("Privacy scale (fraction)")).toHaveCount(0);
+  await page.getByLabel("Privacy mode").selectOption({ label: "Scaled down" });
+  await expect(page.getByLabel("Privacy scale (fraction)")).toBeVisible();
   await page.getByLabel("Privacy mode").selectOption("hidden");
+  await expect(page.getByLabel("Privacy scale (fraction)")).toHaveCount(0);
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByLabel("Quantity hidden").first()).toBeVisible();
   await page.screenshot({

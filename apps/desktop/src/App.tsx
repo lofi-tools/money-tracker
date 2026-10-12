@@ -517,24 +517,39 @@ function Body(props: {
                         void save(draft());
                       }}
                     >
-                      <label>
-                        Privacy
-                        <select
-                          aria-label="Privacy mode"
-                          value={draft().privacy_mode}
-                          onChange={(e) =>
-                            setDraft({
-                              ...draft(),
-                              privacy_mode: e.currentTarget
-                                .value as Settings["privacy_mode"],
-                            })
-                          }
-                        >
-                          <option value="normal">Normal</option>
-                          <option value="hidden">Hidden</option>
-                          <option value="scaled">Scaled</option>
-                        </select>
-                      </label>
+                      <div class="privacy-settings-row">
+                        <label>
+                          Privacy
+                          <select
+                            aria-label="Privacy mode"
+                            value={draft().privacy_mode}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft(),
+                                privacy_mode: e.currentTarget
+                                  .value as Settings["privacy_mode"],
+                              })
+                            }
+                          >
+                            <option value="normal">Normal</option>
+                            <option value="hidden">Hidden</option>
+                            <option value="scaled">Scaled down</option>
+                          </select>
+                        </label>
+                        <Show when={draft().privacy_mode === "scaled"}>
+                          <TextField
+                            label="Privacy scale (fraction)"
+                            disabled={reviewMode}
+                            value={draft().privacy_scale}
+                            onInput={(e) =>
+                              setDraft({
+                                ...draft(),
+                                privacy_scale: e.currentTarget.value,
+                              })
+                            }
+                          />
+                        </Show>
+                      </div>
                       <label>
                         Theme
                         <select
@@ -563,19 +578,14 @@ function Body(props: {
                           })
                         }
                       />
-                      <TextField
-                        label="Privacy scale (fraction)"
-                        disabled={reviewMode}
-                        value={draft().privacy_scale}
-                        onInput={(e) =>
-                          setDraft({
-                            ...draft(),
-                            privacy_scale: e.currentTarget.value,
-                          })
-                        }
-                      />
+
                       <TextField
                         label="Dust threshold in reporting currency"
+                        prefix={
+                          draft().reporting_currency === "USD"
+                            ? "$"
+                            : draft().reporting_currency
+                        }
                         disabled={reviewMode}
                         value={draft().dust_threshold}
                         onInput={(e) =>

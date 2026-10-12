@@ -71,3 +71,5 @@ Theme changes switch foreground/background colors together without a background-
 Navigation selection colors the entire entry container, including its independently clickable warning button. Selection and warning actions remain separate sibling buttons with separate accessible names and keyboard focus.
 
 The sliding details pane uses square corners and no outer border. Internal section dividers and visible focus outlines on its interactive controls remain.
+
+TextField supports a decorative noneditable prefix inside the input; it is separate from the controlled value and does not intercept focus or pointer input.

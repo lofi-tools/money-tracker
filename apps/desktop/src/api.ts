@@ -12,6 +12,7 @@ function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   return invoke<T>(command, args);
 }
 export const api = {
+  refreshPrices: () => call<Startup>("refresh_prices"),
   startup: () => call<Startup>("startup"),
   startNew: () => call<Startup>("start_new"),
   copyDatabase: () => call<Startup | null>("copy_database"),

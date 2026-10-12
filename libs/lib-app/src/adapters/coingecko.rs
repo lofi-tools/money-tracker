@@ -96,6 +96,33 @@ impl CoinGeckoSvc {
             .collect()
     }
 
+    /// Exact current quotes for reviewed canonical assets only. Unknown mappings are skipped.
+    pub async fn fetch_exact_current_prices(
+        &self,
+        assets: &[AssetId],
+    ) -> anyhow::Result<Vec<lib_core::ui_metadata::PriceEvidence>> {
+        let mut ids = BTreeSet::new();
+        for asset in assets {
+            if let Ok(Some(id)) = coin_id(&asset.0) {
+                ids.insert(id.to_string());
+            }
+            if matches!(asset.0.as_str(), "GBP" | "GBPX" | "EUR" | "EURX") {
+                ids.insert("bitcoin".into());
+            }
+        }
+        let raw = if ids.is_empty() {
+            BTreeMap::new()
+        } else {
+            self.api_client
+                .fetch_exact_current_prices(CurrentPriceReq::new(
+                    ids.into_iter().collect(),
+                    vec!["usd".into(), "gbp".into(), "eur".into()],
+                ))
+                .await?
+        };
+        exact_quotes(assets, &raw, Utc::now())
+    }
+
     pub async fn fetch_historical_prices(
         &self,
         assets: &[AssetId],
@@ -231,4 +258,156 @@ fn coin_id(ticker: &str) -> anyhow::Result<Option<&'static str>> {
         "ETHW" => Some("ethereum-pow-iou"),
         _ => bail!("no CoinGecko mapping for Nexo asset {ticker}"),
     })
+}
+
+fn exact_quotes(
+    assets: &[AssetId],
+    raw: &BTreeMap<String, BTreeMap<String, serde_json::Number>>,
+    now: DateTime<Utc>,
+) -> anyhow::Result<Vec<lib_core::ui_metadata::PriceEvidence>> {
+    use lib_core::{
+        ExactDecimal,
+        ui_metadata::{PriceEvidence, SourceEvidence},
+    };
+    use rust_decimal::Decimal;
+    use std::str::FromStr;
+    let mut out = Vec::new();
+    for asset in assets {
+        // Reporting asset is already valued at exactly one by the query model.
+        if asset.0 == "USD" {
+            continue;
+        }
+        let (price, as_of, reference) = match asset.0.as_str() {
+            "USDX" | "xUSD" => (
+                "1".to_string(),
+                now,
+                "reviewed USD-denominated provider unit".to_string(),
+            ),
+            symbol => {
+                let fiat = match symbol {
+                    "GBP" | "GBPX" => Some("gbp"),
+                    "EUR" | "EURX" => Some("eur"),
+                    _ => None,
+                };
+                let id = if fiat.is_some() {
+                    "bitcoin"
+                } else {
+                    match coin_id(symbol) {
+                        Ok(Some(id)) => id,
+                        _ => continue,
+                    }
+                };
+                let Some(row) = raw.get(id) else { continue };
+                let Some(timestamp) = row
+                    .get("last_updated_at")
+                    .and_then(|n| n.as_i64())
+                    .and_then(|n| DateTime::from_timestamp(n, 0))
+                else {
+                    continue;
+                };
+                if timestamp > now || now - timestamp > chrono::Duration::days(1) {
+                    continue;
+                }
+                let Some(usd) = row.get("usd") else { continue };
+                let parse = |n: &serde_json::Number| -> anyhow::Result<Decimal> {
+                    let text = n.to_string();
+                    Ok(if text.contains(['e', 'E']) {
+                        Decimal::from_scientific(&text)?
+                    } else {
+                        Decimal::from_str_exact(&text)?
+                    })
+                };
+                let usd = parse(usd)?;
+                if usd <= Decimal::ZERO {
+                    continue;
+                }
+                let (price, reference) = if let Some(currency) = fiat {
+                    let Some(denom) = row.get(currency) else {
+                        continue;
+                    };
+                    let denom = parse(denom)?;
+                    if denom <= Decimal::ZERO {
+                        continue;
+                    }
+                    (
+                        usd.checked_div(denom)
+                            .context("CoinGecko FX quote exceeds decimal capacity")?
+                            .normalize()
+                            .to_string(),
+                        format!(
+                            "simple/price:{id}:usd/{currency}; decimal FX division up to 28 places; provider fiat unit mapping"
+                        ),
+                    )
+                } else {
+                    (
+                        usd.normalize().to_string(),
+                        format!("simple/price:{id}:usd"),
+                    )
+                };
+                (price, timestamp, reference)
+            }
+        };
+        out.push(PriceEvidence {
+            id: format!("coingecko:{}:USD:{}", asset.0, as_of.timestamp()),
+            asset: asset.clone(),
+            quote: AssetId::str("USD"),
+            as_of,
+            price: ExactDecimal::from_str(&price)?,
+            evidence: SourceEvidence {
+                source: "coingecko-current".into(),
+                reference,
+                observed_at: now,
+                updated_at: now,
+            },
+        });
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod exact_tests {
+    use super::*;
+    #[test]
+    fn fiat_units_use_derived_fx_and_stablecoins_use_market_quotes() -> anyhow::Result<()> {
+        let now = DateTime::from_timestamp(1_800_000_000, 0).unwrap();
+        let raw = serde_json::from_str(
+            r#"{"bitcoin":{"usd":60000,"eur":50000,"last_updated_at":1800000000},"usd-coin":{"usd":0.98,"last_updated_at":1800000000},"near":{"usd":1e-7,"last_updated_at":1800000000}}"#,
+        )?;
+        let quotes = exact_quotes(
+            &[
+                AssetId::str("EURX"),
+                AssetId::str("USDC"),
+                AssetId::str("NEAR"),
+            ],
+            &raw,
+            now,
+        )?;
+        assert_eq!(quotes[0].price.as_str(), "1.2");
+        assert!(quotes[0].evidence.reference.contains("decimal FX division"));
+        assert_eq!(quotes[1].price.as_str(), "0.98");
+        assert_eq!(quotes[2].price.as_str(), "0.0000001");
+        Ok(())
+    }
+    #[test]
+    fn exact_current_quotes_keep_decimals_and_skip_unknown_missing_stale_assets()
+    -> anyhow::Result<()> {
+        let now = DateTime::from_timestamp(1_800_000_000, 0).unwrap();
+        let raw = serde_json::from_str(
+            r#"{"ethereum":{"usd":1234.567890123456789,"last_updated_at":1800000000},"near":{"usd":1e-7,"last_updated_at":1700000000}}"#,
+        )?;
+        let quotes = exact_quotes(
+            &[
+                AssetId::str("ETH"),
+                AssetId::str("NEAR"),
+                AssetId::str("UNKNOWN"),
+                AssetId::str("USD"),
+            ],
+            &raw,
+            now,
+        )?;
+        assert_eq!(quotes.len(), 1);
+        assert_eq!(quotes[0].price.as_str(), "1234.567890123456789");
+        assert_eq!(quotes[0].as_of, now);
+        Ok(())
+    }
 }

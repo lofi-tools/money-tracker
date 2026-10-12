@@ -29,6 +29,8 @@ pub struct Summary {
     pub net_annual_earnings: FigureDto<CalculatedMoney>,
     /// Net earnings / gross assets, never net worth. Exact annual fraction.
     pub current_apy: FigureDto<ExactRatio>,
+    /// Display estimate only: missing investment rates count as zero, never borrowing costs.
+    pub estimated_current_apy: FigureDto<ExactRatio>,
     pub historical_effective_apy: FigureDto<ExactRatio>,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -268,6 +270,7 @@ fn empty_summary(quote: &AssetId) -> Summary {
         annual_borrowing_costs: z.clone(),
         net_annual_earnings: z,
         current_apy: FigureDto::NotApplicable,
+        estimated_current_apy: FigureDto::NotApplicable,
         historical_effective_apy: FigureDto::NotApplicable,
     }
 }
@@ -401,7 +404,7 @@ fn summary(
     {
         FigureDto::NotApplicable
     } else if !source_apy_issues.is_empty() {
-        unknown(dedup(source_apy_issues))
+        unknown(dedup(source_apy_issues.clone()))
     } else if complete(&gross) && complete(&net) {
         match (amount(&net), amount(&gross)) {
             (Some(n), Some(g)) => n.div(&g).map_or(FigureDto::NotApplicable, |v| {
@@ -412,6 +415,25 @@ fn summary(
     } else {
         unknown(dedup([figure_issues(&gross), figure_issues(&net)].concat()))
     };
+    let missing = figure_issues(&earning);
+    let estimated = if matches!(apy, FigureDto::Unknown { .. })
+        && source_apy_issues.is_empty()
+        && complete(&gross)
+        && complete(&costs)
+        && !missing.is_empty()
+        && missing.iter().all(|i| i.code == "rate_unknown")
+    {
+        match (amount(&gross), amount(&costs)) {
+            (Some(g), Some(c)) => amount(&earning).unwrap_or_else(ExactRatio::zero).sub(&c).div(&g)
+                .map(|value| FigureDto::Partial {
+                    value, evidence: dedup([evidence(&gross), evidence(&earning), evidence(&costs)].concat()),
+                    issues: vec![issue("unknown_rate_assumed_zero", detail_scope.clone(), "Missing investment rates assumed zero for this display estimate; individual rates remain unknown", vec![])],
+                }).unwrap_or(FigureDto::NotApplicable),
+            _ => apy.clone(),
+        }
+    } else {
+        apy.clone()
+    };
     Summary {
         calculation_basis: SUMMARY_BASIS.into(),
         current_value: subtract(quote, gross.clone(), liabilities.clone()),
@@ -421,6 +443,7 @@ fn summary(
         annual_borrowing_costs: costs,
         net_annual_earnings: net,
         current_apy: apy,
+        estimated_current_apy: estimated,
         historical_effective_apy: if hs.is_empty() {
             FigureDto::NotApplicable
         } else {

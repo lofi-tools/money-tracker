@@ -19,6 +19,7 @@ export interface Summary {
   annual_borrowing_costs: Figure<MoneyValue>;
   net_annual_earnings: Figure<MoneyValue>;
   current_apy: Figure<Rational>;
+  estimated_current_apy?: Figure<Rational>;
 }
 export type Selection =
   { kind: "overview" | "dust" } | { kind: "asset" | "provider"; id: string };

@@ -66,6 +66,26 @@
         "asset_id": "USD"
       }
     },
+    "estimated_current_apy": {
+      "evidence": [
+        {
+          "cutoff": "2026-01-20T00:00:00Z",
+          "kind": "ledger_replay"
+        },
+        {
+          "effective_from": "2026-01-01T00:00:00Z",
+          "kind": "provider",
+          "observed_at": "2026-01-02T00:00:00Z",
+          "reference": "source:2",
+          "source": "fixture API"
+        }
+      ],
+      "status": "known",
+      "value": {
+        "denominator": "25",
+        "numerator": "1"
+      }
+    },
     "gross_annual_earnings": {
       "evidence": [
         {

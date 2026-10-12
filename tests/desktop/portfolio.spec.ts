@@ -72,7 +72,7 @@ test("real Rust DTO: Overview, scoped allocation, liability and exact unknown ho
     page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Partial subtotal").first()).toBeVisible();
-  await page.getByRole("button", { name: /USD.*APY unknown/ }).click();
+  await page.getByRole("button", { name: /US USD/ }).click();
   await expect(page.getByRole("table")).toBeVisible();
   await expect(
     page.getByText("Liability · borrowed amount").first(),
@@ -87,7 +87,7 @@ test("real Rust DTO: Overview, scoped allocation, liability and exact unknown ho
   await expect(
     page.getByRole("button", { name: "My wallet", exact: true }),
   ).toBeFocused();
-  await page.getByRole("button", { name: /MYSTERY.*APY unknown/ }).click();
+  await page.getByRole("button", { name: /MY MYSTERY/ }).click();
   await page.getByRole("button", { name: "My wallet", exact: true }).click();
   await expect(
     page
@@ -103,7 +103,7 @@ test("group/search, privacy across details, persisted settings and accessibility
   await install(page);
   await page.goto("/");
   await page.getByRole("tab", { name: "By provider" }).click();
-  await page.getByRole("button", { name: /example.*APY unknown/ }).click();
+  await page.getByRole("button", { name: /EX example/ }).click();
   await expect(
     page.getByRole("button", { name: "My wallet", exact: true }),
   ).toBeVisible();
@@ -138,9 +138,7 @@ test("group/search, privacy across details, persisted settings and accessibility
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.locator('[data-theme="dark"]')).toBeVisible();
   await page.getByLabel("Search assets or providers").fill("does not exist");
-  await expect(
-    page.getByRole("button", { name: /example.*APY unknown/ }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /EX example/ })).toHaveCount(0);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
   await page.screenshot({ path: ".cache/desktop-review.png", fullPage: true });
@@ -169,7 +167,7 @@ test("647px window contains independent panes and keeps Settings reachable", asy
     page.getByRole("button", { name: "Quit", exact: true }),
   ).toHaveCount(0);
   await expect(page.getByLabel("Privacy mode")).toHaveCount(0);
-  await page.getByRole("button", { name: /USD.*APY unknown/ }).click();
+  await page.getByRole("button", { name: /US USD/ }).click();
   const nav = page.getByRole("navigation", { name: "Portfolio navigation" });
   const settings = nav.getByRole("button", { name: "Settings", exact: true });
   await expect(settings).toBeVisible();
@@ -216,4 +214,22 @@ test("647px window contains independent panes and keeps Settings reachable", asy
     path: ".cache/desktop-647-review.png",
     fullPage: true,
   });
+});
+
+test("failed explicit price refresh retains cached navbar figures", async ({
+  page,
+}) => {
+  await install(page);
+  await page.goto("/");
+  const nav = page.getByRole("navigation", { name: "Portfolio navigation" });
+  const usd = nav.getByRole("button", { name: /US USD/ });
+  const before = await usd.innerText();
+  await nav.getByRole("button", { name: "Settings", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Refresh prices", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Existing cached figures are retained",
+  );
+  expect(await usd.innerText()).toBe(before);
 });

@@ -999,3 +999,46 @@ fn explicit_source_withheld_figures_are_honored_even_with_known_rates() -> Resul
     ));
     Ok(())
 }
+
+#[test]
+fn missing_investment_rates_have_explicit_zero_assumption_but_debt_does_not() -> Result<()> {
+    let app = Application::from_store(Store::in_memory()?);
+    let s = app.store();
+    account(s, "a", "nexo")?;
+    pos(s, "a", "cash", "USD", 2, PositionRole::Asset, "100")?;
+    pos(s, "a", "eth", "ETH", 18, PositionRole::Asset, "1")?;
+    price(s, "ETH", "100")?;
+    rate(
+        s,
+        "usd",
+        RateScope::AccountAsset {
+            account: "a".into(),
+            asset: AssetId::str("USD"),
+        },
+        Some("0.05"),
+    )?;
+    let p = app.portfolio_projection(req())?;
+    assert!(matches!(p.overview.current_apy, FigureDto::Unknown { .. }));
+    match &p.overview.estimated_current_apy {
+        FigureDto::Partial { value, issues, .. } => {
+            assert_eq!(*value, decimal("0.025"));
+            assert_eq!(issues[0].code, "unknown_rate_assumed_zero");
+        }
+        _ => panic!("expected explicitly estimated APY"),
+    }
+    assert!(matches!(
+        p.holdings
+            .iter()
+            .find(|h| h.quantity.asset_id.0 == "ETH")
+            .unwrap()
+            .annual_earnings,
+        FigureDto::Unknown { .. }
+    ));
+    pos(s, "a", "debt", "USD", 2, PositionRole::Liability, "10")?;
+    let p = app.portfolio_projection(req())?;
+    assert!(matches!(
+        p.overview.estimated_current_apy,
+        FigureDto::Unknown { .. }
+    ));
+    Ok(())
+}

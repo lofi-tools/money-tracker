@@ -12,17 +12,20 @@ use std::path::PathBuf;
 async fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     ensure!(
-        args.len() == 2,
-        "usage: export_preview SOURCE.duckdb OUTPUT.json"
+        args.len() == 2 || (args.len() == 3 && args[2] == "--refresh-prices"),
+        "usage: export_preview SOURCE.duckdb OUTPUT.json [--refresh-prices]"
     );
     let mut resolved = ResolvedConfig::system(None, None)?;
     let temporary = tempfile::tempdir()?;
     resolved.database = temporary.path().join(DATABASE_FILENAME);
     resolved.config_file = temporary.path().join("preview-config.json");
     let mut session = Session::new(resolved);
-    let ready = session
+    let mut ready = session
         .open(OpenAction::CopyExisting(PathBuf::from(&args[0])))
         .await?;
+    if args.len() == 3 {
+        ready = session.refresh_prices().await?;
+    }
     let Startup::Ready { data, .. } = &ready else {
         anyhow::bail!("preview database missing")
     };

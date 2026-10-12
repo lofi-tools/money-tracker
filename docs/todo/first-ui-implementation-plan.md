@@ -160,3 +160,5 @@ Record validation results and limitations, then update canonical master todo sta
 | Validated first build | 9 plus prior stages | Acceptance evidence and reproducible three-system builds. |
 
 The design system can progress alongside backend metadata/query work after contract design. A fake-data prototype may help visual review but cannot replace real-data validation. Do not wait for new providers, a complete opportunity catalogue, risk service, routing, sharing/sync or the full historical calculation engine before building this UI.
+
+Current-price follow-up before stage 8: explicit Settings USD price refresh and a live-priced frozen imported preview are implemented. Missing investment rates now have a separately labelled aggregate APY estimate, while strict/individual unknowns and debt protections remain. Automatic provider/rate refresh and scheduling stay in stage 8. See [follow-up findings](../findings/desktop-stage-6.md#current-price-and-aggregate-apy-follow-up).

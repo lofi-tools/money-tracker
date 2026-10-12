@@ -108,6 +108,47 @@ impl CoingeckoClient {
         Ok(prices_out)
     }
 
+    /// Preserve the provider's JSON decimal spelling instead of using binary floats.
+    pub async fn fetch_exact_current_prices(
+        &self,
+        args: CurrentPriceReq,
+    ) -> anyhow::Result<
+        std::collections::BTreeMap<String, std::collections::BTreeMap<String, serde_json::Number>>,
+    > {
+        #[derive(serde::Serialize)]
+        struct Query {
+            #[serde(flatten)]
+            prices: CurrentPriceReq,
+            include_last_updated_at: bool,
+            precision: &'static str,
+        }
+        let query = Query {
+            prices: args,
+            include_last_updated_at: true,
+            precision: "full",
+        };
+        let response: std::collections::BTreeMap<
+            String,
+            std::collections::BTreeMap<String, Option<serde_json::Number>>,
+        > = tokio::time::timeout(
+            Duration::from_secs(30),
+            self.get_json("/simple/price", &query),
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("current price request timed out"))??;
+        Ok(response
+            .into_iter()
+            .map(|(id, row)| {
+                (
+                    id,
+                    row.into_iter()
+                        .filter_map(|(key, value)| value.map(|n| (key, n)))
+                        .collect(),
+                )
+            })
+            .collect())
+    }
+
     /// CoinGecko's market chart range endpoint returns [Unix milliseconds, price].
     pub async fn fetch_historical_prices(
         &self,

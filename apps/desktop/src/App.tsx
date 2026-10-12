@@ -66,6 +66,9 @@ function Apy(props: { figure: Figure<Rational> }) {
       }
     >
       <Rate value={(props.figure as { value: Rational }).value} />
+      <Show when={props.figure.status === "partial"}>
+        <span class="muted"> (est.)</span>
+      </Show>
     </Show>
   );
 }
@@ -258,7 +261,15 @@ function Body(props: {
             currency={props.settings.reporting_currency}
           />
         ),
-        rate: <Apy figure={n.summary.current_apy} />,
+        rate: (
+          <Apy
+            figure={
+              n.children.length
+                ? (n.summary.estimated_current_apy ?? n.summary.current_apy)
+                : n.summary.current_apy
+            }
+          />
+        ),
         annual: (
           <MoneyFigure
             figure={figure(n.summary.net_annual_earnings)}
@@ -460,7 +471,15 @@ function Body(props: {
                           </For>
                         </span>
                       }
-                      rate={<Apy figure={entry.summary.current_apy} />}
+                      rate={(() => {
+                        const rate =
+                          entry.summary.estimated_current_apy ??
+                          entry.summary.current_apy;
+                        return rate.status === "known" ||
+                          rate.status === "partial" ? (
+                          <Apy figure={rate} />
+                        ) : undefined;
+                      })()}
                       warning={
                         entry.issues.length
                           ? {
@@ -479,7 +498,15 @@ function Body(props: {
                     selected={!options() && selection().kind === "dust"}
                     onSelect={() => select({ kind: "dust" })}
                     value={money(data()!.dust.summary.current_value)}
-                    rate={<Apy figure={data()!.dust.summary.current_apy} />}
+                    rate={(() => {
+                      const rate =
+                        data()!.dust.summary.estimated_current_apy ??
+                        data()!.dust.summary.current_apy;
+                      return rate.status === "known" ||
+                        rate.status === "partial" ? (
+                        <Apy figure={rate} />
+                      ) : undefined;
+                    })()}
                     warning={
                       data()!.dust.issues.length
                         ? {
@@ -595,9 +622,26 @@ function Body(props: {
                           })
                         }
                       />
+                      <Button
+                        disabled={reviewMode || busy()}
+                        onClick={() => {
+                          setBusy(true);
+                          void api
+                            .refreshPrices()
+                            .then(accept)
+                            .catch(() =>
+                              setError(
+                                "Unable to refresh prices. Existing cached figures are retained; check your connection and price API configuration.",
+                              ),
+                            )
+                            .finally(() => setBusy(false));
+                        }}
+                      >
+                        Refresh prices
+                      </Button>
                       <p class="muted">
-                        Refresh preferences are saved for the later scheduler;
-                        this stage only reads cached data.
+                        Prices can be refreshed above. Scheduled account updates
+                        are not available yet.
                       </p>
                       <TextField
                         label="Refresh interval (seconds)"
@@ -738,6 +782,14 @@ function Body(props: {
           {(d) => (
             <>
               <Warnings issues={d().issues} />
+              <Show
+                when={d().summary.estimated_current_apy?.status === "partial"}
+              >
+                <p class="muted">
+                  Estimated aggregate APY assumes missing investment rates are
+                  zero. Individual rates remain unknown.
+                </p>
+              </Show>
               <div class="detail-block">
                 <p>Gross assets: {money(d().summary.gross_assets)}</p>
                 <p>Liabilities: {money(d().summary.liabilities)}</p>

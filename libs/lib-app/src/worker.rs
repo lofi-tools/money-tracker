@@ -155,6 +155,36 @@ impl DatabaseWorker {
         })
         .await
     }
+    /// Explicit current-price refresh; provider ledger and reconciliation records are untouched.
+    pub async fn refresh_prices(&self) -> Result<()> {
+        let projection = self.portfolio_projection(Utc::now()).await?;
+        ensure!(
+            projection.request.reporting_asset.0 == "USD",
+            "current price refresh currently supports USD only"
+        );
+        let assets: Vec<_> = projection
+            .assets
+            .iter()
+            .filter_map(|entry| {
+                if let crate::portfolio::Selection::Asset(id) = &entry.selection {
+                    Some(id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let prices = crate::adapters::coingecko::CoinGeckoSvc::new()?
+            .fetch_exact_current_prices(&assets)
+            .await?;
+        self.request(move |app, _| {
+            for price in prices {
+                app.store().save_price_evidence(&price)?;
+            }
+            Ok(())
+        })
+        .await
+    }
+
     pub async fn ui_metadata(&self) -> Result<crate::dto::UiMetadataDto> {
         let portfolio = self.portfolio_id.clone();
         self.request(move |app, _| app.ui_metadata(&portfolio))

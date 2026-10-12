@@ -135,6 +135,13 @@ impl Session {
             settings: self.settings().await?,
         })
     }
+    pub async fn refresh_prices(&mut self) -> Result<Startup> {
+        self.worker()?.refresh_prices().await?;
+        Ok(Startup::Ready {
+            data: self.snapshot().await?,
+            settings: self.settings().await?,
+        })
+    }
     pub async fn snapshot(&mut self) -> Result<Snapshot> {
         let p = self.worker()?.portfolio_projection(Utc::now()).await?;
         self.snapshot_id = self

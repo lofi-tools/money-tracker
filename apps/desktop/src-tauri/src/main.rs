@@ -102,6 +102,17 @@ async fn details(
     )
 }
 #[tauri::command]
+async fn refresh_prices(state: State<'_, Host>) -> Result<Startup, String> {
+    safe(
+        session(&state)
+            .await?
+            .as_mut()
+            .unwrap()
+            .refresh_prices()
+            .await,
+    )
+}
+#[tauri::command]
 async fn save_settings(state: State<'_, Host>, settings: Settings) -> Result<Startup, String> {
     safe(
         session(&state)
@@ -142,6 +153,7 @@ fn main() {
             allocation,
             details,
             save_settings,
+            refresh_prices,
             quit
         ])
         .on_window_event(|window, event| {

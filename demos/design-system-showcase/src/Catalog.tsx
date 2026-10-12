@@ -474,14 +474,21 @@ function CatalogBody(props: {
               <Money value="0.004" />
             </StatRow>
             <StatRow label="Negative cost">
-              <Money value="-25.05" negative />
+              <Money value="-25.05" />
             </StatRow>
             <Quantity
+              exact
               units="9007199254740993000000000000000001"
               scale={18}
               asset="EXAMPLE"
             />
             <Quantity units="1" scale={18} asset="ETH" />
+            <StatRow label="Compact quantity">
+              <Quantity units="21410824548" scale={8} asset="ETH" />
+            </StatRow>
+            <StatRow label="Exact quantity in details">
+              <Quantity exact units="21410824548" scale={8} asset="ETH" />
+            </StatRow>
             <div class="wrap">
               <Rate value="0.05" />
               <Rate value="0" />

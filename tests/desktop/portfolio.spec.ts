@@ -242,7 +242,9 @@ test("group/search, privacy across details, persisted settings and accessibility
   expect(await page.locator("body").innerText()).not.toContain(
     "9007199254740993",
   );
-  expect(await page.getByRole("dialog").innerText()).not.toContain("$1,001");
+  expect(await page.getByRole("dialog").innerText()).not.toContain(
+    "$1\u202f001",
+  );
   await page.getByRole("button", { name: "Close details" }).click();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByLabel("Privacy mode").selectOption("scaled");

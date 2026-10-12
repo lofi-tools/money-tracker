@@ -51,7 +51,10 @@ function currencyString(
   const fraction = digits ? text.slice(-digits) : "";
   const grouped = new Intl.NumberFormat(locale, {
     maximumFractionDigits: 0,
-  }).format(BigInt(whole));
+  })
+    .formatToParts(BigInt(whole))
+    .map((part) => (part.type === "group" ? "\u202f" : part.value))
+    .join("");
   // Reporting assets can also be crypto IDs, outside Intl's ISO currency syntax.
   if (!/^[A-Za-z]{3}$/.test(currency))
     return `${grouped}${fraction ? "." + fraction : ""} ${currency}`;
@@ -120,6 +123,32 @@ export function formatQuantity(
     remainder %= d;
   }
   return sign + whole.toString() + (fraction ? "." + fraction : "");
+}
+/** Compact display: keep whole units, up to five significant digits and every tiny nonzero. */
+export function formatCompactQuantity(
+  units: string,
+  scale: number,
+  privacy: Privacy = normalPrivacy,
+): string {
+  const exact = formatQuantity(units, scale, privacy);
+  if (privacy.mode === "hidden") return exact;
+  const unsigned = exact.replace(/^−/, "");
+  const [whole, fraction = ""] = unsigned.split(".");
+  const digits =
+    whole !== "0"
+      ? Math.max(0, 5 - whole.length)
+      : Math.max(0, fraction.search(/[1-9]/)) + 5;
+  const [n, d] = rational(exact.replace(/^−/, "-"));
+  const text = rounded(n, d, digits)
+    .toString()
+    .padStart(digits + 1, "0");
+  const integer = digits ? text.slice(0, -digits) : text;
+  const decimals = digits ? text.slice(-digits).replace(/0+$/, "") : "";
+  const grouped = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 })
+    .formatToParts(BigInt(integer))
+    .map((part) => (part.type === "group" ? "\u202f" : part.value))
+    .join("");
+  return (n < 0n ? "−" : "") + grouped + (decimals ? "." + decimals : "");
 }
 /** Rates remain visible in privacy modes. Input is an annual fraction. */
 export function formatRate(value: ExactValue): string {

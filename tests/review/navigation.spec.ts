@@ -26,6 +26,12 @@ test("review navigation works after reload, fills the viewport and keeps history
   });
   await expect(frame).toHaveCSS("border-radius", "0px");
   const nav = page.getByRole("navigation", { name: "Portfolio navigation" });
+  const search = page.locator(".app-header").getByRole("searchbox");
+  await expect(search).toBeVisible();
+  await expect(nav.getByRole("searchbox")).toHaveCount(0);
+  await search.fill("not-an-asset");
+  await expect(nav.getByRole("button", { name: /US USD/ })).toHaveCount(0);
+  await search.fill("");
   const card = page.locator(".overview-card");
   await expect(card).toContainText("$901");
   const cardBounds = await card.boundingBox();

@@ -539,6 +539,15 @@ function Body(props: {
     <div class={`desktop ${panel() ? "panel-open" : ""}`}>
       <header class="app-header">
         <h1>Money Tracker</h1>
+        <Show when={data()}>
+          <div class="header-search">
+            <SearchField
+              value={search()}
+              onChange={setSearch}
+              label="Search assets or providers"
+            />
+          </div>
+        </Show>
       </header>
       <Show when={reviewMode}>
         <aside class="banner" aria-label="Review notice">
@@ -649,11 +658,6 @@ function Body(props: {
                     { value: "provider", label: "By provider" },
                   ]}
                 />
-                <SearchField
-                  value={search()}
-                  onChange={setSearch}
-                  label="Search assets or providers"
-                />
               </div>
               <div
                 class="sidebar-list"
@@ -665,7 +669,11 @@ function Body(props: {
                   {(entry) => (
                     <NavigationEntry
                       name={entry.name}
-                      secondary={entry.ticker ?? undefined}
+                      secondary={
+                        entry.ticker && entry.ticker !== entry.name
+                          ? entry.ticker
+                          : undefined
+                      }
                       selected={
                         !options() && key(entry.selection) === key(selection())
                       }
@@ -1104,6 +1112,7 @@ function Body(props: {
                       <Badge tone="danger">Liability · borrowed amount</Badge>
                     </Show>
                     <Quantity
+                      exact
                       units={holding.quantity.units}
                       scale={holding.quantity.scale}
                       asset={holding.quantity.asset_id}

@@ -31,6 +31,7 @@ export type { AllocationRow } from "./components/portfolio";
 export {
   formatMoney,
   formatQuantity,
+  formatCompactQuantity,
   formatRate,
   normalPrivacy,
   defaultScale,

@@ -145,7 +145,7 @@ select {
 }
 @media (max-width: 800px) {
   .workspace {
-    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-columns: 260px minmax(0, 1fr);
   }
   .main-pane {
     padding: 17px;
@@ -205,6 +205,14 @@ select {
 }
 .app-header h1 {
   letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+.app-header {
+  gap: 16px;
+}
+.header-search {
+  width: min(320px, 50%);
+  min-width: 0;
 }
 .tools select,
 .settings select {
@@ -262,10 +270,10 @@ body {
 }
 @media (max-width: 720px) {
   .workspace {
-    grid-template-columns: 200px minmax(0, 1fr);
+    grid-template-columns: 260px minmax(0, 1fr);
   }
   .main-pane {
-    padding: 14px;
+    padding: 14px 14px 14px 24px;
   }
   .summaries > div {
     padding: 14px;
@@ -274,19 +282,7 @@ body {
     height: 48px;
   }
 }
-@media (max-width: 800px) {
-  .sidebar-list > div > button {
-    grid-template-columns: 32px minmax(0, 1fr);
-    gap: 6px;
-  }
-  .sidebar-list > div > button > span:first-child {
-    grid-row: 1 / span 2;
-  }
-  .sidebar-list > div > button > span:last-child {
-    grid-column: 2;
-    text-align: left;
-  }
-}
+
 .sidebar-list:focus-visible,
 .main-pane:focus-visible {
   outline: 2px solid var(--mt-colors-accent-text);
@@ -309,6 +305,8 @@ body {
 .nav-figures {
   display: grid;
   gap: 3px;
+  justify-items: end;
+  text-align: right;
 }
 .nav-quantity {
   font-size: var(--mt-font-sizes-xs);

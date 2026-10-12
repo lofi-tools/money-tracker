@@ -220,7 +220,7 @@ export function PortfolioShowcase() {
         liability: true,
         value: <Money value="100" />,
         rate: <Rate value="0.1" />,
-        annual: <Money value="-10" negative />,
+        annual: <Money value="-10" />,
       },
     ];
     return (

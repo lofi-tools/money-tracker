@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   formatMoney,
   formatQuantity,
+  formatCompactQuantity,
   formatRate,
 } from "../src/formatting/index.ts";
 import type { ExactValue } from "../src/formatting/index.ts";
@@ -15,21 +16,24 @@ test("USD thresholds use unrounded amounts, preserve sign and distinguish tiny n
     ["12.34", "$12.34"],
     ["99.999", "$100.00"],
     ["100.25", "$100"],
-    ["12345.67", "$12,346"],
-    ["-12345.67", "−$12,346"],
+    ["12345.67", "$12\u202f346"],
+    ["-12345.67", "−$12\u202f346"],
     ["-0.00", "$0.00"],
   ])
     assert.equal(formatMoney(value), display);
 });
 test("huge amounts and rationals never pass through a JS number", () => {
-  assert.equal(formatMoney("9007199254740993.50"), "$9,007,199,254,740,994");
+  assert.equal(
+    formatMoney("9007199254740993.50"),
+    "$9\u202f007\u202f199\u202f254\u202f740\u202f994",
+  );
   assert.equal(formatMoney({ numerator: "1", denominator: "3" }), "$0.33");
   assert.equal(
     formatMoney({
       numerator: "1000000000000000000000000000000000001",
       denominator: "1000000000000000000",
     }),
-    "$1,000,000,000,000,000,000",
+    "$1\u202f000\u202f000\u202f000\u202f000\u202f000\u202f000",
   );
 });
 test("currency minor units follow Intl metadata, without foreign USD symbols", () => {
@@ -97,6 +101,25 @@ test("reject lossy inputs and invalid scales/ratios rather than guessing", () =>
 
 test("non-ISO reporting assets retain their denomination and privacy", () => {
   assert.equal(formatMoney("1.25", "USDT"), "1.25 USDT");
-  assert.equal(formatMoney("1000", "crypto:asset"), "1,000 crypto:asset");
+  assert.equal(formatMoney("1000", "crypto:asset"), "1\u202f000 crypto:asset");
   assert.equal(formatMoney("1000", "USDT", { mode: "hidden" }), "••••");
+});
+
+test("compact quantities shorten fractions, preserve whole units, tiny balances and privacy", () => {
+  assert.equal(formatCompactQuantity("21410824548", 8), "214.11");
+  assert.equal(formatCompactQuantity("27187305093806", 8), "271\u202f873");
+  assert.equal(formatCompactQuantity("3737181767", 8), "37.372");
+  assert.equal(formatCompactQuantity("7219002", 8), "0.07219");
+  assert.equal(formatCompactQuantity("1", 18), "0.000000000000000001");
+  assert.equal(formatCompactQuantity("-21410824548", 8), "−214.11");
+  assert.equal(formatCompactQuantity("999999", 5), "10");
+  assert.equal(
+    formatCompactQuantity("900719925474099350", 2),
+    "9\u202f007\u202f199\u202f254\u202f740\u202f994",
+  );
+  assert.equal(
+    formatCompactQuantity("21410824548", 8, { mode: "scaled" }),
+    "21.411",
+  );
+  assert.equal(formatCompactQuantity("1", 18, { mode: "hidden" }), "••••");
 });

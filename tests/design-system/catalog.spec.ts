@@ -8,6 +8,18 @@ test("catalog covers exported components with live selection, details and privac
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("request", (r) => requests.push(r.url()));
   await page.goto("/");
+  const negative = page.getByText("−$25.05", { exact: true });
+  const positive = page.getByText("$12.34", { exact: true });
+  const danger = await negative.evaluate((node) => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--mt-colors-danger)";
+    node.parentElement!.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+  await expect(negative).toHaveCSS("color", danger);
+  await expect(positive).not.toHaveCSS("color", danger);
   await expect(
     page.getByRole("heading", {
       name: "Design system catalog & portfolio showcase",

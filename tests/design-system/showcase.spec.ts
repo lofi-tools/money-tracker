@@ -162,7 +162,7 @@ test("hidden/scaled modes cover visible text, attributes and details without mas
         .join(" "),
     );
   expect(attributes).not.toMatch(
-    /\$1,000|\$500|50 ETH|100 ETH|50000000000000000000/,
+    /\$1\u202f000|\$500|50 ETH|100 ETH|50000000000000000000/,
   );
   await page.getByLabel("Privacy", { exact: true }).selectOption("scaled");
   await expect(

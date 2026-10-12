@@ -2,7 +2,12 @@ import { Show } from "solid-js";
 import type { JSX } from "solid-js";
 import { css } from "../../styled-system/css";
 import { badge } from "../../styled-system/recipes";
-import { formatMoney, formatQuantity, formatRate } from "../formatting/index";
+import {
+  formatMoney,
+  formatQuantity,
+  formatCompactQuantity,
+  formatRate,
+} from "../formatting/index";
 import type { ExactValue } from "../formatting/index";
 import { usePrivacy } from "./theme";
 import { IconButton } from "./controls";
@@ -32,28 +37,30 @@ export function WarningButton(props: {
 export function Money(props: {
   value: ExactValue;
   currency?: string;
-  negative?: boolean;
   class?: string;
 }) {
   const privacy = usePrivacy();
+  const display = () =>
+    formatMoney(props.value, props.currency ?? "USD", privacy());
   return (
     <span
       class={[
         css({ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }),
-        props.negative ? css({ color: "danger" }) : "",
+        display().startsWith("−") ? css({ color: "danger" }) : "",
         props.class,
       ]
         .filter(Boolean)
         .join(" ")}
       aria-label={privacy().mode === "hidden" ? "Amount hidden" : undefined}
     >
-      {formatMoney(props.value, props.currency ?? "USD", privacy())}
+      {display()}
     </span>
   );
 }
 export function Quantity(props: {
   units: string;
   scale: number;
+  exact?: boolean;
   asset?: string;
   class?: string;
 }) {
@@ -68,7 +75,9 @@ export function Quantity(props: {
         .join(" ")}
       aria-label={privacy().mode === "hidden" ? "Quantity hidden" : undefined}
     >
-      {formatQuantity(props.units, props.scale, privacy())}
+      {props.exact
+        ? formatQuantity(props.units, props.scale, privacy())
+        : formatCompactQuantity(props.units, props.scale, privacy())}
       <Show when={props.asset}>
         <span> {props.asset}</span>
       </Show>

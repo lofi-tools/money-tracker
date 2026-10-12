@@ -39,7 +39,7 @@ export function NavigationEntry(props: {
         onClick={props.onSelect}
         class={css({
           display: "grid",
-          gridTemplateColumns: "32px 1fr auto",
+          gridTemplateColumns: "32px minmax(0, 1fr) auto",
           alignItems: "center",
           gap: "3",
           p: "3",
@@ -85,16 +85,22 @@ export function NavigationEntry(props: {
               {props.secondary}
             </span>
           </Show>
+          <Show when={props.rate}>
+            <span
+              class={css({
+                fontSize: "xs",
+                color: "muted",
+                whiteSpace: "nowrap",
+              })}
+            >
+              {props.rate}
+            </span>
+          </Show>
         </span>
         <span class={css({ display: "grid", gap: "1", textAlign: "right" })}>
           <span class={css({ fontSize: "sm", fontWeight: "700" })}>
             {props.value}
           </span>
-          <Show when={props.rate}>
-            <span class={css({ fontSize: "xs", color: "muted" })}>
-              {props.rate}
-            </span>
-          </Show>
         </span>
       </button>
       <Show when={props.warning}>

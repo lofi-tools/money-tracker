@@ -318,3 +318,14 @@ body {
 .main-pane .settings {
   max-width: 560px;
 }
+
+.nav-figures {
+  display: grid;
+  gap: 3px;
+}
+.nav-quantity {
+  font-size: var(--mt-font-sizes-xs);
+  font-weight: 400;
+  color: var(--mt-colors-muted);
+  overflow-wrap: anywhere;
+}

@@ -443,7 +443,23 @@ function Body(props: {
                         !options() && key(entry.selection) === key(selection())
                       }
                       onSelect={() => select(entry.selection)}
-                      value={money(entry.summary.current_value)}
+                      value={
+                        <span class="nav-figures">
+                          {money(entry.summary.current_value)}
+                          <For each={entry.quantities}>
+                            {([role, q]) => (
+                              <span class="nav-quantity">
+                                <Quantity
+                                  units={q.units}
+                                  scale={q.scale}
+                                  asset={q.asset_id}
+                                />
+                                {role === "liability" ? " borrowed" : ""}
+                              </span>
+                            )}
+                          </For>
+                        </span>
+                      }
                       rate={<Apy figure={entry.summary.current_apy} />}
                       warning={
                         entry.issues.length

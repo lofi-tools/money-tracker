@@ -4,6 +4,10 @@ Status: **stages 1–8 implemented; stage 9 remains proposed and deferred**. The
 
 The master todo covers the agreed feature scope. What it lacked was an explicit implementation order, a minimum schema/query slice, and intermediate working milestones. Follow the [desktop contract and acceptance scenarios](../spec/desktop-app.md), [design-system package plan](../spec/web-design-system.md), and [data-model proposal](../spec/data-model-proposal.md).
 
+## Immediate follow-up priority
+
+Before further UI stages, complete the ordered Nexo evidence/rate and Binance/Kraken visibility fixes in [master todo section 0](master-todo.md#immediate-provider-wiring-fixes--ordered-proposed). They remain proposed. Work one task at a time, present tested changes for user approval, then commit before proceeding to the next task. The Nexo catalogue scraper is a later follow-up.
+
 ## Starting point and boundaries (before stage 1)
 
 | Current evidence | Consequence for the first UI |

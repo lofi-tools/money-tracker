@@ -1,4 +1,5 @@
 //! Map Nexo's parsed CSV transactions into the core ledger.
+pub mod term_inference;
 use lib_core::Units;
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 

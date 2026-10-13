@@ -41,6 +41,7 @@ Documentation is organized by purpose. Specifications describe implemented contr
 - [Kraken connection setup, OAuth evidence and history/export strategy](findings/kraken-connection.md)
 - [Ethereum contract resolution, public indexer access and remaining blockers](findings/evm-contract-resolution.md)
 - [EVM export inventory and live acquisition evidence](findings/evm-wallet-inventory.md)
+- [Nexo transaction inference: locked allocations, reward attribution and limits](findings/nexo-transaction-inference.md)
 - [Shared provider-guide and diagnostic conventions](findings/provider-diagnostics.md)
 - [Consolidated implementation decisions and documentation corrections](findings/implementation-history.md)
 

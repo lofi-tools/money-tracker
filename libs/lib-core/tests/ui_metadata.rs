@@ -825,3 +825,54 @@ fn verification_is_exact_scoped_and_stale_after_ledger_or_policy_changes() -> Re
     );
     Ok(())
 }
+
+#[test]
+fn latest_quotes_reuse_legacy_history_without_age_limit_or_fx_guessing() -> Result<()> {
+    let store = Store::in_memory()?;
+    fixture(&store)?;
+    let asset = AssetId::str("BTC");
+    let quote = AssetId::str("USD");
+    let portfolio = PortfolioId::from(DEFAULT_PORTFOLIO);
+    store.save_price(&history::AssetPricePoint {
+        datetime: time(1),
+        asset_id: asset.clone(),
+        vs_asset_id: quote.clone(),
+        price: 100.25,
+    })?;
+    let selected = store
+        .selected_price(&portfolio, &asset, &quote, time(31))?
+        .unwrap();
+    assert_eq!(selected.price.as_str(), "100.25");
+    assert_eq!(selected.as_of, time(1));
+    assert!(selected.evidence_id.unwrap().starts_with("legacy-price:"));
+    assert!(
+        store
+            .selected_price(&portfolio, &asset, &AssetId::str("EUR"), time(31))?
+            .is_none()
+    );
+    store.save_price_evidence(&PriceEvidence {
+        id: "exact-newer".into(),
+        asset: asset.clone(),
+        quote: quote.clone(),
+        as_of: time(2),
+        price: "101.123456789123456789".parse()?,
+        evidence: evidence(2),
+    })?;
+    assert_eq!(
+        store
+            .selected_price(&portfolio, &asset, &quote, time(31))?
+            .unwrap()
+            .price
+            .as_str(),
+        "101.123456789123456789"
+    );
+    assert_eq!(
+        store
+            .selected_price(&portfolio, &asset, &quote, time(1))?
+            .unwrap()
+            .price
+            .as_str(),
+        "100.25"
+    );
+    Ok(())
+}

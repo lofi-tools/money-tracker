@@ -33,6 +33,7 @@ export interface QuantityValue {
   scale: number;
 }
 export interface Entry {
+  estimated_current_value?: Figure<MoneyValue> | null;
   selection: Selection;
   name: string;
   ticker: string | null;

@@ -17,6 +17,9 @@ use nexo_csv::{NexoCsv, NexoCsvError, NexoCsvFile, NexoTx, TransactionType};
 use snafu::{ResultExt, Snafu};
 
 const CSV_DECIMALS: u8 = 8;
+/// Completion marker for the exact savings/credit-domain mapping. Legacy
+/// NEXO/file-hash markers remain intact but cannot suppress this corrected replay.
+pub const NEXO_LEDGER_SOURCE: &str = "NEXO:ledger:v2";
 
 #[derive(Debug, Snafu)]
 pub enum NexoError {
@@ -85,7 +88,10 @@ impl NexoSvc {
             path: self.path_to_csv.clone(),
         })?;
         let hash = &file.sha256_hex;
-        if store.has_imported_file("NEXO", hash).context(StoreSnafu)? {
+        if store
+            .has_imported_file(NEXO_LEDGER_SOURCE, hash)
+            .context(StoreSnafu)?
+        {
             return Ok(NexoImportOutcome::AlreadyImported);
         }
         let rows = file.parse().context(ReadCsvSnafu {
@@ -111,7 +117,7 @@ impl NexoSvc {
         }
         let imported = store
             .save_file_import_with_progress(
-                "NEXO",
+                NEXO_LEDGER_SOURCE,
                 hash,
                 &asset_positions,
                 &transactions,
@@ -458,6 +464,97 @@ mod tests {
         assert!((amounts.remove("ETH").unwrap_or(0.0) - 1.5).abs() < 1e-8);
         assert!((amounts.remove("NEXO").unwrap_or(0.0) - 141.0).abs() < 1e-8);
         assert!(amounts.is_empty(), "unexpected assets: {amounts:?}");
+        Ok(())
+    }
+
+    #[test]
+    fn versioned_replay_repairs_legacy_card_legs_once_and_preserves_metadata() -> anyhow::Result<()>
+    {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("nexo.csv");
+        let header = "Transaction,Type,Input Currency,Input Amount,Output Currency,Output Amount,USD Equivalent,Fee,Fee Currency,Details,Date / Time (UTC)\n";
+        let csv = concat!(
+            "draw,Exchange Credit,USDX,-20,xUSD,20,$20,-,-,drawdown,2025-01-02 00:00:00\n",
+            "duplicate,Credit Card Withdrawal Credit,USDX,-20,xUSD,20,$20,-,-,draw record,2025-01-02 00:00:00\n",
+            "spend,Nexo Card Purchase,xUSD,-20,xUSD,20,$20,-,-,merchant spend,2025-01-02 00:00:00\n",
+        );
+        std::fs::write(&path, format!("{header}{csv}"))?;
+        let hash = NexoCsvFile::read(&path)?.sha256_hex;
+        let store = Store::in_memory()?;
+        let at = DateTime::parse_from_rfc3339("2025-01-02T00:00:00Z")?.to_utc();
+        store.save_file_import_with_progress(
+            "NEXO",
+            &hash,
+            &[
+                (
+                    "NEXO:USDX".into(),
+                    AssetId::str("USDX"),
+                    8,
+                    PositionRole::Asset,
+                ),
+                (
+                    "NEXO:xUSD".into(),
+                    AssetId::str("xUSD"),
+                    8,
+                    PositionRole::Asset,
+                ),
+            ],
+            &[(
+                "NEXO:draw".into(),
+                Transaction {
+                    datetime: at,
+                    inputs: vec![TxnEffect {
+                        datetime: at,
+                        position_id: "NEXO:USDX".into(),
+                        amount: units(Decimal::from(20))?,
+                    }],
+                    outputs: vec![TxnEffect {
+                        datetime: at,
+                        position_id: "NEXO:xUSD".into(),
+                        amount: units(Decimal::from(20))?,
+                    }],
+                },
+            )],
+            |_, _| {},
+        )?;
+        let account = lib_core::AccountId::from("legacy:nexo");
+        store.set_account_jurisdiction(&account, "GB", at)?;
+        let before = store.account_position_metadata(&account)?;
+        let service = NexoSvc::from_path(&path);
+        assert_eq!(service.import_into(&store)?, NexoImportOutcome::Imported(3));
+        assert!(store.has_imported_file("NEXO", &hash)?);
+        assert!(store.has_imported_file(NEXO_LEDGER_SOURCE, &hash)?);
+        for (id, asset, scale, role) in before {
+            assert!(
+                store
+                    .account_position_metadata(&account)?
+                    .contains(&(id, asset, scale, role))
+            );
+        }
+        assert_eq!(
+            store.account_jurisdiction(&account)?.unwrap().country_code,
+            "GB"
+        );
+        let balances = store.account_balances_at(&account, at)?;
+        assert_eq!(
+            balances
+                .iter()
+                .find(|b| b.position_id.0 == "NEXO-CREDIT:xUSD")
+                .unwrap()
+                .amount,
+            units(Decimal::from(-20))?
+        );
+        assert!(
+            balances
+                .iter()
+                .filter(|b| b.position_id.0.starts_with("NEXO:"))
+                .all(|b| b.amount == Units::from(0))
+        );
+        assert_eq!(
+            service.import_into(&store)?,
+            NexoImportOutcome::AlreadyImported
+        );
+        assert_eq!(store.account_balances_at(&account, at)?, balances);
         Ok(())
     }
 
@@ -824,7 +921,7 @@ mod tests {
         let service = NexoSvc::from_path(&path);
         assert_eq!(service.import_into(&store)?, NexoImportOutcome::Imported(1));
         let first_hash = NexoCsvFile::read(&path)?.sha256_hex;
-        assert!(store.has_imported_file("NEXO", &first_hash)?);
+        assert!(store.has_imported_file(NEXO_LEDGER_SOURCE, &first_hash)?);
         assert_eq!(
             service.import_into(&store)?,
             NexoImportOutcome::AlreadyImported
@@ -841,7 +938,7 @@ mod tests {
         std::fs::write(&path, &changed)?;
         assert_eq!(service.import_into(&store)?, NexoImportOutcome::Imported(1));
         let changed_hash = NexoCsvFile::read(&path)?.sha256_hex;
-        assert!(store.has_imported_file("NEXO", &changed_hash)?);
+        assert!(store.has_imported_file(NEXO_LEDGER_SOURCE, &changed_hash)?);
         let at = DateTime::<Utc>::from_timestamp(1735689600, 0).unwrap();
         assert_eq!(
             store.asset_amounts_at(at)?,
@@ -859,7 +956,7 @@ mod tests {
         let hash = NexoCsvFile::read(&path)?.sha256_hex;
         let store = Store::in_memory()?;
         assert!(NexoSvc::from_path(path).import_into(&store).is_err());
-        assert!(!store.has_imported_file("NEXO", &hash)?);
+        assert!(!store.has_imported_file(NEXO_LEDGER_SOURCE, &hash)?);
         Ok(())
     }
 

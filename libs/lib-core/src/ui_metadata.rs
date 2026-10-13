@@ -937,6 +937,34 @@ impl Store {
                 evidence_id: Some(p.id),
             })
             .collect();
+        // Legacy CLI quotes are approximate market inputs, never exact source evidence.
+        // Keep their timestamp and provenance; do not rewrite the historic table.
+        let legacy = self.connection.prepare(
+            "SELECT datetime, price FROM asset_prices WHERE asset_id=? AND vs_asset_id=? AND datetime<=? AND isfinite(price) AND price>=0 ORDER BY datetime DESC LIMIT 1",
+        )?.query_map(params![&asset.0, &quote.0, cutoff.naive_utc()], |row| {
+            Ok((row.get::<_, chrono::NaiveDateTime>(0)?, row.get::<_, f64>(1)?))
+        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        for (timestamp, value) in legacy {
+            let as_of = timestamp.and_utc();
+            if candidates.iter().any(|p| p.as_of == as_of) {
+                continue;
+            }
+            let Ok(price) = value.to_string().parse() else {
+                continue;
+            };
+            candidates.push(SelectedPrice {
+                price,
+                as_of,
+                updated_at: as_of,
+                pinned: false,
+                evidence_id: Some(format!(
+                    "legacy-price:{}:{}:{}",
+                    asset.0,
+                    quote.0,
+                    as_of.timestamp()
+                )),
+            });
+        }
         let state = self.local_state(
             portfolio,
             &LocalTarget::Price {

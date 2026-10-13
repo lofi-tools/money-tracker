@@ -931,7 +931,7 @@ fn manual_quote_pin_reporting_currency_and_simple_apr_are_applied_exactly() -> R
     let p = app.portfolio_projection(eur)?;
     assert_eq!(amount(&p.overview.current_value), decimal("22"));
     assert_eq!(amount(&p.overview.net_annual_earnings), decimal("1.1"));
-    // Float price rows never become exact quote evidence.
+    // Float history supplies a labelled estimate without becoming exact evidence.
     s.save_prices(&[AssetPricePoint {
         datetime: t(19),
         asset_id: AssetId::str("TOKEN"),
@@ -940,10 +940,14 @@ fn manual_quote_pin_reporting_currency_and_simple_apr_are_applied_exactly() -> R
     }])?;
     let mut gbp = req();
     gbp.reporting_asset = AssetId::str("GBP");
-    assert!(matches!(
-        app.overview(gbp)?.current_value,
-        FigureDto::Unknown { .. }
-    ));
+    let estimate = app.portfolio_projection(gbp)?;
+    assert_eq!(amount(&estimate.overview.current_value), decimal("18"));
+    assert!(
+        s.price_evidence(&AssetId::str("TOKEN"), &AssetId::str("GBP"))?
+            .is_empty()
+    );
+    let wire = serde_json::to_string(&estimate)?;
+    assert!(wire.contains("legacy-price-estimate"));
     Ok(())
 }
 #[test]
@@ -1038,6 +1042,64 @@ fn missing_investment_rates_have_explicit_zero_assumption_but_debt_does_not() ->
     let p = app.portfolio_projection(req())?;
     assert!(matches!(
         p.overview.estimated_current_apy,
+        FigureDto::Unknown { .. }
+    ));
+    Ok(())
+}
+
+#[test]
+fn asset_navigation_does_not_turn_negative_savings_into_debt() -> Result<()> {
+    let app = Application::from_store(Store::in_memory()?);
+    let s = app.store();
+    account(s, "a", "nexo")?;
+    pos(s, "a", "negative", "TOKEN", 2, PositionRole::Asset, "3")?;
+    s.save_account_import(
+        &AccountId::from("a"),
+        "fixture",
+        "withdrawal",
+        &[(
+            PositionId::from("negative"),
+            AssetId::str("TOKEN"),
+            2,
+            PositionRole::Asset,
+        )],
+        &[(
+            "withdrawal".into(),
+            Transaction {
+                datetime: t(2),
+                inputs: vec![TxnEffect {
+                    datetime: t(2),
+                    position_id: PositionId::from("negative"),
+                    amount: Units::from_decimal("6", 2)?,
+                }],
+                outputs: vec![],
+            },
+        )],
+        &[],
+    )?;
+    s.save_price_evidence(&PriceEvidence {
+        id: "quote".into(),
+        asset: AssetId::str("TOKEN"),
+        quote: AssetId::str("USD"),
+        as_of: t(1),
+        price: "2".parse()?,
+        evidence: source(1),
+    })?;
+    let p = app.portfolio_projection(req())?;
+    assert!(matches!(
+        p.assets[0].summary.current_value,
+        FigureDto::Unknown { .. }
+    ));
+    let estimate = p.assets[0].estimated_current_value.as_ref().unwrap();
+    assert!(matches!(estimate, FigureDto::Unknown { .. }));
+    assert!(
+        p.assets[0]
+            .issues
+            .iter()
+            .any(|i| i.code == "unexpected_balance_sign")
+    );
+    assert!(matches!(
+        p.overview.current_value,
         FigureDto::Unknown { .. }
     ));
     Ok(())

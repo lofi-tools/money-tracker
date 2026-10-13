@@ -40,3 +40,7 @@ Contract: [desktop app spec — implemented refresh lifecycle](../spec/desktop-a
 - Credentials must be in the app's environment. There is no in-app provider connection or CSV-import UI yet (deferred from this milestone), so Binance/EVM sources stay blocked and Nexo needs a configured export path.
 - A scheduled refresh on the database worker can still be slow if a provider returns a large Ledger/progress set; the tick itself is cheap and idle ticks do no work.
 - Cross-platform scheduler behaviour (sleep/timer accuracy on Windows, macOS App Nap-like throttling) remains part of stage 9 acceptance.
+
+## Initial missing-price fill
+
+The 13 October valuation refinement adds one exception to refresh-on-open being off: a never-attempted price source can fill missing reporting-currency quotes on first launch. It contacts only the public price source and only missing tracked assets. Existing quotes have no display expiry; failed acquisition retries on the configured interval instead of every restart. Account-provider refresh preferences and strict reconciliation are unchanged. See [latest price estimates](../spec/portfolio-queries.md#latest-stored-price-estimates-13-october-2026).

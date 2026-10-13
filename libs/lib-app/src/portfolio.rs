@@ -68,6 +68,9 @@ pub enum Selection {
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NavigationEntry {
+    /// Display-only signed valuation; never relaxes strict summary/reconciliation.
+    #[serde(default)]
+    pub estimated_current_value: Option<FigureDto<CalculatedMoney>>,
     pub selection: Selection,
     pub name: String,
     pub ticker: Option<String>,
@@ -1039,6 +1042,15 @@ impl Application {
         q: &SelectedPrice,
     ) -> Result<Vec<EvidenceDto>> {
         if let Some(id) = &q.evidence_id {
+            if id.starts_with("legacy-price:") {
+                return Ok(vec![EvidenceDto::Provider {
+                    source: "legacy-price-estimate".into(),
+                    reference: "Stored CLI market quote (binary-float input; approximate estimate)"
+                        .into(),
+                    observed_at: q.as_of,
+                    effective_from: Some(q.as_of),
+                }]);
+            }
             return Ok(self
                 .store()
                 .price_evidence(asset, quote)?
@@ -1390,7 +1402,49 @@ fn nav(
             }
         }
     }
+    let estimated_current_value = matches!(&selection, Selection::Asset(_)).then(|| {
+        sum(
+            &r.reporting_asset,
+            group
+                .iter()
+                .map(|h| {
+                    // A negative savings balance is a mapping/history problem,
+                    // not evidence of borrowing. Only liability roles create debt.
+                    if h.issues.iter().any(|i| i.code == "unexpected_balance_sign") {
+                        return unknown(h.issues.clone());
+                    }
+                    let price = if h.quantity.asset_id == r.reporting_asset {
+                        Some(ExactRatio::integer(1))
+                    } else {
+                        h.price.as_ref().map(|p| ExactRatio::from_decimal(&p.price))
+                    };
+                    let Some(price) = price else {
+                        return unknown(h.issues.clone());
+                    };
+                    let units = if h.role == PositionRole::Liability {
+                        lib_core::Units::from(0) - h.quantity.units.abs()
+                    } else {
+                        h.quantity.units.clone()
+                    };
+                    let value = money(
+                        &r.reporting_asset,
+                        ExactRatio::quantity(&units, h.quantity.scale).mul(&price),
+                    );
+                    if complete(&h.value) {
+                        known(value, evidence(&h.value))
+                    } else {
+                        FigureDto::Partial {
+                            value,
+                            evidence: evidence(&h.value),
+                            issues: h.issues.clone(),
+                        }
+                    }
+                })
+                .collect(),
+        )
+    });
     NavigationEntry {
+        estimated_current_value,
         selection,
         name,
         ticker,
@@ -1401,10 +1455,18 @@ fn nav(
 }
 fn sort_nav(ns: &mut [NavigationEntry]) {
     ns.sort_by(|a, b| {
-        amount(&b.summary.current_value)
-            .cmp(&amount(&a.summary.current_value))
-            .then(a.name.cmp(&b.name))
-            .then_with(|| format!("{:?}", a.selection).cmp(&format!("{:?}", b.selection)))
+        amount(
+            b.estimated_current_value
+                .as_ref()
+                .unwrap_or(&b.summary.current_value),
+        )
+        .cmp(&amount(
+            a.estimated_current_value
+                .as_ref()
+                .unwrap_or(&a.summary.current_value),
+        ))
+        .then(a.name.cmp(&b.name))
+        .then_with(|| format!("{:?}", a.selection).cmp(&format!("{:?}", b.selection)))
     });
 }
 fn node_id(t: &AllocationTarget) -> String {

@@ -106,7 +106,10 @@ impl CoinGeckoSvc {
             if let Ok(Some(id)) = coin_id(&asset.0) {
                 ids.insert(id.to_string());
             }
-            if matches!(asset.0.as_str(), "GBP" | "GBPX" | "EUR" | "EURX") {
+            if matches!(
+                asset.0.as_str(),
+                "USD" | "USDX" | "xUSD" | "GBP" | "GBPX" | "EUR" | "EURX"
+            ) {
                 ids.insert("bitcoin".into());
             }
         }
@@ -120,7 +123,12 @@ impl CoinGeckoSvc {
                 ))
                 .await?
         };
-        exact_quotes(assets, &raw, Utc::now())
+        let now = Utc::now();
+        let mut quotes = Vec::new();
+        for currency in ["USD", "GBP", "EUR"] {
+            quotes.extend(exact_quotes_in(assets, &raw, now, currency)?);
+        }
+        Ok(quotes)
     }
 
     pub async fn fetch_historical_prices(
@@ -247,12 +255,12 @@ fn coin_id(ticker: &str) -> anyhow::Result<Option<&'static str>> {
     Ok(match ticker {
         "USD" | "USDX" | "xUSD" | "GBP" | "GBPX" | "EUR" | "EURX" => None,
         "BTC" => Some("bitcoin"),
-        "ETH" => Some("ethereum"),
-        "BNB" => Some("binancecoin"),
+        "ETH" | "eip155:1/native" | "eip155:42161/native" | "eip155:324/native" => Some("ethereum"),
+        "BNB" | "eip155:56/native" => Some("binancecoin"),
         "NEXO" => Some("nexo"),
         "NEAR" => Some("near"),
         "DOT" => Some("polkadot"),
-        "POL" => Some("polygon-ecosystem-token"),
+        "POL" | "eip155:137/native" => Some("polygon-ecosystem-token"),
         "USDT" => Some("tether"),
         "USDC" => Some("usd-coin"),
         "ETHW" => Some("ethereum-pow-iou"),
@@ -260,10 +268,20 @@ fn coin_id(ticker: &str) -> anyhow::Result<Option<&'static str>> {
     })
 }
 
+#[cfg(test)]
 fn exact_quotes(
     assets: &[AssetId],
     raw: &BTreeMap<String, BTreeMap<String, serde_json::Number>>,
     now: DateTime<Utc>,
+) -> anyhow::Result<Vec<lib_core::ui_metadata::PriceEvidence>> {
+    exact_quotes_in(assets, raw, now, "USD")
+}
+
+fn exact_quotes_in(
+    assets: &[AssetId],
+    raw: &BTreeMap<String, BTreeMap<String, serde_json::Number>>,
+    now: DateTime<Utc>,
+    quote: &str,
 ) -> anyhow::Result<Vec<lib_core::ui_metadata::PriceEvidence>> {
     use lib_core::{
         ExactDecimal,
@@ -274,17 +292,18 @@ fn exact_quotes(
     let mut out = Vec::new();
     for asset in assets {
         // Reporting asset is already valued at exactly one by the query model.
-        if asset.0 == "USD" {
+        if asset.0 == quote {
             continue;
         }
         let (price, as_of, reference) = match asset.0.as_str() {
-            "USDX" | "xUSD" => (
+            "USDX" | "xUSD" if quote == "USD" => (
                 "1".to_string(),
                 now,
                 "reviewed USD-denominated provider unit".to_string(),
             ),
             symbol => {
                 let fiat = match symbol {
+                    "USD" | "USDX" | "xUSD" => Some("usd"),
                     "GBP" | "GBPX" => Some("gbp"),
                     "EUR" | "EURX" => Some("eur"),
                     _ => None,
@@ -305,10 +324,12 @@ fn exact_quotes(
                 else {
                     continue;
                 };
-                if timestamp > now || now - timestamp > chrono::Duration::days(1) {
+                if timestamp > now {
                     continue;
                 }
-                let Some(usd) = row.get("usd") else { continue };
+                let Some(usd) = row.get(&quote.to_lowercase()) else {
+                    continue;
+                };
                 let parse = |n: &serde_json::Number| -> anyhow::Result<Decimal> {
                     let text = n.to_string();
                     Ok(if text.contains(['e', 'E']) {
@@ -335,22 +356,22 @@ fn exact_quotes(
                             .normalize()
                             .to_string(),
                         format!(
-                            "simple/price:{id}:usd/{currency}; decimal FX division up to 28 places; provider fiat unit mapping"
+                            "simple/price:{id}:{quote}/{currency}; decimal FX division up to 28 places; provider fiat unit mapping"
                         ),
                     )
                 } else {
                     (
                         usd.normalize().to_string(),
-                        format!("simple/price:{id}:usd"),
+                        format!("simple/price:{id}:{quote}"),
                     )
                 };
                 (price, timestamp, reference)
             }
         };
         out.push(PriceEvidence {
-            id: format!("coingecko:{}:USD:{}", asset.0, as_of.timestamp()),
+            id: format!("coingecko:{}:{quote}:{}", asset.0, as_of.timestamp()),
             asset: asset.clone(),
-            quote: AssetId::str("USD"),
+            quote: AssetId::str(quote),
             as_of,
             price: ExactDecimal::from_str(&price)?,
             evidence: SourceEvidence {
@@ -389,7 +410,49 @@ mod exact_tests {
         Ok(())
     }
     #[test]
-    fn exact_current_quotes_keep_decimals_and_skip_unknown_missing_stale_assets()
+    fn native_chain_units_have_reviewed_price_mappings_without_merging_identities() {
+        assert_eq!(coin_id("eip155:1/native").unwrap(), Some("ethereum"));
+        assert_eq!(coin_id("eip155:42161/native").unwrap(), Some("ethereum"));
+        assert_eq!(coin_id("eip155:324/native").unwrap(), Some("ethereum"));
+        assert_eq!(coin_id("eip155:56/native").unwrap(), Some("binancecoin"));
+        assert_eq!(
+            coin_id("eip155:137/native").unwrap(),
+            Some("polygon-ecosystem-token")
+        );
+        assert!(coin_id("eip155:1/erc20:unknown").is_err());
+    }
+    #[test]
+    fn quotes_follow_reporting_currency_and_keep_old_source_dates() -> anyhow::Result<()> {
+        let now = DateTime::from_timestamp(1_800_000_000, 0).unwrap();
+        let raw = serde_json::from_str(
+            r#"{"ethereum":{"usd":2000,"eur":1800,"gbp":1500,"last_updated_at":1700000000},"bitcoin":{"usd":60000,"eur":50000,"gbp":40000,"last_updated_at":1700000000}}"#,
+        )?;
+        let quotes = exact_quotes_in(
+            &[
+                AssetId::str("ETH"),
+                AssetId::str("USD"),
+                AssetId::str("EURX"),
+            ],
+            &raw,
+            now,
+            "EUR",
+        )?;
+        assert_eq!(quotes[0].price.as_str(), "1800");
+        assert_eq!(quotes[0].quote.0, "EUR");
+        assert_eq!(quotes[0].as_of.timestamp(), 1700000000);
+        assert!(quotes[1].price.as_str().starts_with("0.833333"));
+        assert_eq!(quotes[2].price.as_str(), "1");
+        let future = exact_quotes_in(
+            &[AssetId::str("ETH")],
+            &raw,
+            DateTime::from_timestamp(1600000000, 0).unwrap(),
+            "EUR",
+        )?;
+        assert!(future.is_empty());
+        Ok(())
+    }
+    #[test]
+    fn exact_current_quotes_keep_decimals_and_skip_unknown_missing_future_assets()
     -> anyhow::Result<()> {
         let now = DateTime::from_timestamp(1_800_000_000, 0).unwrap();
         let raw = serde_json::from_str(
@@ -405,7 +468,7 @@ mod exact_tests {
             &raw,
             now,
         )?;
-        assert_eq!(quotes.len(), 1);
+        assert_eq!(quotes.len(), 2);
         assert_eq!(quotes[0].price.as_str(), "1234.567890123456789");
         assert_eq!(quotes[0].as_of, now);
         Ok(())

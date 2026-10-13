@@ -680,7 +680,10 @@ function Body(props: {
                       onSelect={() => select(entry.selection)}
                       value={
                         <span class="nav-figures">
-                          {money(entry.summary.current_value)}
+                          {money(
+                            entry.estimated_current_value ??
+                              entry.summary.current_value,
+                          )}
                           <For each={entry.quantities}>
                             {([role, q]) => (
                               <span class="nav-quantity">

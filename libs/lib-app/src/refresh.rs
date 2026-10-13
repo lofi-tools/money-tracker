@@ -31,6 +31,7 @@ pub enum RefreshTrigger {
 pub enum RunReason {
     Manual,
     RefreshOnOpen,
+    MissingPrices,
     MissedSchedule,
     Scheduled,
 }
@@ -52,6 +53,8 @@ pub enum Acquisition {
 /// One configured refresh source with its stored state and prerequisite.
 #[derive(Clone, Debug)]
 pub struct Candidate {
+    /// Held assets without any usable stored reporting-currency quote.
+    pub missing_prices: Vec<AssetId>,
     pub source: String,
     pub label: String,
     pub state: RefreshState,
@@ -119,14 +122,34 @@ pub fn candidates(
     let mut candidates = Vec::new();
     let mut assets = Vec::new();
     for account in &accounts {
-        for (_, asset, _, _) in store.account_position_metadata(&account.id)? {
-            if asset != *reporting_asset && !assets.contains(&asset) {
+        for (_, asset, _, role) in store.account_position_metadata(&account.id)? {
+            if !matches!(
+                role,
+                lib_core::PositionRole::Asset | lib_core::PositionRole::Liability
+            ) {
+                continue;
+            }
+            if asset != *reporting_asset
+                && !assets.contains(&asset)
+                && (role == lib_core::PositionRole::Liability
+                    || !store.asset_is_excluded(&account.id, &asset)?)
+            {
                 assets.push(asset);
             }
         }
     }
     if !assets.is_empty() {
+        let mut missing_prices = Vec::new();
+        for asset in &assets {
+            if store
+                .selected_price(portfolio, asset, reporting_asset, Utc::now())?
+                .is_none()
+            {
+                missing_prices.push(asset.clone());
+            }
+        }
         candidates.push(Candidate {
+            missing_prices,
             source: PRICES_SOURCE.into(),
             label: format!("Current prices ({})", reporting_asset.0),
             state: store.refresh_state(portfolio, PRICES_SOURCE)?,
@@ -146,6 +169,7 @@ pub fn candidates(
     if nexo_csv.is_some() || accounts.iter().any(|account| is_provider(account, "NEXO")) {
         let source = provider_source("NEXO");
         candidates.push(Candidate {
+            missing_prices: Vec::new(),
             label: "Nexo export".into(),
             state: store.refresh_state(portfolio, &source)?,
             acquisition: usable.map(|path| Acquisition::Nexo {
@@ -161,6 +185,7 @@ pub fn candidates(
         if is_provider(account, "kraken") {
             let source = format!("account:{}", account.id.0);
             candidates.push(Candidate {
+            missing_prices: Vec::new(),
                 label: format!("Kraken · {}", account.label),
                 source: source.clone(),
                 state: store.refresh_state(portfolio, &source)?,
@@ -174,6 +199,7 @@ pub fn candidates(
             });
         } else if is_provider(account, "binance") {
             candidates.push(Candidate {
+            missing_prices: Vec::new(),
                 source: format!("account:{}", account.id.0),
                 label: format!("Binance · {}", account.label),
                 state: store.refresh_state(portfolio, &format!("account:{}", account.id.0))?,
@@ -184,6 +210,7 @@ pub fn candidates(
             });
         } else if is_provider(account, "evm") {
             candidates.push(Candidate {
+            missing_prices: Vec::new(),
                 source: format!("account:{}", account.id.0),
                 label: format!("EVM · {}", account.label),
                 state: store.refresh_state(portfolio, &format!("account:{}", account.id.0))?,
@@ -217,7 +244,7 @@ pub fn kraken_cache_path(cache_dir: &Path, account: &AccountId) -> PathBuf {
 ///
 /// A source that was never scheduled starts its interval on the next launch or
 /// scheduled pass instead of contacting anything, so opening the app does not
-/// refresh unless the user enabled refresh-on-open. An intervening launch after
+/// refresh unless enabled, except for a first missing-price fill. An intervening launch after
 /// a missed interval performs exactly one catch-up run.
 pub fn plan(
     portfolio: PortfolioId,
@@ -231,6 +258,7 @@ pub fn plan(
         .into_iter()
         .map(|candidate| {
             let Candidate {
+                missing_prices,
                 source,
                 label,
                 state,
@@ -250,7 +278,11 @@ pub fn plan(
             }
             let due = state.next_due.is_some_and(|next| next <= now);
             let unscheduled = state.next_due.is_none();
+            let bootstrap = trigger == RefreshTrigger::Launch
+                && !missing_prices.is_empty()
+                && state.last_attempt.is_none();
             let action = match trigger {
+                RefreshTrigger::Launch if bootstrap => PlanAction::Run(RunReason::MissingPrices),
                 RefreshTrigger::Manual => PlanAction::Run(RunReason::Manual),
                 RefreshTrigger::Launch if refresh_on_open => {
                     PlanAction::Run(RunReason::RefreshOnOpen)
@@ -261,6 +293,17 @@ pub fn plan(
                 RefreshTrigger::Scheduled if unscheduled => PlanAction::StartSchedule,
                 RefreshTrigger::Scheduled if due => PlanAction::Run(RunReason::Scheduled),
                 RefreshTrigger::Scheduled => PlanAction::Skip,
+            };
+            let acquisition = if bootstrap {
+                acquisition.map(|a| match a {
+                    Acquisition::Prices { quote, .. } => Acquisition::Prices {
+                        assets: missing_prices,
+                        quote,
+                    },
+                    other => other,
+                })
+            } else {
+                acquisition
             };
             let acquisition = matches!(action, PlanAction::Run(_))
                 .then_some(acquisition)
@@ -597,6 +640,7 @@ mod tests {
     }
     fn source(source: &str, next_due: Option<DateTime<Utc>>) -> Candidate {
         Candidate {
+            missing_prices: Vec::new(),
             source: source.into(),
             label: source.into(),
             state: RefreshState {
@@ -608,6 +652,47 @@ mod tests {
             }),
             prerequisite: None,
         }
+    }
+    #[test]
+    fn missing_prices_bootstrap_only_prices_once_and_preserve_provider_schedule() {
+        let now = at(1_800_000_000);
+        let mut prices = source(PRICES_SOURCE, None);
+        prices.missing_prices = vec![AssetId::str("ETH")];
+        prices.acquisition = Some(Acquisition::Prices {
+            assets: vec![AssetId::str("ETH"), AssetId::str("BTC")],
+            quote: AssetId::str("EUR"),
+        });
+        let first = plan(
+            DEFAULT_PORTFOLIO.into(),
+            RefreshTrigger::Launch,
+            false,
+            DAY,
+            vec![prices.clone(), source("provider:nexo", None)],
+            now,
+        );
+        assert_eq!(
+            actions(&first),
+            vec![
+                (PRICES_SOURCE, PlanAction::Run(RunReason::MissingPrices)),
+                ("provider:nexo", PlanAction::StartSchedule)
+            ]
+        );
+        let Some(Acquisition::Prices { assets, quote }) = &first.items[0].acquisition else {
+            panic!("missing prices acquisition")
+        };
+        assert_eq!(assets, &[AssetId::str("ETH")]);
+        assert_eq!(quote.0, "EUR");
+        prices.state.last_attempt = Some(now);
+        prices.state.next_due = Some(now + Duration::days(1));
+        let retry = plan(
+            DEFAULT_PORTFOLIO.into(),
+            RefreshTrigger::Launch,
+            false,
+            DAY,
+            vec![prices],
+            now,
+        );
+        assert_eq!(actions(&retry), vec![(PRICES_SOURCE, PlanAction::Skip)]);
     }
     fn actions(plan: &RefreshPlan) -> Vec<(&str, PlanAction)> {
         plan.items
@@ -837,6 +922,7 @@ mod tests {
         ["ok", "broken"]
             .into_iter()
             .map(|source| Candidate {
+                missing_prices: Vec::new(),
                 source: source.into(),
                 label: source.into(),
                 state: store.refresh_state(portfolio, source).unwrap(),

@@ -16,7 +16,7 @@ pub struct Args {
     #[arg(long, env = "APP_CACHE_DIR")]
     pub cache_dir: Option<PathBuf>,
 
-    /// Data directory
+    /// Portfolio directory (Unix default: ~/.data/money-tracker; overridden by APP_DATA_DIR)
     #[arg(short, long, env = "APP_DATA_DIR")]
     pub data_dir: Option<PathBuf>,
 

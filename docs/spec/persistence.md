@@ -20,6 +20,7 @@
 | `balance_observations` | Independent source/hash/position/timestamp/amount evidence |
 | `asset_tracking_reviews` | Account/asset exclusion or restoration revisions, reason, evidence, review time; active exclusions derived from latest decisions |
 | `account_source_snapshots` | Immutable complete EVM JSON evidence keyed by account/source/import hash, including unresolved raw history |
+| `account_jurisdictions` | Locally declared account country and timestamp; separate from provider-imported account metadata |
 | `imported_files` | Source/content hash, transaction count, completion time; unique per source/hash |
 
 Portfolio/account persistence and scoped queries are implemented as described in [the data model](data-model.md). Full provider/connection/product/held-investment metadata remains [future work](../todo/master-todo.md). Transactions and effects support stable-ID replacement and retrieval. Inputs persist negatively and outputs positively. An import marker must commit atomically with its ledger and related registrations/observations; a failed import leaves no successful marker. Independent balance observations are comparison evidence, never synthetic ledger effects.
@@ -43,6 +44,8 @@ Every `Store::open` and `Store::in_memory` must run **all** migrations in explic
 7. `007_ui_catalogue_hierarchy`: seed missing conservative display/hierarchy records; create separate products/subscriptions and unique position links.
 8. `008_ui_evidence`: create immutable exact rate/price/balance/verification payload stores without converting old prices or inferring rates.
 9. `009_ui_actions_policy_refresh`: create revisioned local state/actions, exact-asset spam, portfolio revisions and source refresh state; union global spam with existing account reviews.
+
+10. `010_account_jurisdictions`: create the optional per-account declaration table without assigning any country or changing existing accounts/effects/import hashes. See [Nexo catalogue/jurisdiction](nexo-rate-catalogue.md).
 
 Each step runs in its own transaction. Failure rolls back that step, stops startup, and reports its name. Earlier committed steps must remain safe to rerun on retry.
 

@@ -159,6 +159,7 @@ pub struct HoldingDetails {
 }
 #[derive(Serialize)]
 pub struct NodeDetails {
+    pub jurisdiction: Option<lib_core::AccountJurisdiction>,
     pub name: String,
     pub summary: Summary,
     pub original_name: Option<String>,
@@ -439,6 +440,10 @@ impl Session {
         Ok(NodeDetails {
             name: node.name.clone(),
             summary: node.summary.clone(),
+            jurisdiction: d
+                .original_account
+                .as_ref()
+                .and_then(|a| a.jurisdiction.clone()),
             original_name: d.original_account.as_ref().map(|a| a.label.clone()),
             source_reference: d.original_account.and_then(|a| a.source_reference),
             issues: node.issues.clone(),

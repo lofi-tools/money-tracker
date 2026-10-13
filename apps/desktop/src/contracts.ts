@@ -196,12 +196,17 @@ export interface AccountStructure {
   source_parent: string | null;
   mapping_version: number;
 }
+export interface AccountJurisdiction {
+  country_code: string;
+  declared_at: string;
+}
 export interface UiAccount {
   account: {
     id: string;
     provider_id: string;
     label: string;
     source_reference: string | null;
+    jurisdiction?: AccountJurisdiction | null;
   };
   structure: AccountStructure;
   parent: string | null;
@@ -279,6 +284,7 @@ export interface Holding {
   edits: HoldingEdits;
 }
 export interface Details {
+  jurisdiction?: AccountJurisdiction | null;
   name: string;
   summary: Summary;
   issues: Issue[];

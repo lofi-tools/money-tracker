@@ -1,0 +1,762 @@
+{
+  "version": 1,
+  "observed_on": "2026-10-13",
+  "review_after": "2026-10-27",
+  "minima_review_on": "2026-10-15",
+  "sources": {
+    "flex": {
+      "url": "https://support.nexo.com/article/how-to-earn-interest-with-flexible-savings",
+      "scope": "GB",
+      "observed_on": "2026-10-13"
+    },
+    "fixed": {
+      "url": "https://support.nexo.com/article/how-to-earn-interest-with-fixed-term-savings",
+      "scope": "GB",
+      "observed_on": "2026-10-13"
+    },
+    "tier": {
+      "url": "https://support.nexo.com/article/nexo-loyalty-program-explained",
+      "scope": "GB",
+      "observed_on": "2026-10-13"
+    },
+    "minima": {
+      "url": "https://nexoio.my.site.com/assets/assets-info",
+      "scope": null,
+      "observed_on": "2026-10-13"
+    },
+    "us-fixed": {
+      "url": "https://support.nexo.com/article/how-to-earn-interest-with-fixed-term-yield-us",
+      "scope": "US",
+      "observed_on": "2026-10-13"
+    },
+    "near": {
+      "url": "https://nexo.com/earn-crypto/near-protocol",
+      "scope": null,
+      "observed_on": "2026-10-13"
+    }
+  },
+  "rules": {
+    "country": "GB",
+    "account_minimum_usd": "5000",
+    "grace_days": 7,
+    "opt_in_days": 365,
+    "tier_thresholds": {
+      "silver": "0.01",
+      "gold": "0.05",
+      "platinum": "0.1"
+    },
+    "tier_denominator": "portfolio_excluding_nexo",
+    "nexo_payout_bonus_range": [
+      "0.0025",
+      "0.02"
+    ],
+    "fixed_months": {
+      "NEXO": [
+        3,
+        12
+      ],
+      "DOT": [
+        1,
+        6
+      ],
+      "XRP": [
+        1,
+        3
+      ],
+      "BCH": [
+        1,
+        3,
+        6
+      ],
+      "TRX": [
+        1,
+        3,
+        6
+      ],
+      "TIA": [
+        3
+      ],
+      "EURX": [
+        3
+      ],
+      "USDT": [
+        3
+      ],
+      "USDC": [
+        3
+      ],
+      "USDP": [
+        3
+      ],
+      "GBPX": [
+        3,
+        12
+      ],
+      "USDX": [
+        3,
+        12
+      ],
+      "EURC": [
+        3,
+        12
+      ],
+      "BTC": [
+        1
+      ],
+      "ETH": [
+        1
+      ],
+      "AAVE": [
+        1
+      ],
+      "ADA": [
+        1
+      ],
+      "APE": [
+        1
+      ],
+      "ATOM": [
+        1
+      ],
+      "AVAX": [
+        1
+      ],
+      "AXS": [
+        1
+      ],
+      "BNB": [
+        1
+      ],
+      "GRT": [
+        1
+      ],
+      "INJ": [
+        1
+      ],
+      "KSM": [
+        1
+      ],
+      "LINK": [
+        1
+      ],
+      "LTC": [
+        1
+      ],
+      "NEAR": [
+        1
+      ],
+      "OSMO": [
+        1
+      ],
+      "POL": [
+        1
+      ],
+      "S": [
+        1
+      ],
+      "SOL": [
+        1
+      ],
+      "GRAM": [
+        1
+      ],
+      "XLM": [
+        1
+      ],
+      "PAXG": [
+        1
+      ],
+      "XAUT": [
+        1
+      ]
+    },
+    "fixed_unavailable": [
+      "ARB",
+      "DOGE"
+    ],
+    "banded_assets": [
+      "BTC",
+      "ETH",
+      "XRP",
+      "PAXG",
+      "LINK"
+    ],
+    "minimum_tiers": {
+      "DOGE": "gold",
+      "GRAM": "gold",
+      "GRT": "silver",
+      "OSMO": "silver"
+    },
+    "credit_wallet_earners": [
+      "NEXO"
+    ],
+    "eea_unavailable": [
+      "USDT",
+      "USDP",
+      "PAXG"
+    ],
+    "fixed_minimum_grouping": null,
+    "flexible_cooldown_hours": [
+      24,
+      52
+    ],
+    "flexible_snapshot_utc": "23:59:59",
+    "flexible_payout_utc": [
+      "05:00",
+      "09:00"
+    ],
+    "fixed_payout_utc": [
+      "06:00",
+      "11:00"
+    ],
+    "fixed_max_terms_per_asset": 50
+  },
+  "minimum_observations": {
+    "BTC": {
+      "flexible": "0.00653907",
+      "fixed": "0.00644763"
+    },
+    "ETH": {
+      "flexible": "0.20492831",
+      "fixed": "0.20079398"
+    },
+    "NEXO": {
+      "flexible": "626.09245306",
+      "fixed": "616.7367224"
+    },
+    "BNB": {
+      "flexible": "0.69003359",
+      "fixed": "0.69404555"
+    },
+    "DOT": {
+      "flexible": "493.68477449",
+      "fixed": "504.79436015"
+    },
+    "NEAR": {
+      "flexible": "187.27224347",
+      "fixed": "204.67768079"
+    },
+    "POL": {
+      "flexible": "5165.42639613",
+      "fixed": "5207.93134613"
+    },
+    "EURX": {
+      "flexible": "436.13",
+      "fixed": "433.34"
+    },
+    "GBPX": {
+      "flexible": "373.5",
+      "fixed": "371.4"
+    },
+    "USDX": {
+      "flexible": "500",
+      "fixed": "500"
+    },
+    "USDT": {
+      "flexible": "500.48509",
+      "fixed": "500.129933"
+    },
+    "USDC": {
+      "flexible": "500.086845",
+      "fixed": "500.052425"
+    }
+  },
+  "rates": [
+    {
+      "id": "gb-flexible-btc",
+      "country": "GB",
+      "asset": "BTC",
+      "product": "flexible",
+      "fraction": "0.047",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "flex",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-flexible-eth",
+      "country": "GB",
+      "asset": "ETH",
+      "product": "flexible",
+      "fraction": "0.0525",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "flex",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-flexible-nexo",
+      "country": "GB",
+      "asset": "NEXO",
+      "product": "flexible",
+      "fraction": "0.03",
+      "kind": "documented_rate",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "flex",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-flexible-usdc",
+      "country": "GB",
+      "asset": "USDC",
+      "product": "flexible",
+      "fraction": "0.085",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "flex",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-flexible-usdt",
+      "country": "GB",
+      "asset": "USDT",
+      "product": "flexible",
+      "fraction": "0.095",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "flex",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-flexible-dot",
+      "country": "GB",
+      "asset": "DOT",
+      "product": "flexible",
+      "fraction": "0.13",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "flex",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-flexible-xrp",
+      "country": "GB",
+      "asset": "XRP",
+      "product": "flexible",
+      "fraction": "0.0625",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "flex",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-flexible-sol",
+      "country": "GB",
+      "asset": "SOL",
+      "product": "flexible",
+      "fraction": "0.07",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "flex",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-flexible-bnb",
+      "country": "GB",
+      "asset": "BNB",
+      "product": "flexible",
+      "fraction": "0.06",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "flex",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-flexible-pol",
+      "country": "GB",
+      "asset": "POL",
+      "product": "flexible",
+      "fraction": "0.0475",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "flex",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-flexible-near",
+      "country": "GB",
+      "asset": "NEAR",
+      "product": "flexible",
+      "fraction": null,
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "flex",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-flexible-eurx",
+      "country": "GB",
+      "asset": "EURX",
+      "product": "flexible",
+      "fraction": "0.065",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "flex",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-flexible-gbpx",
+      "country": "GB",
+      "asset": "GBPX",
+      "product": "flexible",
+      "fraction": "0.065",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "flex",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-flexible-usdx",
+      "country": "GB",
+      "asset": "USDX",
+      "product": "flexible",
+      "fraction": "0.065",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "flex",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-fixed-btc",
+      "country": "GB",
+      "asset": "BTC",
+      "product": "fixed",
+      "fraction": "0.057",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-fixed-eth",
+      "country": "GB",
+      "asset": "ETH",
+      "product": "fixed",
+      "fraction": "0.0625",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-fixed-nexo",
+      "country": "GB",
+      "asset": "NEXO",
+      "product": "fixed",
+      "fraction": "0.09",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-fixed-usdc",
+      "country": "GB",
+      "asset": "USDC",
+      "product": "fixed",
+      "fraction": "0.105",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-fixed-usdt",
+      "country": "GB",
+      "asset": "USDT",
+      "product": "fixed",
+      "fraction": "0.115",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-fixed-dot",
+      "country": "GB",
+      "asset": "DOT",
+      "product": "fixed",
+      "fraction": "0.15",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-fixed-xrp",
+      "country": "GB",
+      "asset": "XRP",
+      "product": "fixed",
+      "fraction": "0.0825",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-fixed-sol",
+      "country": "GB",
+      "asset": "SOL",
+      "product": "fixed",
+      "fraction": "0.08",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-fixed-bnb",
+      "country": "GB",
+      "asset": "BNB",
+      "product": "fixed",
+      "fraction": "0.07",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-fixed-pol",
+      "country": "GB",
+      "asset": "POL",
+      "product": "fixed",
+      "fraction": "0.0675",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-fixed-near",
+      "country": "GB",
+      "asset": "NEAR",
+      "product": "fixed",
+      "fraction": "0.08",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "near",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-fixed-eurx",
+      "country": "GB",
+      "asset": "EURX",
+      "product": "fixed",
+      "fraction": "0.105",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-fixed-gbpx",
+      "country": "GB",
+      "asset": "GBPX",
+      "product": "fixed",
+      "fraction": "0.105",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "gb-fixed-usdx",
+      "country": "GB",
+      "asset": "USDX",
+      "product": "fixed",
+      "fraction": "0.105",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "us-fixed-eth",
+      "country": "US",
+      "asset": "ETH",
+      "product": "fixed",
+      "fraction": "0.08",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "us-fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "us-fixed-nexo",
+      "country": "US",
+      "asset": "NEXO",
+      "product": "fixed",
+      "fraction": "0.12",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "us-fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    },
+    {
+      "id": "us-fixed-dot",
+      "country": "US",
+      "asset": "DOT",
+      "product": "fixed",
+      "fraction": "0.16",
+      "kind": "headline_maximum",
+      "basis": null,
+      "tier": null,
+      "payout": null,
+      "months": null,
+      "bands": null,
+      "source": "us-fixed",
+      "effective_from": null,
+      "compounds_per_year": null
+    }
+  ]
+}

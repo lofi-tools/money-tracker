@@ -30,6 +30,7 @@ fn seed(path: &std::path::Path) -> Result<()> {
         label: "My wallet".into(),
         source_reference: Some("wallet-reference".into()),
     })?;
+    s.set_account_jurisdiction(&"wallet".into(), "UK", date)?;
     s.save_account(&Account {
         id: "dust-wallet".into(),
         portfolio_id: DEFAULT_PORTFOLIO.into(),

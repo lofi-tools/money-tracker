@@ -138,6 +138,8 @@ pub enum VerificationDto {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccountDto {
+    #[serde(default)]
+    pub jurisdiction: Option<lib_core::AccountJurisdiction>,
     pub id: AccountId,
     pub provider_id: ProviderId,
     pub label: String,

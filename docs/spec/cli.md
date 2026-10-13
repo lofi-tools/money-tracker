@@ -20,4 +20,15 @@ Acceptance scenarios: CLI paths override environment paths; environment paths ov
 
 Saved EVM accounts support `--exclude-safe-promo` (Ethereum only) and `--restore-token CONTRACT`; both persist reviewed policy revisions. Combine with `--register-only` for a settings-only update, or `--offline` for cached strict replay. See [reviewed exclusions](tracking-exclusions.md).
 
-The shared resolver is implemented. The managed desktop DB worker and copy/new actions are available in Rust; their Tauri UI remains deferred.
+The shared resolver, managed desktop DB worker and Tauri copy/new startup UI are implemented. Provider connections and CSV-import controls in the UI remain deferred.
+
+## Local development database override
+
+The CLI and desktop use the same `portfolio.duckdb` filename and standard Unix default. From the repository root, select a disposable/local portfolio explicitly without changing the normal installed-app default:
+
+```sh
+APP_DATA_DIR="$PWD/.cache/data" cargo run -p cli -- --offline
+APP_DATA_DIR="$PWD/.cache/data" pnpm dev:desktop
+```
+
+For a terminal session, `export APP_DATA_DIR="$PWD/.cache/data"` provides the same override. A local ignored `.env` may hold `APP_DATA_DIR="./.cache/data"` when loaded by the developer's environment/direnv setup; the CLI itself does not load dotenv files. Relative paths follow the launch working directory, so an absolute directory is safer if launching elsewhere. Unset `APP_DATA_DIR` to return to the configured/default directory. `--data-dir` remains the CLI's highest-priority override. No database is moved merely by changing the variable.

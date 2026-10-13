@@ -198,6 +198,11 @@ test("real Rust DTO: Overview, scoped allocation, liability and exact unknown ho
   ).toBeVisible();
   await page.getByRole("button", { name: "My wallet", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByText("Account jurisdiction: United Kingdom (GB)"),
+  ).toBeVisible();
   await expect(page.getByRole("table")).toBeVisible();
   await expect(
     page.getByRole("dialog").getByText("MYSTERY", { exact: false }),

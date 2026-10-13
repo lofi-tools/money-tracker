@@ -10,6 +10,8 @@ The CLI consumes shared provider/application services from `libs/lib-app`; see [
 
 Shared [database startup/settings](docs/spec/database-startup.md) now uses `~/.data/money-tracker/portfolio.duckdb` on Unix, with CLI flag → `APP_DATA_DIR` → JSON `data_dir` precedence. `--config-path` loads a JSON config; an existing DB at the previous OS location is detected before creating a replacement.
 
+For repo development, use `APP_DATA_DIR="$PWD/.cache/data" cargo run -p cli -- --offline` or `APP_DATA_DIR="$PWD/.cache/data" pnpm dev:desktop`. This selects the local test/imported database while keeping `~/.data/money-tracker/portfolio.duckdb` as the normal Unix default. See [local development overrides](docs/spec/cli.md#local-development-database-override).
+
 Setup deps using `direnv allow` (needs Nix and nix-direnv), then:
 
 - Run unit tests: `utest`

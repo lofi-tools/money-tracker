@@ -50,6 +50,10 @@ const MIGRATIONS: &[Migration] = &[
         name: "009_ui_actions_policy_refresh",
         apply: ui_actions_policy_refresh,
     },
+    Migration {
+        name: "010_account_jurisdictions",
+        apply: account_jurisdictions,
+    },
 ];
 
 /// Run every migration in order before the Store becomes available. Each step
@@ -402,4 +406,9 @@ mod tests {
         assert_eq!(role, "liability");
         Ok(())
     }
+}
+
+fn account_jurisdictions(c: &Connection) -> anyhow::Result<()> {
+    c.execute_batch("CREATE TABLE IF NOT EXISTS account_jurisdictions (account_id VARCHAR PRIMARY KEY, country_code VARCHAR NOT NULL, declared_at TIMESTAMP NOT NULL);")?;
+    Ok(())
 }

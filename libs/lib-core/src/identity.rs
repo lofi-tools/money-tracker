@@ -73,3 +73,10 @@ pub(crate) fn legacy_account(position: &str) -> Account {
         source_reference: None,
     }
 }
+
+/// Locally declared account jurisdiction; never inferred from language/timezone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AccountJurisdiction {
+    pub country_code: String,
+    pub declared_at: chrono::DateTime<chrono::Utc>,
+}

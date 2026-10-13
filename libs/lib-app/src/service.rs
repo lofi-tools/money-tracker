@@ -65,6 +65,7 @@ impl Application {
                 });
             }
             accounts.push(AccountDto {
+                jurisdiction: self.store.account_jurisdiction(&account.id)?,
                 id: account.id,
                 provider_id: account.provider_id,
                 label: account.label,
@@ -88,6 +89,14 @@ impl Application {
 }
 
 impl Application {
+    pub fn nexo_rate_eligibility(
+        &self,
+        account: &lib_core::AccountId,
+        facts: &crate::adapters::nexo::rate_catalogue::Facts,
+    ) -> Result<crate::adapters::nexo::rate_catalogue::Evaluation> {
+        crate::adapters::nexo::rate_catalogue::evaluate_account(&self.store, account, facts)
+    }
+
     pub fn ui_metadata(&self, portfolio: &lib_core::PortfolioId) -> Result<UiMetadataDto> {
         let revisions = self.store.revisions(portfolio)?;
         self.store.validate_account_tree(portfolio)?;
@@ -103,6 +112,7 @@ impl Application {
             let parent = self.store.account_parent(&account.id)?;
             accounts.push(UiAccountDto {
                 account: AccountDto {
+                    jurisdiction: self.store.account_jurisdiction(&account.id)?,
                     id: account.id,
                     provider_id: account.provider_id,
                     label: account.label,

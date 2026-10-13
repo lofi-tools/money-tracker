@@ -1,6 +1,6 @@
 # Proposed Nexo rate catalogue and qualification rules
 
-Status: **research and proposed rules, awaiting user review**. Observed 13 October 2026. No catalogue evaluator, automatic rate defaults, expected-yield matcher or scraper is implemented by this document. The [ordered task](../todo/master-todo.md#immediate-provider-wiring-fixes--ordered-proposed) requires approval before this stage's commit. The preceding term matcher is committed separately.
+Status: **approved research and design proposal**, committed as `46585c0`. Observed 13 October 2026. The [bundled catalogue, evaluator and account jurisdiction](nexo-rate-catalogue.md) are now implemented for review. Automatic held-rate defaults, expected-yield matching and the scraper remain outstanding. The [ordered task](../todo/master-todo.md#immediate-provider-wiring-fixes--ordered-proposed) requires approval before this stage's commit. The preceding term matcher is committed separately.
 
 ## Official sources and applicability
 
@@ -110,4 +110,4 @@ Still needed: the actual account programme/jurisdiction, complete rate matrix by
 
 Implement meaningful cases for tier denominator/boundaries, grace transitions, minimum unit freshness, fixed eligibility versus active fallback, the NEXO collateral exception, unpriced/missing provider holdings, bonus double counting, marginal bands, payouts with changed currency, calendar terms, current versus historical dates, pinned overrides and conflicting regional evidence. Catalogue lookup must not contact the network or rewrite ownership. The later scraper should collect dated observations into this same format and require review for changed conditions.
 
-Validation for this research stage: official pages were inspected through web retrieval and the rendered Help Center; the account matrix was confirmed to require login. Relative documentation links and whitespace checks pass. No runtime changes or new executable tests were made in this stage; implementation remains subject to review.
+Validation for this research stage: official pages were inspected through web retrieval and the rendered Help Center; the account matrix was confirmed to require login. Relative documentation links and whitespace checks pass. No runtime changes or new executable tests were made in the research stage. Subsequent implementation and validation are documented in the linked implemented contract.

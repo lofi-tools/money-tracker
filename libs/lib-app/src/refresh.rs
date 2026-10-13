@@ -164,7 +164,7 @@ pub fn candidates(
                 label: format!("Kraken · {}", account.label),
                 source: source.clone(),
                 state: store.refresh_state(portfolio, &source)?,
-                acquisition: Some(Acquisition::Kraken {
+                acquisition: kraken_credentials.then(|| Acquisition::Kraken {
                     account: account.clone(),
                     cache: cache_dir.to_path_buf(),
                 }),

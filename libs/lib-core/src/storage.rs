@@ -305,6 +305,62 @@ impl Store {
             .collect::<Result<_, _>>()?)
     }
 
+    /// Country code is an account-local annotation, separate from provider imports.
+    /// Unknown codes are retained but must not acquire a programme implicitly.
+    pub fn set_account_jurisdiction(
+        &self,
+        account: &AccountId,
+        country: &str,
+        at: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
+        let country = match country.trim().to_ascii_uppercase().as_str() {
+            "UK" => "GB".to_owned(),
+            other => other.to_owned(),
+        };
+        anyhow::ensure!(
+            country.len() == 2 && country.bytes().all(|c| c.is_ascii_uppercase()),
+            "country code must have two ASCII letters"
+        );
+        let tx = self.connection.unchecked_transaction()?;
+        let portfolio: String = tx.query_row(
+            "SELECT portfolio_id FROM accounts WHERE id=?",
+            [&account.0],
+            |r| r.get(0),
+        )?;
+        let previous = self.account_jurisdiction(account)?;
+        if let Some(previous) = &previous {
+            anyhow::ensure!(
+                at >= previous.declared_at,
+                "jurisdiction update predates current declaration"
+            );
+            if previous.country_code == country {
+                return Ok(());
+            }
+        }
+        tx.execute("INSERT INTO account_jurisdictions VALUES (?,?,?) ON CONFLICT(account_id) DO UPDATE SET country_code=excluded.country_code, declared_at=excluded.declared_at", params![account.0, country, at.naive_utc()])?;
+        crate::ui_metadata::bump_revision(&tx, &PortfolioId(portfolio), "metadata")?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn account_jurisdiction(
+        &self,
+        account: &AccountId,
+    ) -> anyhow::Result<Option<crate::AccountJurisdiction>> {
+        let mut statement = self.connection.prepare(
+            "SELECT country_code, declared_at FROM account_jurisdictions WHERE account_id=?",
+        )?;
+        let rows = statement
+            .query_map([&account.0], |r| {
+                Ok(crate::AccountJurisdiction {
+                    country_code: r.get(0)?,
+                    declared_at: DateTime::from_naive_utc_and_offset(r.get(1)?, Utc),
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows.into_iter().next())
+    }
+
     /// Canonical position ID for an account-local source reference.
     pub fn account_position_id(account: &AccountId, source_id: &PositionId) -> PositionId {
         PositionId(crate::identity::scoped_id(

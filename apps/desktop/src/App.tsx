@@ -1098,6 +1098,16 @@ function Body(props: {
                 <Show when={d().original_name}>
                   <p class="source">Original account: {d().original_name}</p>
                 </Show>
+                <Show when={d().jurisdiction}>
+                  {(jurisdiction) => (
+                    <p class="source">
+                      Account jurisdiction:{" "}
+                      {jurisdiction().country_code === "GB"
+                        ? "United Kingdom (GB)"
+                        : jurisdiction().country_code}
+                    </p>
+                  )}
+                </Show>
                 <Show when={d().source_reference}>
                   <p class="source">
                     Provider reference: {d().source_reference}

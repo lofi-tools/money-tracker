@@ -16,6 +16,7 @@ Documentation is organized by purpose. Specifications describe implemented contr
 - [Portfolio read models and exact current earnings](spec/portfolio-queries.md)
 - [Database startup and local settings](spec/database-startup.md)
 - [CLI configuration](spec/cli.md)
+- [Nexo bundled catalogue, eligibility and account-local jurisdiction](spec/nexo-rate-catalogue.md)
 - [Proposed Nexo rate catalogue: official observations and qualification rules](spec/nexo-rate-catalogue-proposal.md)
 - [Nexo sources, ledger mapping, balance sums and diagnostics](spec/nexo.md)
 - [Binance sources, ledger mapping, reconciliation and diagnostics](spec/binance.md)

@@ -11,3 +11,15 @@ Migration `011_token_metadata` appends a separate typed JSON payload table keyed
 The cache is independent of `AssetDisplay`. Existing names/tickers take precedence, then fetched metadata, then explicitly reviewed native/contract labels. Refresh never writes manual displays or their evidence. Cached responses/images survive source failures; their timestamps remain unchanged until a successful response. Missing fields and failures stay explicit. Optional on-chain metadata and block-number evidence are display evidence, not independent balance verification or historical ledger-scale evidence.
 
 Neither acquisition nor cache persistence registers/changes scales, rescales movements, edits prices, adds aliases, changes exclusions, imports account data, or relaxes reconciliation. A source/RPC scale mismatch is retained as a warning beside the protected ledger scale. An absent decimal is different from zero. ERC-20 metadata fields are optional; destroyed or unusual contracts can have explorer facts without current RPC facts.
+
+## Explicit acquisition and offline review
+
+Close other DB writers and back up the selected database before acquiring. The production database default remains unchanged; development uses `APP_DATA_DIR` or an explicit example argument.
+
+```sh
+cargo run --locked -p lib-app --example refresh_token_metadata -- .cache/data/portfolio.duckdb local:default
+cargo run --locked -p lib-app --example check_metadata_preservation -- .cache/data/portfolio.duckdb PATH_TO_BACKUP.duckdb
+cargo run --locked -p money-tracker-desktop --example export_preview -- .cache/data/portfolio.duckdb .cache/portfolio-review.json
+```
+
+The operation uses Blockscout Ethereum token info, optional CoinGecko contract lookup, and Ethereum RPC metadata at an explicit observed block after checking chain ID. Requests have time/response limits and pacing; source failures preserve the cache. Name/symbol fallback handles standard ABI strings and legacy bytes32. There is no automatic metadata schedule or desktop acquisition button in this slice. The frozen review export is regenerated from a temporary copy of the selected DB; it never substitutes a fixture for that DB.

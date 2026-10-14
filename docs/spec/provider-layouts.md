@@ -16,4 +16,6 @@ Review checks: core/application/native Rust suites passed (private/live cases ex
 
 ## Inline value presentation follow-up
 
+Liability-only allocation rows render their dedicated positive liability magnitude as a negative amount, using the existing danger colour. Stored debt fields and net aggregation are unchanged.
+
 Monochrome quantity SVGs are rasterized locally at mount to measure painted alpha area. Their geometry scales toward a shared ink-area target, bounded to the text line. The horizontal SVG viewport is cropped to the adjusted ink bounds, including stroke padding, so its gap to the number matches the font-glyph gap. This optical adjustment applies to all bundled crypto quantity symbols; fiat symbols remain text. No external request is needed. **Others** uses an original bundled SVG depicting several currencies emerging from an isometric box.

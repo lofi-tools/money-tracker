@@ -74,6 +74,15 @@ const figure = (f: Figure<MoneyValue>): CurrencyFigure =>
   f.status === "known" || f.status === "partial"
     ? { status: f.status, value: f.value.amount }
     : { status: f.status };
+const liabilityFigure = (f: Figure<MoneyValue>): CurrencyFigure => {
+  const result = figure(f);
+  if (result.status !== "known" && result.status !== "partial") return result;
+  const amount = result.value! as Rational;
+  return {
+    ...result,
+    value: { ...amount, numerator: (-BigInt(amount.numerator)).toString() },
+  };
+};
 const key = (s: Selection) => JSON.stringify(s);
 /** Exact percent/fraction conversion: binary floats never reach stored rates. */
 function percentToFraction(text: string): string {
@@ -487,9 +496,11 @@ function Body(props: {
         liability: n.liability,
         value: (
           <MoneyFigure
-            figure={figure(
-              n.liability ? n.summary.liabilities : n.summary.current_value,
-            )}
+            figure={
+              n.liability
+                ? liabilityFigure(n.summary.liabilities)
+                : figure(n.summary.current_value)
+            }
             currency={props.settings.reporting_currency}
           />
         ),

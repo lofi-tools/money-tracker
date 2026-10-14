@@ -204,6 +204,14 @@ test("real Rust DTO: Overview, scoped allocation, liability and exact unknown ho
   await expect(
     page.getByText("Liability · borrowed amount").first(),
   ).toBeVisible();
+  const debtRow = page
+    .getByRole("table")
+    .getByRole("row")
+    .filter({ hasText: "Liability · borrowed amount" });
+  await expect(debtRow.first().locator("td").first()).toContainText("−$");
+  await expect(
+    debtRow.first().locator("td").first().locator(".mt-c_danger"),
+  ).toHaveCount(1);
   await page.getByRole("button", { name: "My wallet", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(

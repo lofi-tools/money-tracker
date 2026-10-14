@@ -1,0 +1,8 @@
+{
+  "source": "https://github.com/near/docs",
+  "commit": "8401fc0962bded2479a2759616f00a4a5dfb1e29",
+  "path": "assets/logo.svg",
+  "fetched": "2026-10-13",
+  "adaptation": "Extracted official N mark from wordmark; white circular background for dark/light legibility. NEAR trademark remains owned by its holders.",
+  "license": "MIT OR Apache-2.0 (upstream repository licenses bundled)"
+}

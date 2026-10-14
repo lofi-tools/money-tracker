@@ -56,9 +56,15 @@ async function install(page: Page, missing = false) {
       };
       Object.defineProperty(window, "__TAURI_INTERNALS__", {
         value: {
+          transformCallback: () => 1,
+          unregisterCallback: () => {},
           invoke: async (command: string, args: Record<string, any>) => {
             const copy = (x: unknown) => structuredClone(x);
             switch (command) {
+              case "plugin:event|listen":
+                return 1;
+              case "plugin:event|unlisten":
+                return null;
               case "startup":
                 return missing
                   ? {
@@ -190,8 +196,10 @@ test("real Rust DTO: Overview, scoped allocation, liability and exact unknown ho
   await expect(
     page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("Partial subtotal").first()).toBeVisible();
-  await page.getByRole("button", { name: /US USD/ }).click();
+  await expect(
+    page.getByText("Partial", { exact: true }).first(),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /^USD / }).click();
   await expect(page.getByRole("table")).toBeVisible();
   await expect(
     page.getByText("Liability · borrowed amount").first(),
@@ -211,7 +219,7 @@ test("real Rust DTO: Overview, scoped allocation, liability and exact unknown ho
   await expect(
     page.getByRole("button", { name: "My wallet", exact: true }),
   ).toBeFocused();
-  await page.getByRole("button", { name: /MY MYSTERY/ }).click();
+  await page.getByRole("button", { name: /^Others \/ dust/ }).click();
   await page.getByRole("button", { name: "My wallet", exact: true }).click();
   await expect(
     page
@@ -227,7 +235,7 @@ test("group/search, privacy across details, persisted settings and accessibility
   await install(page);
   await page.goto("/");
   await page.getByRole("tab", { name: "By provider" }).click();
-  await page.getByRole("button", { name: /EX example/ }).click();
+  await page.getByRole("button", { name: /^example / }).click();
   await expect(
     page.getByRole("button", { name: "My wallet", exact: true }),
   ).toBeVisible();
@@ -264,7 +272,7 @@ test("group/search, privacy across details, persisted settings and accessibility
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.locator('[data-theme="dark"]')).toBeVisible();
   await page.getByLabel("Search assets or providers").fill("does not exist");
-  await expect(page.getByRole("button", { name: /EX example/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^example / })).toHaveCount(0);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
   await page.screenshot({ path: ".cache/desktop-review.png", fullPage: true });
@@ -293,7 +301,7 @@ test("647px window contains independent panes and keeps Settings reachable", asy
     page.getByRole("button", { name: "Quit", exact: true }),
   ).toHaveCount(0);
   await expect(page.getByLabel("Privacy mode")).toHaveCount(0);
-  await page.getByRole("button", { name: /US USD/ }).click();
+  await page.getByRole("button", { name: /^USD / }).click();
   const nav = page.getByRole("navigation", { name: "Portfolio navigation" });
   const settings = nav.getByRole("button", { name: "Settings", exact: true });
   await expect(settings).toBeVisible();
@@ -350,8 +358,9 @@ test("refresh reports each source and retains cached figures", async ({
   await install(page);
   await page.goto("/");
   const nav = page.getByRole("navigation", { name: "Portfolio navigation" });
-  const usd = nav.getByRole("button", { name: /US USD/ });
-  const before = await usd.innerText();
+  const usd = nav.getByRole("button", { name: /^USD / });
+  const row = usd.locator("..").locator(".nav-entry-content");
+  const before = await row.innerText();
   await nav.getByRole("button", { name: "Settings", exact: true }).click();
   const status = page.getByRole("region", { name: "Refresh status" });
   await status.getByRole("button", { name: "Refresh now" }).click();
@@ -361,16 +370,18 @@ test("refresh reports each source and retains cached figures", async ({
   await expect(notice).toContainText("2 exact current prices");
   await expect(status).toContainText("Current prices (USD)");
   await expect(status).toContainText("No readable Nexo export is configured");
-  expect(await usd.innerText()).toBe(before);
+  expect(await row.innerText()).toBe(before);
   await page.screenshot({ path: ".cache/desktop-refresh-review.png" });
 });
 
 test("manual rate, price, dust and spam edits commit typed requests", async ({
   page,
 }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
   await install(page);
   await page.goto("/");
-  await page.getByRole("button", { name: /US USD/ }).click();
+  await page.getByRole("button", { name: /^USD / }).click();
   await expect(page.getByRole("table")).toBeVisible();
   // Inline APY editing lives on leaf holding rows with a dated, pinned override.
   const rateEdit = page
@@ -400,7 +411,7 @@ test("manual rate, price, dust and spam edits commit typed requests", async ({
   await expect(effective).toHaveValue(new Date().toISOString().slice(0, 10));
   // Prices are edited in the reporting currency alongside their pin; the
   // reporting asset itself has no quote and therefore no price override.
-  await page.getByRole("button", { name: "MY MYSTERY Unknown" }).click();
+  await page.getByRole("button", { name: /^Others \/ dust/ }).click();
   const priceEdit = page
     .getByRole("button", { name: "Edit Current price" })
     .first();
@@ -442,7 +453,10 @@ test("manual rate, price, dust and spam edits commit typed requests", async ({
     excluded: true,
     reason: "unwanted airdrop",
   });
-  await page.getByRole("button", { name: "Close details" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    page.locator('[data-scope="dialog"][data-part="positioner"]'),
+  ).toBeHidden();
   // The action log exposes the change with a working undo link.
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(
@@ -455,4 +469,5 @@ test("manual rate, price, dust and spam edits commit typed requests", async ({
   await expect(undo).toBeVisible();
   await undo.click();
   await expect(page.getByText("Undone").first()).toBeVisible();
+  expect(errors).toEqual([]);
 });

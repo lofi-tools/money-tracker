@@ -92,6 +92,7 @@ pub struct AccountOption {
 /// Account grouping controls: rename, move and the valid-parent candidates.
 #[derive(Clone, Serialize)]
 pub struct NodeAccount {
+    pub wallet_software: Option<String>,
     pub id: AccountId,
     pub provider_id: ProviderId,
     pub parent: Option<AccountId>,
@@ -159,6 +160,7 @@ pub struct HoldingDetails {
 }
 #[derive(Serialize)]
 pub struct NodeDetails {
+    pub inferred_allocation: Option<lib_app::adapters::nexo::allocations::TermAllocation>,
     pub jurisdiction: Option<lib_core::AccountJurisdiction>,
     pub name: String,
     pub summary: Summary,
@@ -312,22 +314,7 @@ impl Session {
             snapshot_id: self.snapshot_id,
             cutoff: p.request.context.cutoff,
             overview: p.overview.clone(),
-            assets: p
-                .assets
-                .iter()
-                .filter(|entry| {
-                    let Selection::Asset(asset) = &entry.selection else {
-                        return true;
-                    };
-                    // An asset significant anywhere keeps its full cross-provider total.
-                    // Only wholly dust assets fold into the Dust navigation entry.
-                    !p.holdings
-                        .iter()
-                        .filter(|h| &h.quantity.asset_id == asset)
-                        .all(|h| h.is_dust)
-                })
-                .cloned()
-                .collect(),
+            assets: p.asset_navigation(),
             providers: p.providers.clone(),
             dust: p.dust.clone(),
             holding_count: p.holdings.len(),
@@ -377,11 +364,43 @@ impl Session {
                 })
                 .collect();
         }
+        // Hide the one migration-created Nexo container when it has no local organization.
+        // It remains in the projection/storage and the holding details retain its references.
+        let redundant: Vec<_> = t.nodes.iter().filter(|node| {
+            let AllocationTarget::Account(id) = &node.target else { return false; };
+            if id.0 != "legacy:nexo" { return false; }
+            let Some(account) = p.metadata.accounts.iter().find(|a| a.account.id == *id) else { return false; };
+            if !account.account.provider_id.0.eq_ignore_ascii_case("nexo") || account.parent.is_some() || account.structure.kind != NodeKind::Source { return false; }
+            if p.metadata.accounts.iter().filter(|a| a.account.provider_id == account.account.provider_id).count() != 1 { return false; }
+            !p.metadata.local_state.iter().any(|(target, record)| {
+                matches!((target, &record.value), (LocalTarget::Account { id: target }, Some(LocalValue::Account(c))) if target == id && (c.local_label.is_some() || c.parent_is_custom))
+            })
+        }).map(|node| (node.id.clone(), node.parent.clone(), node.children.clone())).collect();
+        for (hidden, parent, children) in redundant {
+            for node in &mut t.nodes {
+                if node.parent.as_ref() == Some(&hidden) {
+                    node.parent = parent.clone();
+                }
+                if let Some(index) = node.children.iter().position(|id| id == &hidden) {
+                    node.children.splice(index..=index, children.clone());
+                }
+            }
+            if let Some(index) = t.roots.iter().position(|id| id == &hidden) {
+                t.roots.splice(index..=index, children);
+            }
+            t.nodes.retain(|node| node.id != hidden);
+        }
         let initially_expanded = t
             .nodes
             .iter()
             .filter(|n| {
                 matches!(n.target, lib_app::portfolio::AllocationTarget::Provider(_))
+                    || (matches!(n.target, lib_app::portfolio::AllocationTarget::Holding(_))
+                        && n.children.iter().any(|id| {
+                            t.nodes
+                                .iter()
+                                .any(|c| c.id == *id && c.inferred_allocation.is_some())
+                        }))
                     || (matches!(n.target, lib_app::portfolio::AllocationTarget::Account(_))
                         && n.parent.as_ref().is_none_or(|parent| {
                             t.nodes.iter().any(|p| {
@@ -410,13 +429,39 @@ impl Session {
                             .all(|h| h.role == PositionRole::Liability);
                     // Leaf holding rows carry their own rate/price override controls;
                     // rollup rows display derived figures that cannot be edited directly.
-                    let edits = match &node.target {
-                        AllocationTarget::Holding(id) => p
-                            .holdings
-                            .iter()
-                            .find(|h| &h.id == id)
-                            .map(|h| node_edits(p, h)),
-                        _ => None,
+                    let edits = if let Some(part) = &node.inferred_allocation {
+                        if part.kind == "unclassified_residual" {
+                            None
+                        } else {
+                            let scope = if part.kind == "fixed" {
+                                RateScope::Subscription(part.id.clone())
+                            } else if p.metadata.products.iter().any(|v| {
+                                v.id.0 == format!("nexo-fixed-group:{}:{}", part.id, part.count)
+                            }) {
+                                RateScope::Product(lib_core::ProductId::from(format!(
+                                    "nexo-fixed-group:{}:{}",
+                                    part.id, part.count
+                                )))
+                            } else {
+                                RateScope::Product(lib_core::ProductId::from(format!(
+                                    "nexo-fixed:{}:{}",
+                                    part.account.0, part.quantity.asset_id.0
+                                )))
+                            };
+                            Some(NodeEdits {
+                                rate: Some(slot(&local_index(p), LocalTarget::Rate { scope })),
+                                ..Default::default()
+                            })
+                        }
+                    } else {
+                        match &node.target {
+                            AllocationTarget::Holding(id) => p
+                                .holdings
+                                .iter()
+                                .find(|h| &h.id == id)
+                                .map(|h| node_edits(p, h)),
+                            _ => None,
+                        }
                     };
                     DesktopNode {
                         node,
@@ -438,6 +483,7 @@ impl Session {
             .ok_or_else(|| anyhow::anyhow!("allocation not in selection"))?;
         let d = p.details(node.target.clone())?;
         Ok(NodeDetails {
+            inferred_allocation: node.inferred_allocation.clone(),
             name: node.name.clone(),
             summary: node.summary.clone(),
             jurisdiction: d
@@ -633,6 +679,16 @@ fn account_controls(p: &PortfolioProjection, target: &AllocationTarget) -> Optio
             }),
     );
     Some(NodeAccount {
+        wallet_software: p.metadata.local_state.iter().find_map(|(target, record)| {
+            match (target, &record.value) {
+                (LocalTarget::Account { id: account }, Some(LocalValue::Account(custom)))
+                    if account == id =>
+                {
+                    custom.wallet_software.clone()
+                }
+                _ => None,
+            }
+        }),
         id: id.clone(),
         provider_id: entry.account.provider_id.clone(),
         parent: entry.parent.clone(),

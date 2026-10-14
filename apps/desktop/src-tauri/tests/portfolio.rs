@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
-use lib_app::refresh::{RefreshOutcome, RefreshTrigger};
+use lib_app::refresh::{Acquired, RefreshOutcome, RefreshTrigger, SourceOutcome};
 use lib_app::{
     Application,
     config::{AppConfig, DATABASE_FILENAME, ResolvedConfig},
@@ -118,7 +118,7 @@ async fn real_wire_fixture_scopes_unknowns_debt_and_exact_quantities() -> Result
         panic!()
     };
     assert_eq!(data.holding_count, 4);
-    assert_eq!(data.dust_count, 1); // Dust grouping preserves the whole asset total.
+    assert_eq!(data.dust_count, 2); // Unpriced assets join dust without changing totals.
     assert_eq!(
         data.overview.current_value.clone().status_for_test(),
         "partial"
@@ -242,17 +242,30 @@ async fn refresh_starts_unscheduled_imports_exactly_and_survives_restart() -> Re
     );
     assert!(data.refresh.iter().all(|s| s.next_due.is_none()));
 
-    // A launch starts the interval without contacting or reading anything.
+    // Missing prices get a price-only bootstrap; provider refresh-on-open remains off.
+    // Supply an empty acquisition result to keep this schedule test entirely offline.
     let now = Utc::now();
     let plan = session.refresh_plan(RefreshTrigger::Launch, now).await?;
-    assert_eq!(plan.runs().count(), 0);
-    let (startup, report) = session.refresh_commit(plan, Vec::new(), now).await?;
-    assert!(
-        report
-            .entries
-            .iter()
-            .all(|e| matches!(e.outcome, RefreshOutcome::Scheduled))
+    assert_eq!(
+        plan.runs()
+            .map(|item| item.source.as_str())
+            .collect::<Vec<_>>(),
+        vec!["prices"]
     );
+    let (startup, report) = session
+        .refresh_commit(
+            plan,
+            vec![SourceOutcome {
+                source: "prices".into(),
+                result: Ok(Acquired::Prices(Vec::new())),
+            }],
+            now,
+        )
+        .await?;
+    assert!(report.entries.iter().all(|e| matches!(
+        e.outcome,
+        RefreshOutcome::Scheduled | RefreshOutcome::Unchanged
+    )));
     let Startup::Ready { data, .. } = &startup else {
         panic!()
     };
@@ -397,7 +410,7 @@ async fn dust_spam_and_grouping_controls_change_the_projection() -> Result<()> {
     let Startup::Ready { data, .. } = session.startup().await? else {
         panic!()
     };
-    assert_eq!(data.dust_count, 1);
+    assert_eq!(data.dust_count, 2);
     let Startup::Ready { data, .. } = session
         .apply_edit(lib_app::manual::ManualEdit::Dust {
             provider: "tiny".into(),
@@ -408,7 +421,7 @@ async fn dust_spam_and_grouping_controls_change_the_projection() -> Result<()> {
     else {
         panic!()
     };
-    assert_eq!(data.dust_count, 0);
+    assert_eq!(data.dust_count, 1); // Unknown value remains in Others / dust.
     let Startup::Ready { data, .. } = session
         .apply_edit(lib_app::manual::ManualEdit::Spam {
             asset: AssetId::str("MYSTERY"),
@@ -514,5 +527,133 @@ async fn cached_imported_portfolios_are_browsable() -> Result<()> {
         populated >= 2,
         "expected populated Nexo and Binance statement copies"
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn nexo_display_flattens_only_the_uncustomized_single_import_account() -> Result<()> {
+    use lib_app::{manual::ManualEdit, portfolio::AllocationTarget};
+    let temp = tempfile::tempdir()?;
+    let config = resolved(temp.path());
+    seed(&config.database)?;
+    {
+        let s = Store::open(&config.database)?;
+        s.save_account(&Account {
+            id: "legacy:nexo".into(),
+            portfolio_id: DEFAULT_PORTFOLIO.into(),
+            provider_id: "nexo".into(),
+            label: "Legacy Nexo aggregate account".into(),
+            source_reference: Some("original-nexo-export".into()),
+        })?;
+        let date = "2026-01-01T00:00:00Z".parse()?;
+        s.save_account_import(
+            &"legacy:nexo".into(),
+            "fixture",
+            "nexo-one",
+            &[("cash".into(), AssetId::str("USD"), 2, PositionRole::Asset)],
+            &[(
+                "deposit".into(),
+                Transaction {
+                    datetime: date,
+                    inputs: vec![],
+                    outputs: vec![TxnEffect {
+                        datetime: date,
+                        position_id: "cash".into(),
+                        amount: Units::from(100),
+                    }],
+                },
+            )],
+            &[],
+        )?;
+    }
+    let mut session = Session::new(config.clone());
+    let Startup::Ready { data, .. } = session.startup().await? else {
+        panic!()
+    };
+    assert_eq!(
+        data.providers
+            .iter()
+            .find(|p| p.selection == Selection::Provider("nexo".into()))
+            .unwrap()
+            .name,
+        "Nexo"
+    );
+    let tree = session.tree(data.snapshot_id, Selection::Overview)?;
+    assert!(
+        !tree
+            .nodes
+            .iter()
+            .any(|n| n.node.target == AllocationTarget::Account("legacy:nexo".into()))
+    );
+    let provider = tree
+        .nodes
+        .iter()
+        .find(|n| n.node.target == AllocationTarget::Provider("nexo".into()))
+        .unwrap();
+    let leaf = tree
+        .nodes
+        .iter()
+        .find(|n| n.node.parent.as_ref() == Some(&provider.node.id))
+        .unwrap();
+    assert!(matches!(leaf.node.target, AllocationTarget::Holding(_)));
+    let details = session.details(data.snapshot_id, Selection::Overview, &leaf.node.id)?;
+    assert_eq!(
+        details.original_name.as_deref(),
+        Some("Legacy Nexo aggregate account")
+    );
+    assert_eq!(
+        details.source_reference.as_deref(),
+        Some("original-nexo-export")
+    );
+    let scoped = session.tree(data.snapshot_id, Selection::Provider("nexo".into()))?;
+    assert_eq!(scoped.roots, vec![leaf.node.id.clone()]);
+    let before = data.overview;
+    let Startup::Ready { data, .. } = session
+        .apply_edit(ManualEdit::AccountName {
+            account: "legacy:nexo".into(),
+            name: Some("My savings account".into()),
+        })
+        .await?
+    else {
+        panic!()
+    };
+    let tree = session.tree(data.snapshot_id, Selection::Overview)?;
+    assert!(
+        tree.nodes
+            .iter()
+            .any(|n| n.node.name == "My savings account")
+    );
+    assert_eq!(
+        amount(&data.overview.current_value),
+        amount(&before.current_value)
+    );
+    assert_eq!(
+        amount(&data.overview.gross_annual_earnings),
+        amount(&before.gross_annual_earnings)
+    );
+    session.close().await?;
+    {
+        let s = Store::open(&config.database)?;
+        s.save_provider_display(&ProviderDisplay {
+            id: "nexo".into(),
+            name: Some("My Nexo".into()),
+            evidence: "local display choice".into(),
+        })?;
+    }
+    let mut session = Session::new(config);
+    let Startup::Ready { data, .. } = session.startup().await? else {
+        panic!()
+    };
+    assert_eq!(
+        data.providers
+            .iter()
+            .find(|p| p.selection == Selection::Provider("nexo".into()))
+            .unwrap()
+            .name,
+        "My Nexo"
+    );
+    let tree = session.tree(data.snapshot_id, Selection::Overview)?;
+    assert!(tree.nodes.iter().any(|n| n.node.name == "My Nexo"));
+    session.close().await?;
     Ok(())
 }

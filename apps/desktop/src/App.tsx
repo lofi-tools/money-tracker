@@ -1,3 +1,5 @@
+import { CurrencySymbol, hasCurrencySymbol } from "./currency-symbols";
+import { OutlineIcon } from "./outline-icons";
 import {
   For,
   Match,
@@ -35,6 +37,11 @@ import type {
   CurrencyFigure,
   Rational,
 } from "@money-tracker/design-system";
+import {
+  assetIcon,
+  shortAssetLabel,
+  readableReference,
+} from "./asset-presentation";
 import { api, onRefresh, reviewMode } from "./api";
 import { defaultSettings } from "./contracts";
 import type {
@@ -142,11 +149,23 @@ function Apy(props: { figure: Figure<Rational> }) {
         </span>
       }
     >
-      <Rate value={(props.figure as { value: Rational }).value} />
       <Show when={props.figure.status === "partial"}>
-        <span class="muted"> (est.)</span>
+        <span title="Estimated APY">~</span>
       </Show>
+      <Rate value={(props.figure as { value: Rational }).value} />
     </Show>
+  );
+}
+function NavQuantity(props: { units: string; scale: number; asset: string }) {
+  const currency = () => hasCurrencySymbol(props.asset);
+  return (
+    <span class="nav-native-quantity">
+      <Quantity units={props.units} scale={props.scale} />{" "}
+      <Show when={currency()} fallback={<span>{props.asset}</span>}>
+        <CurrencySymbol asset={props.asset} />
+        <span class="visually-hidden">{props.asset}</span>
+      </Show>
+    </span>
   );
 }
 // Deliberately display codes/withheld fields rather than provider diagnostic messages:
@@ -206,6 +225,17 @@ function Body(props: {
   const [tree, setTree] = createSignal<Tree>();
   const [treeBusy, setTreeBusy] = createSignal(false);
   const [expanded, setExpanded] = createSignal(new Set<string>());
+  const [expandedRepresentations, setExpandedRepresentations] = createSignal(
+    new Set<string>(),
+  );
+  const toggleRepresentations = (entry: Entry) =>
+    setExpandedRepresentations((previous) => {
+      const next = new Set(previous);
+      const id = key(entry.selection);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const [panelNode, setPanelNode] = createSignal<{ id: string }>();
   const [panelWarnings, setPanelWarnings] = createSignal<Entry>();
   const [panel, setPanel] = createSignal<Details>();
@@ -284,9 +314,13 @@ function Body(props: {
   const entries = createMemo(() => {
     const list = group() === "asset" ? data()?.assets : data()?.providers;
     const text = search().toLocaleLowerCase();
-    return (list ?? []).filter((e) =>
-      `${e.name} ${e.ticker ?? ""}`.toLocaleLowerCase().includes(text),
-    );
+    return (list ?? [])
+      .filter((e) => !e.metadata_unresolved)
+      .filter((e) =>
+        `${e.name} ${e.ticker ?? ""} ${(e.alternatives ?? []).map((a) => `${a.name} ${a.ticker}`).join(" ")}`
+          .toLocaleLowerCase()
+          .includes(text),
+      );
   });
   const selectedEntry = createMemo(() =>
     [
@@ -295,6 +329,10 @@ function Body(props: {
       ...(data() ? [data()!.dust] : []),
     ].find((e) => key(e.selection) === key(selection())),
   );
+  const assetTicker = (id: string) =>
+    data()?.assets.find(
+      (e) => e.selection.kind === "asset" && e.selection.id === id,
+    )?.ticker ?? shortAssetLabel(id);
   const summary = () =>
     selection().kind === "overview"
       ? data()!.overview
@@ -412,6 +450,8 @@ function Body(props: {
     setDraft({ ...props.settings });
     setOptions("settings");
   };
+  const formatObservedApy = (rate: string) =>
+    `${(Number(rate) * 100).toFixed(2)}%`;
   const rows = createMemo<AllocationRow[]>(() => {
     const t = tree();
     if (!t) return [];
@@ -437,9 +477,30 @@ function Body(props: {
         ),
         rate: (
           <>
+            <Show when={n.inferred_allocation}>
+              {(part) => (
+                <span class="muted">
+                  {part().observed_apy ? (
+                    `${formatObservedApy(part().observed_apy!)} observed APY estimate`
+                  ) : part().expected_apy ? (
+                    <>
+                      <Apy
+                        figure={{
+                          status: "known",
+                          value: part().expected_apy!,
+                        }}
+                      />{" "}
+                      expected
+                    </>
+                  ) : (
+                    "Expected APY unknown"
+                  )}
+                </span>
+              )}
+            </Show>
             {/* Narrow windows show the derived rate only; manual row editing
                 happens in the details panel below 900px. */}
-            <span class="narrow-only">
+            <span class="narrow-only" hidden={!!n.inferred_allocation}>
               <Apy
                 figure={
                   n.children.length
@@ -448,7 +509,7 @@ function Body(props: {
                 }
               />
             </span>
-            <Show when={n.edits?.rate}>
+            <Show when={n.edits?.rate && !n.inferred_allocation}>
               <span class="wide-only">
                 <RateEditor
                   slot={n.edits!.rate!}
@@ -667,83 +728,206 @@ function Body(props: {
               >
                 <For each={entries()}>
                   {(entry) => (
+                    <div class="nav-asset-group">
+                      <NavigationEntry
+                        warningPlacement="title"
+                        name={entry.name}
+                        icon={(() => {
+                          const bundled =
+                            entry.selection.kind === "asset" ||
+                            entry.selection.kind === "exposure"
+                              ? assetIcon(entry.selection.id)
+                              : undefined;
+                          const cached = entry.token_metadata?.icon_data?.match(
+                            /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/,
+                          )
+                            ? entry.token_metadata.icon_data
+                            : undefined;
+                          const url = bundled ?? cached;
+                          return url ? (
+                            <img
+                              class="asset-icon"
+                              src={url}
+                              alt=""
+                              width="32"
+                              height="32"
+                              loading="lazy"
+                              referrerpolicy="no-referrer"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                              }}
+                            />
+                          ) : undefined;
+                        })()}
+                        secondary={
+                          entry.ticker && entry.ticker !== entry.name
+                            ? entry.ticker
+                            : undefined
+                        }
+                        selected={
+                          !options() &&
+                          key(entry.selection) === key(selection())
+                        }
+                        onSelect={() => select(entry.selection)}
+                        value={
+                          <span class="nav-figures">
+                            {money(
+                              entry.estimated_current_value ??
+                                entry.summary.current_value,
+                            )}
+                            <Show
+                              when={entry.direct_quantities != null}
+                              fallback={
+                                <For each={entry.quantities}>
+                                  {([role, q]) => (
+                                    <span class="nav-quantity">
+                                      <NavQuantity
+                                        units={q.units}
+                                        scale={q.scale}
+                                        asset={assetTicker(q.asset_id)}
+                                      />
+                                      {role === "liability" ? " borrowed" : ""}
+                                    </span>
+                                  )}
+                                </For>
+                              }
+                            >
+                              <For each={entry.direct_quantities ?? []}>
+                                {(q) => (
+                                  <span class="nav-quantity">
+                                    <NavQuantity
+                                      units={q.units}
+                                      scale={q.scale}
+                                      asset={q.asset_id}
+                                    />
+                                  </span>
+                                )}
+                              </For>
+                              <Show when={!entry.direct_quantities?.length}>
+                                <span class="nav-quantity">
+                                  No direct {entry.ticker ?? entry.name}
+                                </span>
+                              </Show>
+                            </Show>
+                          </span>
+                        }
+                        rate={(() => {
+                          const rate =
+                            entry.summary.estimated_current_apy ??
+                            entry.summary.current_apy;
+                          return rate.status === "known" ||
+                            rate.status === "partial" ? (
+                            <span class="nav-apy">
+                              <OutlineIcon name="growth" />
+                              <Apy figure={rate} />
+                            </span>
+                          ) : undefined;
+                        })()}
+                        warning={
+                          entry.issues.length
+                            ? {
+                                label: `Warnings for ${entry.name}`,
+                                onClick: (e) =>
+                                  entryWarnings(entry, e.currentTarget),
+                              }
+                            : undefined
+                        }
+                      />
+                      <Show when={entry.alternatives?.length}>
+                        <button
+                          type="button"
+                          class="nav-representations-toggle"
+                          aria-label={`Alternative representations of ${entry.name}`}
+                          aria-expanded={expandedRepresentations().has(
+                            key(entry.selection),
+                          )}
+                          onClick={() => toggleRepresentations(entry)}
+                        >
+                          <span
+                            style={{
+                              transform: expandedRepresentations().has(
+                                key(entry.selection),
+                              )
+                                ? "rotate(90deg)"
+                                : "none",
+                            }}
+                          >
+                            <Icon name="arrow" />
+                          </span>{" "}
+                          Wrapped / tokenized
+                        </button>
+                        <Show
+                          when={expandedRepresentations().has(
+                            key(entry.selection),
+                          )}
+                        >
+                          <ul
+                            class="nav-representations"
+                            aria-label={`${entry.name} alternative holdings`}
+                          >
+                            <For each={entry.alternatives ?? []}>
+                              {(alt) => (
+                                <li>
+                                  <span>
+                                    {alt.name}
+                                    {alt.role === "liability"
+                                      ? " · borrowed"
+                                      : ""}
+                                  </span>
+                                  <span class="nav-figures">
+                                    {money(alt.value)}
+                                    <span class="nav-quantity">
+                                      <NavQuantity
+                                        units={alt.quantity.units}
+                                        scale={alt.quantity.scale}
+                                        asset={alt.ticker}
+                                      />
+                                    </span>
+                                  </span>
+                                </li>
+                              )}
+                            </For>
+                          </ul>
+                        </Show>
+                      </Show>
+                    </div>
+                  )}
+                </For>
+                <Show when={data()!.dust_count > 0}>
+                  <div class="others-dust-entry">
                     <NavigationEntry
-                      name={entry.name}
-                      secondary={
-                        entry.ticker && entry.ticker !== entry.name
-                          ? entry.ticker
-                          : undefined
-                      }
-                      selected={
-                        !options() && key(entry.selection) === key(selection())
-                      }
-                      onSelect={() => select(entry.selection)}
+                      warningPlacement="title"
+                      name={data()!.dust.name}
+                      selected={!options() && selection().kind === "dust"}
+                      onSelect={() => select({ kind: "dust" })}
                       value={
                         <span class="nav-figures">
-                          {money(
-                            entry.estimated_current_value ??
-                              entry.summary.current_value,
-                          )}
-                          <For each={entry.quantities}>
-                            {([role, q]) => (
-                              <span class="nav-quantity">
-                                <Quantity
-                                  units={q.units}
-                                  scale={q.scale}
-                                  asset={q.asset_id}
-                                />
-                                {role === "liability" ? " borrowed" : ""}
-                              </span>
-                            )}
-                          </For>
+                          {money(data()!.dust.summary.current_value)}
                         </span>
                       }
                       rate={(() => {
                         const rate =
-                          entry.summary.estimated_current_apy ??
-                          entry.summary.current_apy;
+                          data()!.dust.summary.estimated_current_apy ??
+                          data()!.dust.summary.current_apy;
                         return rate.status === "known" ||
                           rate.status === "partial" ? (
-                          <Apy figure={rate} />
+                          <span class="nav-apy">
+                            <OutlineIcon name="growth" />
+                            <Apy figure={rate} />
+                          </span>
                         ) : undefined;
                       })()}
                       warning={
-                        entry.issues.length
+                        data()!.dust.issues.length
                           ? {
-                              label: `Warnings for ${entry.name}`,
+                              label: `Warnings for ${data()!.dust.name}`,
                               onClick: (e) =>
-                                entryWarnings(entry, e.currentTarget),
+                                entryWarnings(data()!.dust, e.currentTarget),
                             }
                           : undefined
                       }
                     />
-                  )}
-                </For>
-                <Show when={data()!.dust_count > 0}>
-                  <NavigationEntry
-                    name="Dust"
-                    selected={!options() && selection().kind === "dust"}
-                    onSelect={() => select({ kind: "dust" })}
-                    value={money(data()!.dust.summary.current_value)}
-                    rate={(() => {
-                      const rate =
-                        data()!.dust.summary.estimated_current_apy ??
-                        data()!.dust.summary.current_apy;
-                      return rate.status === "known" ||
-                        rate.status === "partial" ? (
-                        <Apy figure={rate} />
-                      ) : undefined;
-                    })()}
-                    warning={
-                      data()!.dust.issues.length
-                        ? {
-                            label: "Warnings for Dust",
-                            onClick: (e) =>
-                              entryWarnings(data()!.dust, e.currentTarget),
-                          }
-                        : undefined
-                    }
-                  />
+                  </div>
                 </Show>
               </div>
               <div class="sidebar-footer">
@@ -985,6 +1169,12 @@ function Body(props: {
                       />
                     </Show>
                   </div>
+                  <Show when={selection().kind === "exposure"}>
+                    <p class="muted">
+                      Underlying asset group · each token keeps its own
+                      quantity, price and source evidence.
+                    </p>
+                  </Show>
                   <div class="summaries">
                     <SummaryValue
                       label="Current value"
@@ -999,20 +1189,73 @@ function Body(props: {
                     />
                   </div>
                   <Show when={selection().kind !== "overview"}>
-                    <div class="quantity-list">
-                      <For each={selectedEntry()?.quantities}>
-                        {([role, q]) => (
-                          <span>
-                            <Quantity
-                              units={q.units}
-                              scale={q.scale}
-                              asset={q.asset_id}
-                            />{" "}
-                            {role === "liability" ? "borrowed" : ""}
-                          </span>
-                        )}
-                      </For>
-                    </div>
+                    <Show
+                      when={
+                        selection().kind === "asset" &&
+                        (selection() as { id: string }).id.startsWith(
+                          "eip155:1/erc20:",
+                        )
+                      }
+                    >
+                      <details class="token-metadata">
+                        <summary>Token information · cached metadata</summary>
+                        <Show
+                          when={selectedEntry()?.token_metadata}
+                          fallback={
+                            <p>
+                              Metadata missing. Original asset:{" "}
+                              {selection().kind === "asset"
+                                ? shortAssetLabel(
+                                    (selection() as { id: string }).id,
+                                  )
+                                : ""}
+                            </p>
+                          }
+                        >
+                          {(metadata) => (
+                            <>
+                              <p>
+                                Ethereum · chain {metadata().chain_id} ·{" "}
+                                <code>{metadata().contract}</code>
+                              </p>
+                              <p>
+                                Name: {metadata().name ?? "Missing"} · Ticker:{" "}
+                                {metadata().ticker ?? "Missing"} · Icon:{" "}
+                                {metadata().icon_data ? "Cached" : "Missing"}
+                              </p>
+                              <p>
+                                Ledger decimals:{" "}
+                                {selectedEntry()?.quantities[0]?.[1].scale} ·
+                                Source decimals:{" "}
+                                {metadata().decimals ?? "Missing"} · RPC
+                                decimals:{" "}
+                                {metadata().rpc_decimals ?? "Unavailable"}
+                              </p>
+                              <p>
+                                CoinGecko ID:{" "}
+                                {metadata().coingecko_id ??
+                                  "Unverified / unavailable"}{" "}
+                                · Fetched:{" "}
+                                {metadata().fetched_at ??
+                                  "Never fetched successfully"}
+                              </p>
+                              <p>
+                                Asset reference:{" "}
+                                <code>
+                                  {shortAssetLabel(metadata().asset_id)}
+                                </code>
+                              </p>
+                              <For each={Object.keys(metadata().sources)}>
+                                {(source) => <p>Source: {source}</p>}
+                              </For>
+                              <For each={metadata().warnings}>
+                                {(warning) => <p>{warning}</p>}
+                              </For>
+                            </>
+                          )}
+                        </Show>
+                      </details>
+                    </Show>
                     <Show
                       when={!treeBusy()}
                       fallback={
@@ -1063,7 +1306,6 @@ function Body(props: {
             setPanelNode(undefined);
             setPanelWarnings(undefined);
             setPanel(undefined);
-            setOptions("");
             queueMicrotask(() => returnFocus?.focus());
           }
         }}
@@ -1081,6 +1323,54 @@ function Body(props: {
                   Estimated aggregate APY assumes missing investment rates are
                   zero. Individual rates remain unknown.
                 </p>
+              </Show>
+              <Show when={d().inferred_allocation}>
+                {(part) => (
+                  <section class="detail-block">
+                    <p>
+                      <Quantity
+                        units={part().quantity.units}
+                        scale={part().quantity.scale}
+                        asset={assetTicker(part().quantity.asset_id)}
+                      />
+                    </p>
+                    <p>
+                      Inferred from transactions through{" "}
+                      {new Date(part().as_of).toLocaleDateString()}.
+                    </p>
+                    <Show when={part().opened_at}>
+                      <p>
+                        Observed opening:{" "}
+                        {new Date(part().opened_at!).toLocaleDateString()}
+                      </p>
+                    </Show>
+                    <p>
+                      {part().kind === "unclassified_residual"
+                        ? "Savings / collateral allocation unknown"
+                        : "Fixed-term allocation"}
+                      . Scheduled maturity and auto-renew: unknown.
+                    </p>
+                    <Show when={part().expected_apy}>
+                      <p>
+                        <Apy
+                          figure={{
+                            status: "known",
+                            value: part().expected_apy!,
+                          }}
+                        />{" "}
+                        expected · {part().expected_rate_note}
+                      </p>
+                    </Show>
+                    <Show when={part().observed_apy}>
+                      <p>
+                        {formatObservedApy(part().observed_apy!)} observed APY
+                        estimate from a uniquely matched previous term. This
+                        historical estimate is shown separately from any
+                        user-supplied current expected rate.
+                      </p>
+                    </Show>
+                  </section>
+                )}
               </Show>
               <div class="detail-block">
                 <p>Gross assets: {money(d().summary.gross_assets)}</p>
@@ -1112,9 +1402,11 @@ function Body(props: {
                   )}
                 </Show>
                 <Show when={d().source_reference}>
-                  <p class="source">
-                    Provider reference: {d().source_reference}
-                  </p>
+                  {(reference) => (
+                    <p class="source">
+                      Provider reference: {readableReference(reference())}
+                    </p>
+                  )}
                 </Show>
               </div>
               <For each={d().holdings}>
@@ -1128,7 +1420,7 @@ function Body(props: {
                       exact
                       units={holding.quantity.units}
                       scale={holding.quantity.scale}
-                      asset={holding.quantity.asset_id}
+                      asset={assetTicker(holding.quantity.asset_id)}
                     />
                     <p>Current value: {money(holding.value)}</p>
                     <p>Earnings per year: {money(holding.annual_earnings)}</p>
@@ -1549,6 +1841,30 @@ function AccountControls(props: {
   return (
     <section class="detail-block" aria-label="Local organization">
       <strong>Local organization</strong>
+      <Show
+        when={
+          props.account.provider_id.toLowerCase() === "evm" &&
+          !props.account.group
+        }
+      >
+        <InlineEdit
+          label="Wallet software"
+          value={props.account.wallet_software ?? ""}
+          disabled={reviewMode}
+          validate={(value) =>
+            value.trim().length <= 160
+              ? undefined
+              : "Use at most 160 characters."
+          }
+          onCommit={(value) =>
+            props.onEdit({
+              kind: "wallet_software",
+              account: props.account.id,
+              software: value.trim() || null,
+            })
+          }
+        />
+      </Show>
       <InlineEdit
         label="Local account name"
         value={props.account.local_label ?? props.account.source_label}
@@ -1698,18 +2014,18 @@ function describeTarget(
             : scope.kind === "borrowing_position"
               ? `position ${scope.id}`
               : scope.kind === "provider_asset"
-                ? `${label(scope.provider, entries)} · ${scope.asset}`
+                ? `${label(scope.id.provider, entries)} · ${shortAssetLabel(scope.id.asset)}`
                 : scope.kind === "account_asset"
-                  ? `${label(scope.account, names)} · ${scope.asset}`
+                  ? `${label(scope.id.account, names)} · ${shortAssetLabel(scope.id.asset)}`
                   : label(scope.id, entries);
       return `Manual rate · ${where}`;
     }
     case "price":
-      return `Manual price · ${target.asset} in ${target.quote}`;
+      return `Manual price · ${shortAssetLabel(target.asset)} in ${target.quote}`;
     case "spam":
-      return `Spam decision · ${target.asset}`;
+      return `Spam decision · ${shortAssetLabel(target.asset)}`;
     case "dust":
-      return `Dust classification · ${label(target.provider, entries)} / ${target.asset}`;
+      return `Dust classification · ${label(target.provider, entries)} / ${shortAssetLabel(target.asset)}`;
   }
 }
 /** Ordered action log with prior/resulting state and working undo links. */

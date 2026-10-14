@@ -404,3 +404,9 @@ The fixed Overview navigation entry is an elevated card showing the same exact c
 The later row/formatting review uses narrow nonbreaking spaces in monetary digit groups and compact quantities outside details. Navigation keeps name/APY together in the middle, value/quantity on the right and warnings at the far right, following the supplied layout reference without changing colors. The narrow sidebar is 260px so both text columns remain useful; exact quantities stay available in details and partial/unknown/privacy behavior is preserved.
 
 Search sits in the header bar and filters the selected asset/provider list without changing portfolio totals. Navigation value and quantity contents align right. Negative monetary amounts use the semantic danger color; positive, zero, unknown and hidden amounts keep their ordinary styling.
+
+## Allocation presentation refinement (14 October 2026)
+
+The asset/provider main pane omits the standalone quantity list between summary cards and the allocation table. The table supplies the allocation breakdown; navbar quantities and exact quantities in details remain available. This supersedes the earlier interview’s separate secondary quantity display in the main pane.
+
+The [14 October Nexo allocation follow-up](nexo-current-allocations.md) adds expanded fixed-pot rows with observed/expected APY distinctions, wallet-software annotations and zero yield for plain native wallet holdings. Unpriced assets join Others / dust. The standalone quantity list above the allocation table is removed; quantities remain in detail evidence.

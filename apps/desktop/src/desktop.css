@@ -100,13 +100,6 @@ select {
   display: grid;
   gap: 6px;
 }
-.quantity-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 15px;
-  font-size: 11px;
-}
 .warnings {
   display: grid;
   gap: 7px;
@@ -456,4 +449,222 @@ body {
 }
 .overview-total > span {
   flex-wrap: wrap;
+}
+
+.token-metadata {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--mt-colors-border);
+  border-radius: 6px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.token-metadata summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.token-metadata p {
+  margin: 8px 0;
+  line-height: 1.5;
+}
+
+.asset-icon {
+  display: block;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.sidebar span:has(> img.asset-icon) {
+  background: transparent;
+}
+
+.nav-asset-group {
+  min-width: 0;
+}
+.nav-representations-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mt-colors-muted);
+  background: none;
+  border: 0;
+  padding: 4px 10px 8px 50px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.nav-representations-toggle:focus-visible {
+  outline: 2px solid var(--mt-colors-accent-text);
+  outline-offset: 2px;
+}
+.nav-representations {
+  margin: 0 0 10px 40px;
+  padding: 0 8px 0 12px;
+  border-left: 1px solid var(--mt-colors-border);
+  list-style: none;
+}
+.nav-representations li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 12px;
+}
+
+.nav-apy {
+  display: inline-flex;
+  max-width: 100%;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  align-items: center;
+  gap: 4px;
+}
+.nav-apy > svg {
+  flex-shrink: 0;
+}
+
+.nav-entry--title-warning {
+  position: relative;
+  border-radius: 8px;
+}
+.nav-entry--title-warning:hover {
+  background: var(--mt-colors-subtle);
+}
+.nav-entry--title-warning[data-selected="true"] {
+  background: var(--mt-colors-accent-subtle);
+  color: var(--mt-colors-accent-text);
+}
+.nav-entry-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.nav-entry-select:focus-visible {
+  outline: 2px solid var(--mt-colors-accent-text);
+  outline-offset: 2px;
+}
+.nav-entry-content {
+  position: relative;
+  pointer-events: none;
+  display: grid;
+  grid-template-columns: 32px minmax(68px, 1fr) minmax(0, max-content);
+  gap: 8px;
+  align-items: start;
+  padding: 10px;
+}
+.nav-entry-icon {
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 5px;
+  background: var(--mt-colors-accent);
+  color: var(--mt-colors-on-accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+.nav-entry-labels {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.nav-entry-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.nav-entry-title > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-title-warning {
+  position: relative;
+  pointer-events: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--mt-colors-warning);
+  cursor: pointer;
+}
+.nav-title-warning:focus-visible {
+  outline: 2px solid var(--mt-colors-accent-text);
+  outline-offset: 2px;
+}
+.nav-entry-rate,
+.nav-entry-secondary {
+  font-size: 12px;
+  color: var(--mt-colors-muted);
+}
+.nav-entry-value {
+  min-width: 0;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 700;
+}
+.nav-native-quantity {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.nav-native-quantity > span {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.nav-apy > svg {
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+}
+.currency-quantity-glyph {
+  font: inherit;
+  line-height: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-native-quantity > svg {
+  width: 1lh;
+  height: 1lh;
+  line-height: inherit;
+  flex-shrink: 0;
+  display: block;
+}
+
+.nav-entry-value .nav-figures {
+  min-width: 0;
+}
+.nav-entry-value .nav-figures > span:first-child {
+  max-width: 100%;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  justify-content: flex-end;
 }

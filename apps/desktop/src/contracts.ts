@@ -22,7 +22,8 @@ export interface Summary {
   estimated_current_apy?: Figure<Rational>;
 }
 export type Selection =
-  { kind: "overview" | "dust" } | { kind: "asset" | "provider"; id: string };
+  | { kind: "overview" | "dust" }
+  | { kind: "asset" | "provider" | "exposure"; id: string };
 export interface Issue {
   code: string;
   withheld: string[];
@@ -32,7 +33,33 @@ export interface QuantityValue {
   units: string;
   scale: number;
 }
+export interface TokenMetadata {
+  asset_id: string;
+  chain_id: number;
+  contract: string;
+  name: string | null;
+  ticker: string | null;
+  icon_url: string | null;
+  icon_data: string | null;
+  decimals: number | null;
+  rpc_decimals: number | null;
+  coingecko_id: string | null;
+  fetched_at: string | null;
+  sources: Record<string, unknown>;
+  warnings: string[];
+}
 export interface Entry {
+  direct_quantities?: QuantityValue[] | null;
+  alternatives?: {
+    name: string;
+    ticker: string;
+    provider: string;
+    role: string;
+    quantity: QuantityValue;
+    value: Figure<MoneyValue>;
+  }[];
+  metadata_unresolved?: boolean;
+  token_metadata?: TokenMetadata | null;
   estimated_current_value?: Figure<MoneyValue> | null;
   selection: Selection;
   name: string;
@@ -128,10 +155,10 @@ export type LocalValue =
 export type RateScope =
   | { kind: "subscription"; id: string }
   | { kind: "product"; id: string }
-  | { kind: "account_asset"; account: string; asset: string }
+  | { kind: "account_asset"; id: { account: string; asset: string } }
   | { kind: "provider"; id: string }
   | { kind: "asset"; id: string }
-  | { kind: "provider_asset"; provider: string; asset: string }
+  | { kind: "provider_asset"; id: { provider: string; asset: string } }
   | { kind: "borrowing_position"; id: string };
 export type LocalTarget =
   | { kind: "account"; id: string }
@@ -182,6 +209,7 @@ export interface AccountOption {
   group: boolean;
 }
 export interface NodeAccount {
+  wallet_software?: string | null;
   id: string;
   provider_id: string;
   parent: string | null;
@@ -247,7 +275,22 @@ export type AllocationTarget =
   | { kind: "product"; account: string; product: string }
   | { kind: "subscription"; id: string }
   | { kind: "holding"; id: string };
+export interface InferredAllocation {
+  id: string;
+  account: string;
+  kind: string;
+  quantity: QuantityValue;
+  opened_at: string | null;
+  as_of: string;
+  source_hash: string;
+  count: number;
+  observed_apy: string | null;
+  observed_from: string | null;
+  expected_apy: Rational | null;
+  expected_rate_note: string | null;
+}
 export interface Node {
+  inferred_allocation?: InferredAllocation | null;
   id: string;
   target: AllocationTarget;
   name: string;
@@ -285,6 +328,7 @@ export interface Holding {
   edits: HoldingEdits;
 }
 export interface Details {
+  inferred_allocation?: InferredAllocation | null;
   jurisdiction?: AccountJurisdiction | null;
   name: string;
   summary: Summary;
@@ -296,6 +340,7 @@ export interface Details {
 }
 /** Typed manual edit requests; Rust validates scope, dates and revisions. */
 export type ManualEdit =
+  | { kind: "wallet_software"; account: string; software: string | null }
   | {
       kind: "rate";
       scope: RateScope;

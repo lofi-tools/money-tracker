@@ -133,7 +133,11 @@ export function MoneyFigure(props: {
         />
       </Show>
       <Show when={props.figure.status === "partial"}>
-        <Badge tone="warning">Partial subtotal</Badge>
+        <Badge tone="warning">
+          <span title="Known subtotal; some values remain unknown">
+            Partial
+          </span>
+        </Badge>
       </Show>
     </span>
   );

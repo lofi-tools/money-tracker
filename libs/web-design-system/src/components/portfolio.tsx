@@ -1,4 +1,11 @@
-import { For, Show, createEffect, on, onCleanup } from "solid-js";
+import {
+  For,
+  Show,
+  createEffect,
+  createUniqueId,
+  on,
+  onCleanup,
+} from "solid-js";
 import type { JSX } from "solid-js";
 import { Dialog } from "@ark-ui/solid/dialog";
 import { css } from "../../styled-system/css";
@@ -7,6 +14,7 @@ import { Icon } from "./icons";
 import { WarningButton } from "./finance";
 export function NavigationEntry(props: {
   name: string;
+  warningPlacement?: "title" | "end";
   secondary?: JSX.Element;
   value?: JSX.Element;
   rate?: JSX.Element;
@@ -18,6 +26,56 @@ export function NavigationEntry(props: {
     onClick: JSX.EventHandler<HTMLButtonElement, MouseEvent>;
   };
 }) {
+  const uid = createUniqueId();
+  if (props.warningPlacement === "title")
+    return (
+      <div
+        class="nav-entry--title-warning"
+        data-selected={props.selected ? "true" : undefined}
+      >
+        <button
+          type="button"
+          class="nav-entry-select"
+          aria-current={props.selected ? "page" : undefined}
+          aria-labelledby={`${uid}-name ${props.secondary ? `${uid}-secondary` : ""} ${uid}-rate ${uid}-value`}
+          onClick={props.onSelect}
+        />
+        <div class="nav-entry-content">
+          <span
+            class="nav-entry-icon"
+            style={{ background: props.icon ? "transparent" : undefined }}
+          >
+            {props.icon ?? props.name.slice(0, 2).toUpperCase()}
+          </span>
+          <span class="nav-entry-labels">
+            <span class="nav-entry-title">
+              <span id={`${uid}-name`}>{props.name}</span>
+              <Show when={props.warning}>
+                <button
+                  type="button"
+                  class="nav-title-warning"
+                  aria-label={props.warning!.label}
+                  onClick={props.warning!.onClick}
+                >
+                  <Icon name="warning" size={14} />
+                </button>
+              </Show>
+            </span>
+            <Show when={props.secondary}>
+              <span id={`${uid}-secondary`} class="nav-entry-secondary">
+                {props.secondary}
+              </span>
+            </Show>
+            <span id={`${uid}-rate`} class="nav-entry-rate">
+              {props.rate}
+            </span>
+          </span>
+          <span id={`${uid}-value`} class="nav-entry-value">
+            {props.value}
+          </span>
+        </div>
+      </div>
+    );
   return (
     <div
       data-selected={props.selected ? "true" : undefined}

@@ -46,6 +46,10 @@ pub enum ManualEdit {
         quote: AssetId,
         pinned: bool,
     },
+    WalletSoftware {
+        account: AccountId,
+        software: Option<String>,
+    },
     AccountName {
         account: AccountId,
         name: Option<String>,
@@ -231,6 +235,37 @@ impl crate::Application {
                     )
                     .map(Some)
             }
+            ManualEdit::WalletSoftware { account, software } => {
+                let owner = store
+                    .accounts(portfolio)?
+                    .into_iter()
+                    .find(|a| a.id == *account)
+                    .context("account missing")?;
+                ensure!(
+                    owner.provider_id.0.eq_ignore_ascii_case("evm"),
+                    "wallet software requires an EVM account"
+                );
+                ensure!(
+                    software
+                        .as_ref()
+                        .is_none_or(|s| !s.trim().is_empty() && s.len() <= 160),
+                    "invalid wallet software label"
+                );
+                let target = LocalTarget::Account {
+                    id: account.clone(),
+                };
+                let record = store.local_state(portfolio, &target)?;
+                let mut value = customization(&record);
+                value.wallet_software = software.as_ref().map(|s| s.trim().to_string());
+                store
+                    .apply_manual_change(
+                        portfolio,
+                        &target,
+                        record.revision,
+                        Some(LocalValue::Account(value)),
+                    )
+                    .map(Some)
+            }
             ManualEdit::AccountName { account, name } => {
                 let target = LocalTarget::Account {
                     id: account.clone(),
@@ -238,6 +273,7 @@ impl crate::Application {
                 let record = store.local_state(portfolio, &target)?;
                 let current = customization(&record);
                 let value = Some(LocalValue::Account(AccountCustomization {
+                    wallet_software: current.wallet_software.clone(),
                     local_label: name.clone(),
                     parent_is_custom: current.parent_is_custom,
                     parent: if current.parent_is_custom {
@@ -293,6 +329,7 @@ impl crate::Application {
                 let record = store.local_state(portfolio, &target)?;
                 let current = customization(&record);
                 let value = Some(LocalValue::Account(AccountCustomization {
+                    wallet_software: current.wallet_software.clone(),
                     local_label: current.local_label.clone(),
                     parent_is_custom: !source_default,
                     parent: if *source_default {
@@ -382,6 +419,60 @@ mod tests {
             source_reference: None,
         })?;
         store.save_asset_scale(&AssetId::str("USD"), 2)?;
+        Ok(())
+    }
+    #[test]
+    fn wallet_software_survives_rename_and_has_undo() -> Result<()> {
+        let app = Application::from_store(Store::in_memory()?);
+        let portfolio: PortfolioId = DEFAULT_PORTFOLIO.into();
+        app.store().save_account(&Account {
+            id: "wallet".into(),
+            portfolio_id: portfolio.clone(),
+            provider_id: "evm".into(),
+            label: "EVM wallet".into(),
+            source_reference: Some("eip155:1:address".into()),
+        })?;
+        let action = app
+            .apply_manual_edit(
+                &portfolio,
+                &ManualEdit::WalletSoftware {
+                    account: "wallet".into(),
+                    software: Some(" MetaMask ".into()),
+                },
+            )?
+            .unwrap();
+        let target = LocalTarget::Account {
+            id: "wallet".into(),
+        };
+        assert_eq!(
+            customization(&app.store().local_state(&portfolio, &target)?)
+                .wallet_software
+                .as_deref(),
+            Some("MetaMask")
+        );
+        app.undo_manual_edit(&portfolio, &action.id)?;
+        assert!(
+            customization(&app.store().local_state(&portfolio, &target)?)
+                .wallet_software
+                .is_none()
+        );
+        app.apply_manual_edit(
+            &portfolio,
+            &ManualEdit::WalletSoftware {
+                account: "wallet".into(),
+                software: Some("MetaMask".into()),
+            },
+        )?;
+        app.apply_manual_edit(
+            &portfolio,
+            &ManualEdit::AccountName {
+                account: "wallet".into(),
+                name: Some("My ETH wallet".into()),
+            },
+        )?;
+        let value = customization(&app.store().local_state(&portfolio, &target)?);
+        assert_eq!(value.wallet_software.as_deref(), Some("MetaMask"));
+        assert_eq!(value.local_label.as_deref(), Some("My ETH wallet"));
         Ok(())
     }
     #[test]
@@ -586,6 +677,7 @@ mod tests {
                 )?
                 .value,
             Some(LocalValue::Account(AccountCustomization {
+                wallet_software: None,
                 local_label: Some("Terms wallet".into()),
                 parent_is_custom: false,
                 parent: None,

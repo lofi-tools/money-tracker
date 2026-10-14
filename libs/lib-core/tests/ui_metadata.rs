@@ -151,6 +151,7 @@ fn hierarchy_preserves_source_and_customizations_and_rejects_invalid_parents() -
         &target,
         0,
         Some(LocalValue::Account(AccountCustomization {
+            wallet_software: None,
             local_label: Some("My account".into()),
             parent_is_custom: true,
             parent: None,
@@ -182,6 +183,7 @@ fn hierarchy_preserves_source_and_customizations_and_rejects_invalid_parents() -
     assert!(store.save_account_structure(&cyclic).is_err());
     for parent in ["a", "c", "other", "missing"] {
         let value = LocalValue::Account(AccountCustomization {
+            wallet_software: None,
             parent_is_custom: true,
             parent: Some(parent.into()),
             ..Default::default()
@@ -203,6 +205,7 @@ fn hierarchy_preserves_source_and_customizations_and_rejects_invalid_parents() -
         &target,
         2,
         Some(LocalValue::Account(AccountCustomization {
+            wallet_software: None,
             parent_is_custom: true,
             parent: None,
             ..Default::default()
@@ -610,6 +613,7 @@ fn action_log_and_undo_survive_restart_and_refuse_newer_local_edits() -> Result<
             &target,
             0,
             Some(LocalValue::Account(AccountCustomization {
+                wallet_software: None,
                 local_label: Some("Mine".into()),
                 ..Default::default()
             })),
@@ -636,6 +640,7 @@ fn action_log_and_undo_survive_restart_and_refuse_newer_local_edits() -> Result<
         &target,
         2,
         Some(LocalValue::Account(AccountCustomization {
+            wallet_software: None,
             local_label: Some("Older".into()),
             ..Default::default()
         })),
@@ -645,6 +650,7 @@ fn action_log_and_undo_survive_restart_and_refuse_newer_local_edits() -> Result<
         &target,
         3,
         Some(LocalValue::Account(AccountCustomization {
+            wallet_software: None,
             local_label: Some("Newer".into()),
             ..Default::default()
         })),

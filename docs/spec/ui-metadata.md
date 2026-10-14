@@ -71,3 +71,13 @@ Deterministic core tests cover two same-product subscriptions at different openi
 Commands: `cargo test -p lib-core`, `cargo test -p lib-core --test ui_metadata`, `cargo test -p lib-app --test startup`. The deterministic workspace suite keeps provider mappings/replay/reconciliation tests; private/live acquisition remains excluded. The opt-in offline cached Nexo/Binance upgrade test validates unchanged financial records across repeated opens of temporary copies, preserving the originals.
 
 Stage-3 validation passed: 149 deterministic workspace tests (13 opt-in tests ignored; one private-cache test filtered), plus the opt-in preservation check on temporary copies of all three cached Nexo/Binance databases. Formatting, locked offline Cargo metadata, CLI help and documentation links also passed. No live provider acquisition was required.
+
+## Fetched token metadata (13 October 2026)
+
+[Token metadata](token-metadata.md) adds a separate migration/cache keyed by chain-qualified identity, preserving existing `AssetDisplay` names/tickers/evidence and protected scales. Nullable source/RPC decimals, market identifiers, fetched timestamps, source responses and offline icons inform display only. The same follow-up documents reviewed underlying display groups and unresolved-token Dust classification.
+
+## Wallet software and inferred Nexo scopes (14 October 2026)
+
+`AccountCustomization.wallet_software` is an optional backward-compatible local annotation for EVM accounts. The manual action trims/validates it, logs Undo, and keeps it through rename/reparent actions. It changes account display only, not financial provider identity. The details editor exposes it on EVM source accounts.
+
+Nexo source backfill creates empty-position inferred fixed subscriptions and product rate scopes without duplicating ledger holdings. User-qualified rates and ambiguous equal-principal cohort handling are documented in [current inferred allocations](nexo-current-allocations.md).

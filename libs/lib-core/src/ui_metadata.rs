@@ -23,6 +23,8 @@ pub struct AccountStructure {
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccountCustomization {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wallet_software: Option<String>,
     pub local_label: Option<String>,
     /// Distinguish source default from explicitly moving to the root.
     pub parent_is_custom: bool,
@@ -516,6 +518,13 @@ fn validate_local(
     match (target, value) {
         (_, None) => {}
         (LocalTarget::Account { id }, Some(LocalValue::Account(local))) => {
+            ensure!(
+                local
+                    .wallet_software
+                    .as_ref()
+                    .is_none_or(|s| !s.trim().is_empty() && s.len() <= 160),
+                "invalid wallet software label"
+            );
             ensure!(
                 local
                     .local_label
@@ -1581,6 +1590,7 @@ mod tests {
             &LocalTarget::Account { id: "a".into() },
             0,
             Some(LocalValue::Account(AccountCustomization {
+                wallet_software: None,
                 local_label: Some("First".into()),
                 ..Default::default()
             })),
@@ -1597,6 +1607,7 @@ mod tests {
                     &target,
                     0,
                     Some(LocalValue::Account(AccountCustomization {
+                        wallet_software: None,
                         local_label: Some("Second".into()),
                         ..Default::default()
                     }))
@@ -1620,6 +1631,7 @@ mod tests {
             &target,
             0,
             Some(LocalValue::Account(AccountCustomization {
+                wallet_software: None,
                 local_label: Some("Second".into()),
                 ..Default::default()
             })),

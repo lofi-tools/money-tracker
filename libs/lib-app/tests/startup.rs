@@ -413,6 +413,7 @@ async fn metadata_and_local_actions_use_the_selected_worker_portfolio_after_rest
             target.clone(),
             0,
             Some(LocalValue::Account(AccountCustomization {
+                wallet_software: None,
                 local_label: Some("Local name".into()),
                 ..Default::default()
             })),

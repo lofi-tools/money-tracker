@@ -11,3 +11,36 @@ The query uses the latest export no later than its requested cutoff. Exact lock/
 Inferred fixed subscriptions have empty ledger-position lists. They provide stable metadata/rate scopes, while the original aggregate remains the sole ownership record. Expanded holding rows show fixed partitions and the residual. Their values sum to the original holding when its price is known; they are never added again to portfolio totals. The redundant quantity list above the allocation table is removed.
 
 “Current” means still open at the source cutoff, not independently verified today. For the selected export this is 5 October 2026. The supplied export yields 20 represented terms: 16 unique openings and two unresolved two-member cohorts. Scheduled maturity and auto-renew remain unknown, even when the user supplies a product duration.
+
+## Rates and earnings
+
+A unique current opening can inherit an **observed APY estimate** from a uniquely matched preceding term of the same asset closing exactly at renewal. Principal must match exactly, or equal previous principal plus its same-asset reward. The existing reward matcher uses an explicit 300-second window because reward records precede unlock records by a few minutes. All candidates compete; there is no nearest-event tiebreaker. Ambiguous or different-currency rewards remain unresolved. Approximate annualization is historical evidence, not a contractual current rate and is not applied as confirmed annual earnings.
+
+Expected rates use dated persistent metadata, with individual subscription overrides before a qualified cohort product and then the asset's fixed product. Missing rates remain unknown. Valid expected rates supply annual estimates on exact partition value; unqualified residual yields remain unknown, so the aggregate can display a partial known subtotal. Existing aggregate/manual override precedence is preserved. Price and rate provenance accompanies the estimate.
+
+User-reported account rates recorded for this review are distinct from the [bundled public catalogue](nexo-rate-catalogue.md):
+
+| Asset | Flexible reference | Fixed expected rate |
+| --- | --- | --- |
+| ETH | 5.25% | 1 month, 6.25% |
+| NEXO | 3% | 12 months, 9% |
+| NEAR | 7%, paid in NEXO | 1 month, 8%, paid in NEXO |
+| BNB | 6%, paid in NEXO | 1 month, 7%, paid in NEXO |
+| GBPX | 6.5%, paid in NEXO | 12 months: 4,963 and 4,200 at 10.5%; 3,600 at 11.5% |
+| EURX | 6% base, +2 points when paid in NEXO | Old 12-month pots at 11% and 10% |
+
+The two equal-principal EURX pots permit a **10.5% aggregate expected rate**. Their individual identities/rate assignments remain unresolved; these grandfathered rates are not offered defaults. DOT fixed rates remain unknown. GBPX rates are attached to the uniquely identified principal-specific subscriptions; they do not create a generic rate for all GBPX terms. The promotional/tier explanation in the supplied text is unverified. Flexible references do not assign yield to residual collateral. Conditional advertised maxima and pasted third-party assertions are not verified official rates or account defaults. No daily-yield-based disambiguation is implemented.
+
+## Related portfolio behavior
+
+Unpriced asset holdings join **Others / dust**, including tokens with known metadata but unknown value. Their audit records and partial-total warnings remain visible.
+
+Plain EVM native currency in a wallet has a zero-yield fallback with provenance. It does not apply to ERC-20 receipts or subscriptions, and explicit manual rates retain precedence. Users can annotate EVM account wallet software through the details editor; the local annotation is logged and undoable, preserves provider identity, and appears in account labels. The user-provided wallet's chain accounts are annotated MetaMask.
+
+## Validation
+
+Synthetic regression checks cover ambiguous releases, exact reinvested renewals, missing openings, unchanged aggregate ownership across reimports, expected-rate partial earnings, native-wallet zero versus unknown token-product yield, and wallet-software edit/Undo. The frozen browser export is regenerated from a copy of the selected CLI database. No principal or financial transaction is created by these annotations.
+
+Review validation also caught and corrected the desktop `RateScope` contract: Rust serializes account/asset and provider/asset scopes under the tagged `id` object. Change history now reads that shape, so entering Settings after manual edits does not throw. The browser manual-edit/Undo regression uses the real Rust fixture and checks for runtime errors.
+
+Completed checks for this review: 79 application unit tests, 18 portfolio tests, 2 refresh integration tests, 9 core metadata tests, 5 CSV tests and 5 native desktop portfolio tests passed; private/live tests were excluded. Desktop TypeScript/build and all 6 browser tests passed. The selected database comparison preserved account metadata/jurisdictions and five unrelated provider accounts, with zero Nexo balance differences against a fresh source map.

@@ -57,7 +57,7 @@ fn main() -> Result<()> {
         })
         .ok_or_else(|| anyhow::anyhow!("account missing"))?;
     let product = ProductId::from(format!("nexo-fixed:{}:{}", account.0, a[2]));
-    app.store().save_product_template(&ProductTemplate {id:product.clone(),provider_id:owner.provider_id.clone(),source_reference:product.0.clone(),label:format!("Nexo {months}-month fixed · {}",a[2]),evidence:"User-reported individual pot rates, not a generic fixed-rate default. Scheduled maturity and the reason for differing rates remain unknown.".into()})?;
+    app.store().save_product_template(&ProductTemplate {term_months: None,id:product.clone(),provider_id:owner.provider_id.clone(),source_reference:product.0.clone(),label:format!("Nexo {months}-month fixed · {}",a[2]),evidence:"User-reported individual pot rates, not a generic fixed-rate default. Scheduled maturity and the reason for differing rates remain unknown.".into()})?;
     if let Some(flex) = a.get(7) {
         let flex_value: Decimal = flex.parse()?;
         ensure!(
@@ -65,7 +65,7 @@ fn main() -> Result<()> {
             "invalid flexible APY"
         );
         let product = ProductId::from(format!("nexo-flex:{}:{}", account.0, a[2]));
-        app.store().save_product_template(&ProductTemplate {id:product.clone(),provider_id:owner.provider_id.clone(),source_reference:product.0.clone(),label:format!("Nexo flexible savings · {}",a[2]),evidence:format!("User reports {flex}% APY paid in {}; reference only, residual collateral eligibility unknown.",a.get(6).map(String::as_str).unwrap_or("unspecified currency"))})?;
+        app.store().save_product_template(&ProductTemplate {term_months: None,id:product.clone(),provider_id:owner.provider_id.clone(),source_reference:product.0.clone(),label:format!("Nexo flexible savings · {}",a[2]),evidence:format!("User reports {flex}% APY paid in {}; reference only, residual collateral eligibility unknown.",a.get(6).map(String::as_str).unwrap_or("unspecified currency"))})?;
     }
     app.apply_manual_edit(
         &owner.portfolio_id,

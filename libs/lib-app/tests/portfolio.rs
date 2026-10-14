@@ -110,7 +110,7 @@ fn price(s: &Store, asset: &str, v: &str) -> Result<()> {
     })
 }
 fn product(s: &Store, id: &str, provider: &str) -> Result<()> {
-    s.save_product_template(&ProductTemplate {
+    s.save_product_template(&ProductTemplate {term_months: None,
         id: id.into(),
         provider_id: provider.into(),
         source_reference: id.into(),

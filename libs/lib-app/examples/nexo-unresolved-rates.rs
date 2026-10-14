@@ -56,7 +56,7 @@ fn main() -> Result<()> {
         "invalid APY"
     );
     let product = ProductId::from(format!("nexo-fixed-group:{}:{}", p.id, p.count));
-    app.store().save_product_template(&ProductTemplate {id:product.clone(),provider_id:owner_account.provider_id.clone(),source_reference:product.0.clone(),label:format!("Old 12-month {} pots · {}% / {}% · individual identity unresolved",a[2],first,second),evidence:"User confirmed grandfathered current rates. Equal principal permits an aggregate mean; no individual rate assignment or current offer inferred.".into()})?;
+    app.store().save_product_template(&ProductTemplate {term_months: None,id:product.clone(),provider_id:owner_account.provider_id.clone(),source_reference:product.0.clone(),label:format!("Old 12-month {} pots · {}% / {}% · individual identity unresolved",a[2],first,second),evidence:"User confirmed grandfathered current rates. Equal principal permits an aggregate mean; no individual rate assignment or current offer inferred.".into()})?;
     app.store()
         .save_subscription(&lib_core::ui_metadata::Subscription {
             id: format!("qualified-group:{}", product.0),
@@ -85,7 +85,7 @@ fn main() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("account missing"))?;
     if a[2] == "EURX" {
         let flex = ProductId::from(format!("nexo-flex:{}:EURX", account.0));
-        app.store().save_product_template(&ProductTemplate { id:flex.clone(), provider_id:owner_account.provider_id.clone(), source_reference:flex.0.clone(), label:"Nexo flexible savings · EURX".into(), evidence:"User supplied 6% base APY, +2 percentage points if paid in NEXO; reference only, unclassified residual may be collateral.".into() })?;
+        app.store().save_product_template(&ProductTemplate {term_months: None, id:flex.clone(), provider_id:owner_account.provider_id.clone(), source_reference:flex.0.clone(), label:"Nexo flexible savings · EURX".into(), evidence:"User supplied 6% base APY, +2 percentage points if paid in NEXO; reference only, unclassified residual may be collateral.".into() })?;
     }
     let fraction = ((first + second) / Decimal::from(200))
         .normalize()

@@ -187,7 +187,7 @@ impl NexoSvc {
                         .context(StoreSnafu)?
                         .is_none()
                     {
-                        store.save_product_template(&ProductTemplate {id:product.clone(),provider_id:provider.clone(),source_reference:product.0.clone(),label:format!("Nexo fixed terms · {}",part.quantity.asset_id.0),evidence:"Inferred locked allocation; contractual duration and APY not established".into()}).context(StoreSnafu)?;
+                        store.save_product_template(&ProductTemplate {term_months: None,id:product.clone(),provider_id:provider.clone(),source_reference:product.0.clone(),label:format!("Nexo fixed terms · {}",part.quantity.asset_id.0),evidence:"Inferred locked allocation; contractual duration and APY not established".into()}).context(StoreSnafu)?;
                     }
                     if matches!(part.kind.as_str(), "fixed" | "unresolved_fixed") {
                         let sub = Subscription {

@@ -81,3 +81,5 @@ Stage-3 validation passed: 149 deterministic workspace tests (13 opt-in tests ig
 `AccountCustomization.wallet_software` is an optional backward-compatible local annotation for EVM accounts. The manual action trims/validates it, logs Undo, and keeps it through rename/reparent actions. It changes account display only, not financial provider identity. The details editor exposes it on EVM source accounts.
 
 Nexo source backfill creates empty-position inferred fixed subscriptions and product rate scopes without duplicating ledger holdings. User-qualified rates and ambiguous equal-principal cohort handling are documented in [current inferred allocations](nexo-current-allocations.md).
+
+Product templates optionally carry `term_months` (1–120). Existing payloads deserialize with no duration. Duration is display metadata for expected calendar-month maturities; it does not establish contractual dates or alter financial positions.

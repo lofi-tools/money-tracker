@@ -56,6 +56,8 @@ pub struct AssetAlias {
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProductTemplate {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub term_months: Option<u32>,
     pub id: ProductId,
     pub provider_id: ProviderId,
     pub source_reference: String,
@@ -700,6 +702,10 @@ impl Store {
             .query_map(params![provider.0,namespace,external],|r| r.get::<_,String>(0))?.map(|r| decode(r?)).collect()
     }
     pub fn save_product_template(&self, value: &ProductTemplate) -> Result<()> {
+        ensure!(
+            value.term_months.is_none_or(|m| m > 0 && m <= 120),
+            "invalid fixed term duration"
+        );
         ensure!(
             !value.id.0.is_empty()
                 && !value.provider_id.0.is_empty()

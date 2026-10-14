@@ -81,6 +81,7 @@ fn position(
 }
 fn product() -> ProductTemplate {
     ProductTemplate {
+        term_months: None,
         id: "term".into(),
         provider_id: "nexo".into(),
         source_reference: "term-source".into(),

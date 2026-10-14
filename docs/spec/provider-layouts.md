@@ -12,6 +12,8 @@ Provider navigation uses bundled Nexo, Binance, Kraken and MetaMask marks. Solan
 
 Regression checks cover Nexo value/earnings conservation, unknown-rate qualification, inferred versus saved dates and backfill, software grouping with several accounts/chains, and canonical section lookup. Source-cutoff and price warnings remain visible.
 
-Review checks: core/application/native Rust suites passed (private/live cases excluded), including all 20 portfolio integration tests. Desktop TypeScript and production build passed, as did six desktop browser tests and four review browser tests. The selected CLI balance report remains unchanged after account annotations.
+Review checks: core/application/native Rust suites passed (private/live cases excluded), including all 20 portfolio integration tests. Desktop TypeScript and production build passed, as did six desktop browser tests and four review browser tests. Solana is covered by the offline bundled-icon check. The selected CLI balance report remains unchanged after account annotations.
 
-**Others** uses an original bundled SVG depicting several currencies emerging from an isometric box.
+## Inline value presentation follow-up
+
+Monochrome quantity SVGs are rasterized locally at mount to measure painted alpha area. Their geometry scales toward a shared ink-area target, bounded to the text line. The horizontal SVG viewport is cropped to the adjusted ink bounds, including stroke padding, so its gap to the number matches the font-glyph gap. This optical adjustment applies to all bundled crypto quantity symbols; fiat symbols remain text. No external request is needed. **Others** uses an original bundled SVG depicting several currencies emerging from an isometric box.

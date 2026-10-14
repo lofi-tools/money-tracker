@@ -1,6 +1,6 @@
 // Monochrome geometry adapted from the bundled, licensed coin SVGs.
 // Original sources and licenses are in assets/coins; no background circles.
-import { For, Show } from "solid-js";
+import { For, Show, createSignal, onMount, onCleanup } from "solid-js";
 const glyphs: Record<string, string> = {
   USD: "$",
   EUR: "€",
@@ -77,14 +77,64 @@ export function hasCurrencySymbol(asset: string) {
   return !!glyphs[asset] || !!shapes[asset];
 }
 export function CurrencySymbol(props: { asset: string }) {
+  let svg: SVGSVGElement | undefined;
+  let geometry: SVGGElement | undefined;
+  const [opticalScale, setOpticalScale] = createSignal(1);
+  const [inkBox, setInkBox] = createSignal({ x: 0, width: 32 });
+  onMount(() => {
+    if (!svg || !geometry) return;
+    const bounds = geometry.getBBox();
+    const source = new XMLSerializer()
+      .serializeToString(svg)
+      .replaceAll("currentColor", "#000");
+    const url = URL.createObjectURL(
+      new Blob([source], { type: "image/svg+xml" }),
+    );
+    const image = new Image();
+    let disposed = false;
+    onCleanup(() => {
+      disposed = true;
+      URL.revokeObjectURL(url);
+    });
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      if (disposed) return;
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 64;
+      const context = canvas.getContext("2d");
+      if (!context) return;
+      context.drawImage(image, 0, 0, 64, 64);
+      const pixels = context.getImageData(0, 0, 64, 64).data;
+      let ink = 0;
+      for (let i = 3; i < pixels.length; i += 4) ink += pixels[i] / 255;
+      // Equalize painted area, with a cap so no symbol escapes its text line.
+      const scale = Math.min(
+        1.3,
+        25.6 / Math.max(bounds.width, bounds.height),
+        Math.sqrt((0.12 * 4096) / Math.max(ink, 1)),
+      );
+      const adjusted = Math.max(0.65, scale);
+      setOpticalScale(adjusted);
+      const strokePadding =
+        props.asset === "ETH" || props.asset === "NEXO" ? 0.8 : 0;
+      setInkBox({
+        x: 16 + (bounds.x - 16 - strokePadding) * adjusted,
+        width: (bounds.width + strokePadding * 2) * adjusted,
+      });
+    };
+    image.src = url;
+  });
   return (
     <Show
       when={glyphs[props.asset]}
       fallback={
         <svg
+          ref={svg}
           class="crypto-quantity-symbol"
+          data-optical-scale={opticalScale()}
           aria-hidden="true"
-          viewBox="0 0 32 32"
+          viewBox={`${inkBox().x} 0 ${inkBox().width} 32`}
+          style={{ width: `calc(1lh * ${inkBox().width / 32})` }}
           width="1em"
           height="1em"
           fill={
@@ -100,9 +150,14 @@ export function CurrencySymbol(props: { asset: string }) {
           stroke-width="1.6"
           stroke-linejoin="round"
         >
-          <For each={shapes[props.asset] ?? []}>
-            {(p) => <path d={p.d} transform={p.transform || undefined} />}
-          </For>
+          <g
+            ref={geometry}
+            transform={`translate(16 16) scale(${opticalScale()}) translate(-16 -16)`}
+          >
+            <For each={shapes[props.asset] ?? []}>
+              {(p) => <path d={p.d} transform={p.transform || undefined} />}
+            </For>
+          </g>
         </svg>
       }
     >

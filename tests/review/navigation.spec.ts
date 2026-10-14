@@ -165,6 +165,12 @@ test("main asset SVG icons and cached token labels remain usable offline", async
   await expect(
     solNav.locator("..").locator(".nav-entry-icon img"),
   ).toHaveAttribute("src", /^(data:image\/svg\+xml,|.*\/sol\.svg)/);
+  const optical = solNav.locator("..").locator("svg.crypto-quantity-symbol");
+  await expect
+    .poll(async () => Number(await optical.getAttribute("data-optical-scale")))
+    .toBeLessThan(1);
+  const symbolBounds = await optical.boundingBox();
+  expect(symbolBounds!.width).toBeLessThan(symbolBounds!.height);
   await expect(nav.locator(".others-dust-entry img")).toHaveAttribute(
     "src",
     /others|data:image/,

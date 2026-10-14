@@ -11,6 +11,7 @@ use std::time::Instant;
 
 pub use lib_app::adapters;
 mod cli;
+mod providers;
 
 #[derive(Debug, Snafu)]
 enum AppError {
@@ -20,6 +21,8 @@ enum AppError {
     Evm { source: anyhow::Error },
     #[snafu(display("Kraken import or reconciliation failed"))]
     Kraken { source: anyhow::Error },
+    #[snafu(display("provider replay or report failed"))]
+    Providers { source: anyhow::Error },
     #[snafu(display("invalid UTC date '{input}' (expected YYYY-MM-DD)"))]
     Date {
         input: String,
@@ -107,6 +110,36 @@ async fn run() -> Result<(), AppError> {
     let db_path = config.data_dir.join("portfolio.duckdb");
     let app = lib_app::Application::open(&db_path).context(OpenDatabaseSnafu { path: db_path })?;
     let store = app.store();
+    if command.is_none() && historical_from.is_none() && fetch_current {
+        return providers::run(
+            store, &config, false, false, offline, None, None, None, None,
+        )
+        .await
+        .context(ProvidersSnafu);
+    }
+    if let Some(cli::Command::Providers {
+        no_import,
+        widen_scales,
+        binance_statement,
+        binance_positions,
+        binance_supplement,
+        kraken_snapshot,
+    }) = &command
+    {
+        return providers::run(
+            store,
+            &config,
+            *no_import,
+            *widen_scales,
+            offline,
+            binance_statement.as_deref(),
+            binance_positions.as_deref(),
+            binance_supplement.as_deref(),
+            kraken_snapshot.as_deref(),
+        )
+        .await
+        .context(ProvidersSnafu);
+    }
     if let Some(cli::Command::Evm {
         address,
         account,

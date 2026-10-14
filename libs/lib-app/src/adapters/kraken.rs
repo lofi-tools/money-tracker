@@ -242,6 +242,16 @@ fn map(snapshot: &Snapshot, existing: &HashMap<AssetId, u8>) -> Result<Mapped> {
     })
 }
 
+/// Validate the complete snapshot and report its independently required scales.
+/// This is a planning operation; it never changes protected scales or storage.
+pub fn required_scales(snapshot: &Snapshot) -> Result<HashMap<AssetId, u8>> {
+    Ok(map(snapshot, &HashMap::new())?
+        .positions
+        .into_iter()
+        .map(|(_, asset, scale, _)| (asset, scale))
+        .collect())
+}
+
 pub fn snapshot_hash(snapshot: &Snapshot) -> Result<String> {
     Ok(fingerprint(&serde_json::to_vec(snapshot)?))
 }
@@ -477,6 +487,11 @@ mod tests {
             );
         }
         let store = Store::in_memory()?;
+        store.save_asset_scale(&AssetId::str("DOT"), 8)?;
+        assert!(map(&snapshot, &HashMap::from([(AssetId::str("DOT"), 8)])).is_err());
+        let plan = required_scales(&snapshot)?;
+        assert_eq!(plan[&AssetId::str("DOT")], 10);
+        store.widen_asset_scale(&AssetId::str("DOT"), plan[&AssetId::str("DOT")])?;
         let a = account("alice");
         let hash = import_snapshot(&store, &a, &snapshot)?;
         reconcile(&store, &a.id, &snapshot, &hash)?;

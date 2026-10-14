@@ -12,6 +12,7 @@ lib-core.workspace = true
 lib-app.workspace = true
 evm-client.workspace = true
 kraken-client.workspace = true
+serde_json.workspace = true
 clap = { version = "4.5", features = ["derive", "env"] }
 dirs = "5.0"
 

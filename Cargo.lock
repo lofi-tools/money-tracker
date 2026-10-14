@@ -856,6 +856,7 @@ dependencies = [
  "kraken-client",
  "lib-app",
  "lib-core",
+ "serde_json",
  "snafu",
  "temp-env",
  "tempfile",

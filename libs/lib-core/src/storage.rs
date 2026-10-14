@@ -1021,6 +1021,17 @@ impl Store {
     }
 
     /// Decimal precision used to encode an asset's ledger amounts.
+    /// Registered scale when present; distinguish a new asset from a query failure.
+    pub fn registered_asset_scale(&self, asset: &AssetId) -> anyhow::Result<Option<u8>> {
+        let mut stmt = self
+            .connection
+            .prepare("SELECT decimals FROM asset_scales WHERE asset_id=?")?;
+        let mut rows = stmt.query([&asset.0])?;
+        rows.next()?
+            .map(|r| Ok(u8::try_from(r.get::<_, i32>(0)?)?))
+            .transpose()
+    }
+
     pub fn asset_scale(&self, asset: &AssetId) -> anyhow::Result<u8> {
         let decimals: i32 = self.connection.query_row(
             "SELECT decimals FROM asset_scales WHERE asset_id=?",

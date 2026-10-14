@@ -22,7 +22,12 @@ pub enum StatementError {
 
 pub fn default_import_path() -> anyhow::Result<PathBuf> {
     let imports = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/imports");
-    let mut paths = std::fs::read_dir(&imports)?
+    import_path_in(&imports)?.context("no Binance CSV or ZIP found in .cache/imports")
+}
+
+/// Deterministic statement discovery in an explicitly selected import directory.
+pub fn import_path_in(imports: &Path) -> anyhow::Result<Option<PathBuf>> {
+    let mut paths = std::fs::read_dir(imports)?
         .map(|entry| entry.map(|e| e.path()))
         .collect::<Result<Vec<_>, _>>()?;
     paths.retain(|p| {
@@ -33,13 +38,12 @@ pub fn default_import_path() -> anyhow::Result<PathBuf> {
     });
     paths.sort();
     // Prefer a ZIP so the ordinary test exercises decompression caching.
-    paths
+    Ok(paths
         .iter()
         .rev()
         .find(|p| p.extension().is_some_and(|e| e == "zip"))
         .or_else(|| paths.last())
-        .cloned()
-        .context("no Binance CSV or ZIP found in .cache/imports")
+        .cloned())
 }
 
 pub fn test_data_dir() -> PathBuf {
@@ -306,6 +310,86 @@ fn persist_mapped(
     )
 }
 
+/// Replay the statement and its frozen Earn supplement into the selected application DB.
+/// Reference balances remain independent observations, never opening-balance entries.
+pub fn replay_cached(
+    store: &Store,
+    statement: &Path,
+    cache: &Path,
+    positions_path: &Path,
+    supplement_path: &Path,
+) -> anyhow::Result<chrono::DateTime<chrono::Utc>> {
+    let positions: AccountSnapshot = serde_json::from_slice(&std::fs::read(positions_path)?)?;
+    let supplement: AccountSnapshot = serde_json::from_slice(&std::fs::read(supplement_path)?)?;
+    ensure!(
+        positions.fetched_at == supplement.fetched_at,
+        "Binance positions and Earn supplement cutoffs differ; refresh them together"
+    );
+    let reference = map_snapshot(&positions)?;
+    let rows = StatementFile::load(statement, cache)?.parse()?;
+    ensure!(
+        rows.iter().all(|r| r.datetime <= positions.fetched_at),
+        "Binance statement extends beyond reference cutoff"
+    );
+    ensure!(
+        events(&supplement)?
+            .iter()
+            .all(|e| e.datetime <= positions.fetched_at),
+        "Binance supplement extends beyond reference cutoff"
+    );
+    import_statement(statement, cache, store)?;
+    import_api_history(&supplement, store)?;
+    let scales: HashMap<_, _> = store
+        .position_metadata()?
+        .into_iter()
+        .map(|(_, asset, scale, _)| (asset, scale))
+        .collect();
+    let source_scales: HashMap<_, _> = reference
+        .data
+        .assets
+        .iter()
+        .map(|a| (a.id.clone(), a.decimals))
+        .collect();
+    let mut observations = reference.current_balances;
+    let mut registrations = Vec::new();
+    for observation in &mut observations {
+        let asset = &reference.position_assets[&observation.position_id];
+        let scale = scales.get(asset).copied().unwrap_or(source_scales[asset]);
+        observation.amount = observation.amount.rescale(source_scales[asset], scale)?;
+        registrations.push((
+            observation.position_id.clone(),
+            asset.clone(),
+            scale,
+            lib_core::PositionRole::Asset,
+        ));
+    }
+    let hash = binance_client::statement::fingerprint(&serde_json::to_vec(&positions)?);
+    store.save_file_import_with_observations(
+        "BINANCE-POSITIONS-v1",
+        &hash,
+        &registrations,
+        &[],
+        &observations,
+        |_, _| {},
+    )?;
+    let accounts: std::collections::HashSet<_> = store
+        .accounts(&lib_core::DEFAULT_PORTFOLIO.into())?
+        .into_iter()
+        .filter(|a| {
+            a.provider_id.0.eq_ignore_ascii_case("binance") && a.id.0.starts_with("legacy:binance")
+        })
+        .map(|a| a.id)
+        .collect();
+    let mut ledger = HashMap::new();
+    for account in accounts {
+        for balance in store.account_balances_at(&account, positions.fetched_at)? {
+            ledger.insert(balance.position_id, balance.amount);
+        }
+    }
+    reconcile_amounts(ledger, &observations)?;
+    Ok(positions.fetched_at)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -497,6 +581,88 @@ mod tests {
             Err(error) if assert_reconciliation => return Err(error.into()),
             Err(error) => eprintln!("{error}"),
         }
+        Ok(())
+    }
+
+    #[test]
+    fn application_replay_is_scoped_idempotent_and_preserves_scales() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let statement = dir.path().join("export.csv");
+        std::fs::write(
+            &statement,
+            "UTC_Time,Account,Operation,Coin,Change,Remark\n2024-01-01 00:00:00,Spot,Deposit,BTC,1,\n",
+        )?;
+        let cutoff: DateTime<Utc> = "2024-01-02T00:00:00Z".parse()?;
+        let reference = AccountSnapshot {
+            version: 1,
+            from: cutoff,
+            fetched_at: cutoff,
+            symbols: vec![],
+            history: BTreeMap::new(),
+            balances: BTreeMap::from([
+                (
+                    "spot".into(),
+                    vec![serde_json::json!({"asset":"BTC","free":"1.01","locked":"0"})],
+                ),
+                ("funding".into(), vec![]),
+                ("flexible".into(), vec![]),
+                ("locked".into(), vec![]),
+            ]),
+        };
+        let mut supplement = reference.clone();
+        supplement.history.insert(
+            "dividends".into(),
+            vec![serde_json::json!({"asset":"BTC","amount":"0.01","divTime":1704067260000i64})],
+        );
+        let positions = dir.path().join("positions.json");
+        let earn = dir.path().join("earn.json");
+        std::fs::write(&positions, serde_json::to_vec(&reference)?)?;
+        std::fs::write(&earn, serde_json::to_vec(&supplement)?)?;
+        let store = Store::in_memory()?;
+        let effect = lib_core::TxnEffect {
+            datetime: cutoff,
+            position_id: "NEXO:BTC".into(),
+            amount: lib_core::Units::from_decimal("7", 12)?,
+        };
+        store.save_file_import_with_progress(
+            "NEXO",
+            "synthetic",
+            &[(
+                "NEXO:BTC".into(),
+                lib_core::AssetId::str("BTC"),
+                12,
+                lib_core::PositionRole::Asset,
+            )],
+            &[(
+                "nexo-deposit".into(),
+                lib_core::Transaction {
+                    datetime: cutoff,
+                    inputs: vec![],
+                    outputs: vec![effect],
+                },
+            )],
+            |_, _| {},
+        )?;
+        replay_cached(&store, &statement, dir.path(), &positions, &earn)?;
+        let before = store.latest_balances()?;
+        replay_cached(&store, &statement, dir.path(), &positions, &earn)?;
+        assert_eq!(before, store.latest_balances()?);
+        assert_eq!(store.asset_scale(&lib_core::AssetId::str("BTC"))?, 12);
+        assert_eq!(
+            store.account_balances_at(&"legacy:binance:spot".into(), cutoff)?[0]
+                .amount
+                .decimal_string(12),
+            "1.010000000000"
+        );
+        supplement.fetched_at += chrono::Duration::seconds(1);
+        std::fs::write(&earn, serde_json::to_vec(&supplement)?)?;
+        assert!(replay_cached(&store, &statement, dir.path(), &positions, &earn).is_err());
+        assert_eq!(before, store.latest_balances()?);
+        let mut wrong = reference.clone();
+        wrong.balances.get_mut("spot").unwrap()[0]["free"] = serde_json::json!("2");
+        std::fs::write(&positions, serde_json::to_vec(&wrong)?)?;
+        std::fs::write(&earn, serde_json::to_vec(&reference)?)?;
+        assert!(replay_cached(&store, &statement, dir.path(), &positions, &earn).is_err());
         Ok(())
     }
 

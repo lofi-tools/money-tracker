@@ -171,7 +171,7 @@ pub fn open_allocations(
     Ok(out)
 }
 
-/// Partition only when locked <= aggregate quantity and scales agree. Never
+/// Partition only when locked <= aggregate quantity after exact scale normalization. Never
 /// clamp or add an allocation to its original ownership a second time.
 pub fn partition(quantity: &QuantityDto, parts: &[TermAllocation]) -> Result<Vec<TermAllocation>> {
     ensure!(
@@ -188,9 +188,10 @@ pub fn partition(quantity: &QuantityDto, parts: &[TermAllocation]) -> Result<Vec
     }
     let mut seen = BTreeSet::new();
     let mut locked = Units::from(0);
-    for p in &out {
+    for p in &mut out {
         ensure!(seen.insert(&p.id), "duplicate partition identity");
-        ensure!(p.quantity.scale == quantity.scale, "term scale mismatch");
+        p.quantity.units = p.quantity.units.rescale(p.quantity.scale, quantity.scale)?;
+        p.quantity.scale = quantity.scale;
         locked += &p.quantity.units;
     }
     ensure!(
@@ -251,6 +252,20 @@ mod tests {
         let partition = partition(&quantity, &parts)?;
         assert_eq!(partition.len(), 2);
         assert_eq!(partition[1].quantity.units, Units::from_decimal("2", 8)?);
+        let widened = QuantityDto {
+            units: quantity.units.rescale(8, 10)?,
+            scale: 10,
+            ..quantity.clone()
+        };
+        let widened_parts = super::partition(&widened, &parts)?;
+        assert_eq!(
+            widened_parts[0].quantity.units,
+            partition[0].quantity.units.rescale(8, 10)?
+        );
+        assert_eq!(
+            widened_parts[1].quantity.units,
+            partition[1].quantity.units.rescale(8, 10)?
+        );
         assert!(
             super::partition(
                 &QuantityDto {

@@ -99,20 +99,21 @@ impl NexoSvc {
         let rows = file.parse().context(ReadCsvSnafu {
             path: self.path_to_csv.clone(),
         })?;
-        let (assets, transactions) = map_rows(&rows)?;
+        let (assets, mut transactions) = map_rows(&rows)?;
+        let scales = stored_scales(store, &assets, &mut transactions)?;
         let mut asset_positions: Vec<_> = Vec::with_capacity(assets.len() * 2);
         for (ticker, has_credit) in &assets {
             asset_positions.push((
                 PositionId::from(format!("NEXO:{ticker}")),
                 AssetId::str(ticker),
-                CSV_DECIMALS,
+                scales[ticker],
                 PositionRole::Asset,
             ));
             if *has_credit {
                 asset_positions.push((
                     PositionId::from(format!("NEXO-CREDIT:{ticker}")),
                     AssetId::str(ticker),
-                    CSV_DECIMALS,
+                    scales[ticker],
                     PositionRole::Liability,
                 ));
             }
@@ -319,11 +320,12 @@ fn import_nexo_rows_with_progress(
     rows: &[NexoTx],
     on_progress: impl FnMut(usize, usize),
 ) -> Result<usize, NexoError> {
-    let (assets, transactions) = map_rows(rows)?;
+    let (assets, mut transactions) = map_rows(rows)?;
+    let scales = stored_scales(store, &assets, &mut transactions)?;
     for (ticker, has_credit) in &assets {
         let asset = AssetId::str(ticker);
         store
-            .save_asset_scale(&asset, CSV_DECIMALS)
+            .save_asset_scale(&asset, scales[ticker])
             .context(StoreSnafu)?;
         store
             .save_position_asset(
@@ -346,6 +348,38 @@ fn import_nexo_rows_with_progress(
         .save_transactions_with_progress(&transactions, on_progress)
         .context(StoreSnafu)?;
     Ok(rows.len())
+}
+
+/// Source parsing remains eight-decimal; persisted effects honor an explicitly widened registry.
+fn stored_scales(
+    store: &Store,
+    assets: &BTreeMap<String, bool>,
+    transactions: &mut [(String, Transaction)],
+) -> Result<BTreeMap<String, u8>, NexoError> {
+    let mut scales = BTreeMap::new();
+    let mut positions = BTreeMap::new();
+    for ticker in assets.keys() {
+        let scale = store
+            .registered_asset_scale(&AssetId::str(ticker))
+            .context(StoreSnafu)?
+            .unwrap_or(CSV_DECIMALS);
+        scales.insert(ticker.clone(), scale);
+        positions.insert(format!("NEXO:{ticker}"), scale);
+        positions.insert(format!("NEXO-CREDIT:{ticker}"), scale);
+    }
+    for (_, transaction) in transactions {
+        for effect in transaction
+            .inputs
+            .iter_mut()
+            .chain(transaction.outputs.iter_mut())
+        {
+            effect.amount = effect
+                .amount
+                .rescale(CSV_DECIMALS, positions[&effect.position_id.0])
+                .context(StoreSnafu)?;
+        }
+    }
+    Ok(scales)
 }
 
 fn map_rows(
@@ -1020,6 +1054,7 @@ mod tests {
             NexoImportOutcome::AlreadyImported
         );
 
+        store.widen_asset_scale(&AssetId::str("ETH"), 10)?;
         let changed = format!("{header}{}", row(3));
         std::fs::write(&path, &changed)?;
         assert_eq!(service.import_into(&store)?, NexoImportOutcome::Imported(1));

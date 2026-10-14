@@ -258,13 +258,14 @@ fn coin_id(ticker: &str) -> anyhow::Result<Option<&'static str>> {
         "ETH" | "eip155:1/native" | "eip155:42161/native" | "eip155:324/native" => Some("ethereum"),
         "BNB" | "eip155:56/native" => Some("binancecoin"),
         "NEXO" => Some("nexo"),
+        "SOL" => Some("solana"),
         "NEAR" => Some("near"),
         "DOT" => Some("polkadot"),
         "POL" | "eip155:137/native" => Some("polygon-ecosystem-token"),
         "USDT" => Some("tether"),
         "USDC" => Some("usd-coin"),
         "ETHW" => Some("ethereum-pow-iou"),
-        _ => bail!("no CoinGecko mapping for Nexo asset {ticker}"),
+        _ => bail!("no reviewed CoinGecko mapping for asset {ticker}"),
     })
 }
 
@@ -388,6 +389,22 @@ fn exact_quotes_in(
 #[cfg(test)]
 mod exact_tests {
     use super::*;
+    #[test]
+    fn binance_native_sol_has_an_explicit_market_mapping() -> anyhow::Result<()> {
+        let now = DateTime::from_timestamp(1_800_000_000, 0).unwrap();
+        let raw =
+            serde_json::from_str(r#"{"solana":{"usd":123.4567,"last_updated_at":1800000000}}"#)?;
+        let quotes = exact_quotes(
+            &[AssetId::str("SOL"), AssetId::str("unknown-SOL-token")],
+            &raw,
+            now,
+        )?;
+        assert_eq!(quotes.len(), 1);
+        assert_eq!(quotes[0].asset, AssetId::str("SOL"));
+        assert_eq!(quotes[0].price.to_string(), "123.4567");
+        Ok(())
+    }
+
     #[test]
     fn fiat_units_use_derived_fx_and_stablecoins_use_market_quotes() -> anyhow::Result<()> {
         let now = DateTime::from_timestamp(1_800_000_000, 0).unwrap();

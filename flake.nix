@@ -25,7 +25,7 @@
 
           # wd = "$(git rev-parse --show-toplevel)";
           scripts = mapAttrs pkgs.writeShellScriptBin {
-            h = ''cargo run -p cli'';
+            h = ''cargo run -p cli -- "$@"'';
             nexo = ''cargo test -p lib-app adapters::nexo::tests::latest_amount -- --ignored --nocapture'';
             binance = ''cargo test -p lib-app adapters::binance::statements::tests::latest_amount_after_cached_statement -- --ignored --nocapture'';
             evm = ''cargo test -p lib-app adapters::evm::private_tests::latest_amount_after_cached_wallet -- --exact --ignored --nocapture'';

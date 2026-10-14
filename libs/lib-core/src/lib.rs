@@ -22,3 +22,5 @@ pub use traits::*;
 pub use types::*;
 
 pub mod token_metadata;
+
+mod precision;

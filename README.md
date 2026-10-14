@@ -39,7 +39,7 @@ On the first online run, the CLI backfills USD prices from one day before each a
 cargo run -p cli -- --data-dir ./data --historical-from 2020-07-26
 ```
 
-The database is `./data/portfolio.duckdb`. The CLI hashes the exact Nexo CSV bytes and skips a file already imported successfully; a changed export updates transactions by stable ID. The hash is committed with the transaction import, so failed imports are retried. Use `--offline` to import and query without contacting price providers. Set `COINGECKO_DEMO_API_KEY` or `COINGECKO_PRO_API_KEY` for the corresponding API plan.
+The database is `./data/portfolio.duckdb`. The default run now replays available cached Nexo/Binance/Kraken inputs into that shared DB and prints all saved providers, including EVM accounts. Use `--offline providers --no-import` for a stored-data-only report; see [combined provider replay](docs/spec/cli.md#combined-provider-replay-14-october-2026) for explicit source paths and cache prerequisites. The CLI hashes the exact Nexo CSV bytes and skips a file already imported successfully; a changed export updates transactions by stable ID. The hash is committed with the transaction import, so failed imports are retried. Use `--offline` to import and query without contacting price providers. Set `COINGECKO_DEMO_API_KEY` or `COINGECKO_PRO_API_KEY` for the corresponding API plan.
 
 Pass `--nexo-csv PATH` to import an export from another location. The Nexo CSV path is independent of `--data-dir`, which controls the DuckDB location.
 

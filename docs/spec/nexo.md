@@ -99,3 +99,5 @@ Validation: 12 deterministic Nexo mapping/import tests and 14 portfolio tests pa
 ## Current allocation follow-up (14 October 2026)
 
 The aggregate-only investigation above is superseded for the reviewed slice by [current inferred allocations](nexo-current-allocations.md): immutable source backfill, conservative derived partitions, subscription metadata and user-qualified expected rates are implemented for review. Individual maturity, renewal and unqualified rates remain unknown. Ledger ownership remains aggregate.
+
+The mixed-provider precision follow-up keeps Nexo source parsing at eight decimals but normalizes new/replaced effects to the registered DB scale exactly. Derived fixed partitions likewise normalize source principal to the aggregate scale before comparison. Thus a deliberate DOT widening for Kraken neither breaks later Nexo export replay nor removes Nexo allocation rows. Source precision/range failures still reject; ordinary imports never widen registered scales themselves.

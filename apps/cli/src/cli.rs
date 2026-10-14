@@ -39,6 +39,23 @@ pub struct Args {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
+    /// Replay local provider inputs into the shared DB and print every provider together
+    Providers {
+        /// Print the selected database without importing local source files
+        #[arg(long)]
+        no_import: bool,
+        /// Explicitly widen ledger precision losslessly if the Kraken snapshot requires it
+        #[arg(long, conflicts_with = "no_import")]
+        widen_scales: bool,
+        #[arg(long, env = "BINANCE_STATEMENT")]
+        binance_statement: Option<PathBuf>,
+        #[arg(long)]
+        binance_positions: Option<PathBuf>,
+        #[arg(long)]
+        binance_supplement: Option<PathBuf>,
+        #[arg(long)]
+        kraken_snapshot: Option<PathBuf>,
+    },
     /// Discover/import EVM wallet quantities and reconcile against pinned RPC balances
     Evm {
         /// Public wallet address; stored in account metadata (never needs a seed/key)
@@ -96,6 +113,8 @@ pub enum Command {
 }
 
 pub struct Config {
+    pub nexo_csv_explicit: bool,
+    pub reporting_currency: lib_core::AssetId,
     pub cache_dir: PathBuf,
     pub data_dir: PathBuf,
     pub nexo_csv_path: PathBuf,
@@ -114,6 +133,8 @@ impl Config {
             }
         }
         Ok(Self {
+            reporting_currency: resolved.config.settings.reporting_currency.clone(),
+            nexo_csv_explicit: args.nexo_csv.is_some(),
             nexo_csv_path: args.nexo_csv.unwrap_or_else(|| {
                 PathBuf::from(".cache/imports/nexo_transactions_05-10-2026_10-36-53.csv")
             }),
@@ -142,6 +163,39 @@ mod tests {
 
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
     static STD_CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::cache_dir().unwrap());
+
+    #[test]
+    fn providers_accepts_explicit_cached_inputs_and_read_only_mode() {
+        let args = Args::try_parse_from(["cli", "--offline", "providers", "--no-import"]).unwrap();
+        assert!(matches!(
+            args.command,
+            Some(Command::Providers {
+                no_import: true,
+                ..
+            })
+        ));
+        let args = Args::try_parse_from([
+            "cli",
+            "providers",
+            "--binance-statement",
+            "a.zip",
+            "--binance-positions",
+            "positions.json",
+            "--binance-supplement",
+            "earn.json",
+            "--kraken-snapshot",
+            "kraken.json",
+        ])
+        .unwrap();
+        assert!(matches!(
+            args.command,
+            Some(Command::Providers {
+                binance_statement: Some(_),
+                kraken_snapshot: Some(_),
+                ..
+            })
+        ));
+    }
 
     #[test]
     fn config_file_loads_and_env_and_flags_take_precedence() {

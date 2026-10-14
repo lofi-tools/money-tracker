@@ -1,4 +1,5 @@
 //! Map Nexo's parsed CSV transactions into the core ledger.
+pub mod allocations;
 pub mod rate_catalogue;
 pub mod term_inference;
 use lib_core::Units;
@@ -92,6 +93,7 @@ impl NexoSvc {
             .has_imported_file(NEXO_LEDGER_SOURCE, hash)
             .context(StoreSnafu)?
         {
+            self.persist_source(store, &file)?;
             return Ok(NexoImportOutcome::AlreadyImported);
         }
         let rows = file.parse().context(ReadCsvSnafu {
@@ -124,11 +126,95 @@ impl NexoSvc {
                 on_progress,
             )
             .context(StoreSnafu)?;
+        self.persist_source(store, &file)?;
         Ok(if imported {
             NexoImportOutcome::Imported(rows.len())
         } else {
             NexoImportOutcome::AlreadyImported
         })
+    }
+    fn persist_source(&self, store: &Store, file: &NexoCsvFile) -> Result<(), NexoError> {
+        // Validate even cached imports before backfilling immutable source evidence.
+        let rows = file.parse().context(ReadCsvSnafu {
+            path: self.path_to_csv.clone(),
+        })?;
+        if !store
+            .account_exists(&lib_core::AccountId::from("legacy:nexo"))
+            .context(StoreSnafu)?
+        {
+            return Ok(());
+        }
+        let payload = std::str::from_utf8(file.bytes()).map_err(|source| NexoError::Store {
+            source: source.into(),
+        })?;
+        store
+            .save_legacy_source_snapshot(
+                &lib_core::AccountId::from("legacy:nexo"),
+                NEXO_LEDGER_SOURCE,
+                &file.sha256_hex,
+                payload,
+            )
+            .context(StoreSnafu)?;
+        if let Some(cutoff) = rows.iter().map(|r| r.date_time_utc).max() {
+            if let Ok(parts) = allocations::open_allocations(
+                &rows,
+                &lib_core::AccountId::from("legacy:nexo"),
+                &file.sha256_hex,
+                cutoff,
+            ) {
+                use lib_core::ui_metadata::{LockStatus, ProductTemplate, Subscription};
+                let provider = store
+                    .portfolios()
+                    .context(StoreSnafu)?
+                    .into_iter()
+                    .find_map(|p| {
+                        store
+                            .accounts(&p.id)
+                            .ok()?
+                            .into_iter()
+                            .find(|a| a.id.0 == "legacy:nexo")
+                    })
+                    .expect("registered Nexo account")
+                    .provider_id;
+                for part in parts {
+                    let product = lib_core::ProductId::from(format!(
+                        "nexo-fixed:{}:{}",
+                        part.account.0, part.quantity.asset_id.0
+                    ));
+                    if store
+                        .product_template(&product)
+                        .context(StoreSnafu)?
+                        .is_none()
+                    {
+                        store.save_product_template(&ProductTemplate {id:product.clone(),provider_id:provider.clone(),source_reference:product.0.clone(),label:format!("Nexo fixed terms · {}",part.quantity.asset_id.0),evidence:"Inferred locked allocation; contractual duration and APY not established".into()}).context(StoreSnafu)?;
+                    }
+                    if matches!(part.kind.as_str(), "fixed" | "unresolved_fixed") {
+                        let sub = Subscription {
+                            id: part.id.clone(),
+                            account_id: part.account,
+                            product_id: product,
+                            base_asset: part.quantity.asset_id,
+                            source_reference: part.id,
+                            label: if part.kind == "fixed" {
+                                "Inferred fixed term".into()
+                            } else {
+                                format!("Unresolved fixed allocation group · {} terms", part.count)
+                            },
+                            opened_at: part.opened_at,
+                            closed_at: None,
+                            lock_status: LockStatus::Locked,
+                            maturity: None,
+                            auto_renew: None,
+                            positions: vec![],
+                        };
+                        if store.subscription(&sub.id).context(StoreSnafu)?.as_ref() != Some(&sub) {
+                            store.save_subscription(&sub).context(StoreSnafu)?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 

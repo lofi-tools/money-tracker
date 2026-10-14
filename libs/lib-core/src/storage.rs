@@ -133,6 +133,51 @@ impl Store {
         Ok(())
     }
 
+    /// Evidence for the legacy single-account importer; scoped imports use
+    /// save_account_source_snapshot. Never attach another provider's export.
+    pub fn save_legacy_source_snapshot(
+        &self,
+        account: &AccountId,
+        source: &str,
+        hash: &str,
+        payload: &str,
+    ) -> anyhow::Result<()> {
+        let provider = source.split(':').next().unwrap_or_default().to_lowercase();
+        anyhow::ensure!(
+            account.0 == format!("legacy:{provider}"),
+            "legacy source/account mismatch"
+        );
+        anyhow::ensure!(
+            self.has_imported_file(source, hash)?,
+            "snapshot must belong to completed import"
+        );
+        let tx = self.connection.unchecked_transaction()?;
+        let exists: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM accounts WHERE id=? AND lower(provider_id)=?)",
+            params![account.0, provider],
+            |r| r.get(0),
+        )?;
+        anyhow::ensure!(exists, "legacy account missing");
+        tx.execute(
+            "INSERT OR IGNORE INTO account_source_snapshots VALUES (?,?,?,?)",
+            params![account.0, source, hash, payload],
+        )?;
+        let stored: String = tx.query_row("SELECT payload FROM account_source_snapshots WHERE account_id=? AND source=? AND content_hash=?", params![account.0,source,hash], |r|r.get(0))?;
+        anyhow::ensure!(stored == payload, "source evidence conflict");
+        tx.commit()?;
+        Ok(())
+    }
+    pub fn legacy_source_snapshots(
+        &self,
+        account: &AccountId,
+        source: &str,
+    ) -> anyhow::Result<Vec<(String, String)>> {
+        let mut stmt = self.connection.prepare("SELECT content_hash,payload FROM account_source_snapshots WHERE account_id=? AND source=? ORDER BY content_hash")?;
+        Ok(stmt
+            .query_map(params![account.0, source], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?)
+    }
+
     pub fn account_source_snapshot(
         &self,
         account: &AccountId,

@@ -31,6 +31,9 @@ pub struct NexoCsvFile {
 }
 
 impl NexoCsvFile {
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
     pub fn read(path: impl AsRef<Path>) -> Result<Self, NexoCsvError> {
         let path = path.as_ref();
         let bytes = std::fs::read(path).context(OpenSnafu {
@@ -89,7 +92,7 @@ fn deserialize_exact_decimal<'de, D: serde::Deserializer<'de>>(
     rust_decimal::Decimal::from_str_exact(&text).map_err(serde::de::Error::custom)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct NexoTx {
     #[serde(rename = "Transaction")]
     pub tx_id: String,
@@ -137,7 +140,7 @@ impl NexoTx {
     }
 }
 
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 pub enum TransactionType {
     Interest,
     #[serde(rename = "Locking Term Deposit")]

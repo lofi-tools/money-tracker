@@ -35,11 +35,11 @@ impl Store {
     }
     pub fn save_token_metadata(&self, value: &TokenMetadata) -> Result<()> {
         ensure!(
-            value.chain_id == 1 && valid_contract(&value.contract),
-            "invalid Ethereum token locator"
+            matches!(value.chain_id, 1 | 137) && valid_contract(&value.contract),
+            "unsupported or invalid token locator"
         );
         ensure!(
-            value.asset_id.0 == format!("eip155:1/erc20:{}", value.contract),
+            value.asset_id.0 == format!("eip155:{}/erc20:{}", value.chain_id, value.contract),
             "token identity mismatch"
         );
         // Metadata is evidence only; it never registers or changes a scale.

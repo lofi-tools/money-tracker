@@ -6,7 +6,7 @@ Implemented on 13–14 October 2026; approved for commit on 14 October. Sources:
 
 Migration `011_token_metadata` appends a separate typed JSON payload table keyed by exact asset ID. The initial fetch covers currently nonzero, tracked Ethereum ERC-20 ledger holdings in one selected portfolio, deduplicated by exact contract. Excluded assets, zero holdings, unsupported chains, native currencies and unknown-scale contracts are not acquired by this operation. It sends token contract addresses, never wallet addresses or quantities, to the chosen public services. Display grouping has a separate small reviewed native/contract catalogue.
 
-`TokenMetadata` stores asset ID, chain ID, lowercase contract, nullable name/ticker/icon URL, cached PNG/JPEG image data, source decimals, current RPC decimals, verified CoinGecko ID, nullable last successful fetched time, response evidence with per-source fetched times, and explicit warnings. CoinGecko IDs require an exact Ethereum platform/contract match; ticker matching never establishes an ID, price mapping or economic equivalence. Cached IDs are evidence for later pricing work; this task does not automatically start pricing these tokens.
+`TokenMetadata` stores asset ID, chain ID, lowercase contract, nullable name/ticker/icon URL, cached PNG/JPEG image data, source decimals, current RPC decimals, verified CoinGecko ID, nullable last successful fetched time, response evidence with per-source fetched times, and explicit warnings. CoinGecko IDs require an exact supported platform/contract match; ticker matching never establishes an ID, price mapping or economic equivalence. Cached IDs are evidence for later pricing work; this task does not automatically start pricing these tokens.
 
 The cache is independent of `AssetDisplay`. Existing names/tickers take precedence, then fetched metadata, then explicitly reviewed native/contract labels. Refresh never writes manual displays or their evidence. Cached responses/images survive source failures; their timestamps remain unchanged until a successful response. Missing fields and failures stay explicit. Optional on-chain metadata and block-number evidence are display evidence, not independent balance verification or historical ledger-scale evidence.
 
@@ -65,3 +65,17 @@ Fiat quantity glyphs inherit the complete amount font and line height, including
 Partial-value badges now read **Partial**, with the full known-subtotal explanation retained as descriptive title text. Navbar titles and values align at the first line; sidebar badges occupy their own right-aligned line within the value column, keeping room for longer titles. Titles can shrink without overflowing. Others / dust uses the same right-aligned value layout rather than special left-aligned rules.
 
 The compact Partial layout passed 4 review browser tests (including a large negative partial value at 687px), 6 desktop browser tests, TypeScript and build. Badge/quantity bounds remain within the row and do not overlap its title. Financial values and coverage rules remain unchanged.
+
+## Polygon mainstream follow-up (14 October 2026)
+
+The optional `137` argument to `refresh_token_metadata` fetches held Polygon ERC-20 contracts already present in the reviewed representation catalogue. It uses the `polygon-pos` CoinGecko platform, Polygon Blockscout and Polygon dRPC, verifying chain ID and exact contract. The cache accepts chains 1 and 137 and rejects chain/asset locator mismatches. Unreviewed contracts are skipped; no ticker-based identification is added. Native POL already has its reviewed identity and quote route.
+
+```sh
+cargo run --locked -p lib-app --example refresh_token_metadata -- .cache/data/portfolio.duckdb local:default 137
+cargo run --locked -p lib-app --example missing-prices -- .cache/data/portfolio.duckdb USD 137
+cargo run --locked -p lib-app --example check_metadata_preservation -- .cache/data/portfolio.duckdb PATH_TO_BACKUP.duckdb --with-prices
+```
+
+The price helper’s optional chain filter restricts public quote requests to that network. Native Polygon USDC’s exact issuer contract `0x3c499c542cef5e3811e1192ce70d8cc03d5c3359` has a reviewed `usd-coin` market mapping, independently of Ethereum contracts and bridged USDC. Its [issuer/network identity](https://polygon.technology/blog/phase-one-of-native-usdc-migration-on-polygon-pos-is-underway) and [CoinGecko contract lookup](https://www.coingecko.com/learn/how-to-fetch-crypto-logos-and-metadata-with-python) support this mapping. Quotes retain market price and timestamp rather than assuming dollar parity.
+
+The selected portfolio acquired one Polygon token record: USDC, six source and RPC decimals, a cached icon and `usd-coin` ID. Blockscout was unavailable; CoinGecko and RPC succeeded. One missing USD quote was saved. All 30 protected tables matched the pre-fetch backup exactly, and existing price evidence was preserved. Metadata/RPC calls send contract identities, never wallet addresses, balances or credentials. Synthetic tests cover Polygon market/cache chain identity and protected scale; unknown contracts remain unknown.

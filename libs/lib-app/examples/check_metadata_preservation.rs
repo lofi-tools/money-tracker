@@ -9,9 +9,11 @@ fn identifier(value: &str) -> String {
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
     ensure!(
-        args.len() == 2,
-        "usage: check_metadata_preservation DB BACKUP_DB"
+        (2..=3).contains(&args.len()),
+        "usage: check_metadata_preservation DB BACKUP_DB [--with-prices]"
     );
+    let with_prices = args.get(2).is_some_and(|s| s == "--with-prices");
+    ensure!(args.len() == 2 || with_prices, "unknown comparison option");
     let c = duckdb::Connection::open(&args[0])?;
     c.execute_batch(&format!(
         "ATTACH {} AS before_metadata (READ_ONLY)",
@@ -23,7 +25,7 @@ fn main() -> Result<()> {
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let mut checked = 0;
     for table in names {
-        if table == "token_metadata" {
+        if table == "token_metadata" || (with_prices && table == "ui_price_evidence") {
             continue;
         }
         let table = identifier(&table);
@@ -31,7 +33,21 @@ fn main() -> Result<()> {
         ensure!(n == 0, "existing table changed: {table}");
         checked += 1;
     }
-    println!("All {checked} preexisting tables match backup exactly; only token metadata changed.");
+    println!(
+        "All {checked} protected tables match backup exactly; token metadata{} may differ.",
+        if with_prices {
+            " and price evidence"
+        } else {
+            ""
+        }
+    );
+    if with_prices {
+        let removed: i64 = c.query_row("SELECT count(*) FROM (SELECT * FROM before_metadata.main.ui_price_evidence EXCEPT ALL SELECT * FROM main.ui_price_evidence)", [], |r| r.get(0))?;
+        ensure!(
+            removed == 0,
+            "existing price evidence was changed or removed"
+        );
+    }
     let mut stmt = c.prepare("SELECT payload FROM token_metadata ORDER BY id")?;
     for row in stmt.query_map([], |r| r.get::<_, String>(0))? {
         let m: lib_core::token_metadata::TokenMetadata = serde_json::from_str(&row?)?;

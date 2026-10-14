@@ -97,8 +97,13 @@ fn apply_blockscout(m: &mut TokenMetadata, v: &Value) -> Result<()> {
     Ok(())
 }
 fn apply_coingecko(m: &mut TokenMetadata, v: &Value) -> Result<()> {
+    let platform = if m.chain_id == 137 {
+        "polygon-pos"
+    } else {
+        "ethereum"
+    };
     ensure!(
-        v["platforms"]["ethereum"]
+        v["platforms"][platform]
             .as_str()
             .is_some_and(|s| s.eq_ignore_ascii_case(&m.contract)),
         "market token identity mismatch"
@@ -110,7 +115,7 @@ fn apply_coingecko(m: &mut TokenMetadata, v: &Value) -> Result<()> {
         .icon_url
         .take()
         .or_else(|| safe_icon(&v["image"]["small"]));
-    if let Some(d) = decimal(&v["detail_platforms"]["ethereum"]["decimal_place"]) {
+    if let Some(d) = decimal(&v["detail_platforms"][platform]["decimal_place"]) {
         if m.decimals.is_some_and(|old| old != d) {
             m.warnings
                 .push("Explorer and market decimals disagree".into());
@@ -170,6 +175,31 @@ async fn response(request: reqwest::RequestBuilder) -> Result<Value> {
 }
 /// No wallet requests, ticker matching, price writes, or ledger writes.
 pub async fn refresh_held_ethereum(store: &Store, portfolio: &PortfolioId) -> Result<usize> {
+    refresh_held_network(store, portfolio, 1).await
+}
+/// Polygon acquisition is limited to reviewed mainstream exact contracts; no ticker guesses.
+pub async fn refresh_held_network(
+    store: &Store,
+    portfolio: &PortfolioId,
+    chain_id: u64,
+) -> Result<usize> {
+    ensure!(matches!(chain_id, 1 | 137), "unsupported metadata network");
+    let platform = if chain_id == 137 {
+        "polygon-pos"
+    } else {
+        "ethereum"
+    };
+    let explorer_host = if chain_id == 137 {
+        "polygon.blockscout.com"
+    } else {
+        "eth.blockscout.com"
+    };
+    let rpc = if chain_id == 137 {
+        "https://polygon.drpc.org"
+    } else {
+        "https://eth.drpc.org"
+    };
+    let prefix = format!("eip155:{chain_id}/erc20:");
     ensure!(
         store.portfolios()?.iter().any(|p| &p.id == portfolio),
         "unknown portfolio"
@@ -185,8 +215,8 @@ pub async fn refresh_held_ethereum(store: &Store, portfolio: &PortfolioId) -> Re
         .filter(|b| b.amount != lib_core::Units::from(0))
         .filter_map(|b| positions.get(&b.position_id.0).cloned())
         .filter(|id| {
-            id.strip_prefix("eip155:1/erc20:")
-                .is_some_and(valid_contract)
+            id.strip_prefix(&prefix).is_some_and(valid_contract)
+                && (chain_id == 1 || crate::asset_groups::representation(id).is_some())
         })
         .collect();
     let http = reqwest::Client::builder()
@@ -196,10 +226,10 @@ pub async fn refresh_held_ethereum(store: &Store, portfolio: &PortfolioId) -> Re
     let cg = coingecko_client::CoingeckoClient::new()?;
     for raw_id in &ids {
         let id = &AssetId::str(raw_id);
-        let contract = raw_id.strip_prefix("eip155:1/erc20:").unwrap().to_owned();
+        let contract = raw_id.strip_prefix(&prefix).unwrap().to_owned();
         let mut m = store.token_metadata(id)?.unwrap_or(TokenMetadata {
             asset_id: id.clone(),
-            chain_id: 1,
+            chain_id,
             contract,
             name: None,
             ticker: None,
@@ -215,7 +245,7 @@ pub async fn refresh_held_ethereum(store: &Store, portfolio: &PortfolioId) -> Re
         let mut fetched = false;
         m.warnings.clear();
         m.rpc_decimals = None;
-        let explorer = format!("https://eth.blockscout.com/api/v2/tokens/{}", m.contract);
+        let explorer = format!("https://{explorer_host}/api/v2/tokens/{}", m.contract);
         match response(http.get(&explorer)).await {
             Ok(v) => match apply_blockscout(&mut m, &v) {
                 Ok(()) => {
@@ -231,7 +261,7 @@ pub async fn refresh_held_ethereum(store: &Store, portfolio: &PortfolioId) -> Re
                 .warnings
                 .push("Explorer metadata unavailable; retained cache".into()),
         }
-        let path = format!("coins/ethereum/contract/{}", m.contract);
+        let path = format!("coins/{platform}/contract/{}", m.contract);
         match response(cg.http_client.get(format!("{}{}", cg.base_url, path))).await {
             Ok(v) => match apply_coingecko(&mut m, &v) {
                 Ok(()) => {
@@ -247,14 +277,16 @@ pub async fn refresh_held_ethereum(store: &Store, portfolio: &PortfolioId) -> Re
                 .warnings
                 .push("CoinGecko metadata unavailable; retained cache".into()),
         }
-        let rpc = "https://eth.drpc.org";
         let chain = response(
             http.post(rpc)
                 .json(&json!({"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]})),
         )
         .await;
         if chain.as_ref().is_ok_and(|v| {
-            v["result"] == "0x1" && v["id"] == 1 && v["jsonrpc"] == "2.0" && v["error"].is_null()
+            v["result"] == format!("0x{chain_id:x}")
+                && v["id"] == 1
+                && v["jsonrpc"] == "2.0"
+                && v["error"].is_null()
         }) {
             let block = response(
                 http.post(rpc)
@@ -266,7 +298,8 @@ pub async fn refresh_held_ethereum(store: &Store, portfolio: &PortfolioId) -> Re
                     .as_str()
                     .filter(|s| s.starts_with("0x") && u64::from_str_radix(&s[2..], 16).is_ok())
                 {
-                    let mut evidence = json!({"fetched_at":Utc::now(), "chain_id":1, "block":tag});
+                    let mut evidence =
+                        json!({"fetched_at":Utc::now(), "chain_id":chain_id, "block":tag});
                     let mut observed = false;
                     for (field, selector) in [
                         ("decimals", "0x313ce567"),
@@ -395,6 +428,22 @@ mod tests {
         assert_eq!(m.decimals, Some(0));
     }
     #[test]
+    fn polygon_market_metadata_requires_polygon_contract_identity() {
+        let mut m = metadata();
+        m.chain_id = 137;
+        let contract = m.contract.clone();
+        assert!(
+            apply_coingecko(
+                &mut m,
+                &json!({"id":"usd-coin","platforms":{"ethereum":contract}})
+            )
+            .is_err()
+        );
+        apply_coingecko(&mut m, &json!({"id":"usd-coin","platforms":{"polygon-pos":contract},"detail_platforms":{"polygon-pos":{"decimal_place":6}}})).unwrap();
+        assert_eq!(m.coingecko_id.as_deref(), Some("usd-coin"));
+        assert_eq!(m.decimals, Some(6));
+    }
+    #[test]
     fn icons_reject_active_and_untrusted_urls() {
         for url in [
             "javascript:alert(1)",
@@ -416,6 +465,21 @@ mod tests {
             rpc_text(&json!({"result":format!("0x{}{}", "414243", "00".repeat(29))})),
             Some("ABC".into())
         );
+    }
+    #[test]
+    fn polygon_cache_preserves_chain_identity_and_scale() -> Result<()> {
+        let store = Store::in_memory()?;
+        let mut m = metadata();
+        m.chain_id = 137;
+        m.asset_id = AssetId::str(&format!("eip155:137/erc20:{}", m.contract));
+        store.save_asset_scale(&m.asset_id, 6)?;
+        m.decimals = Some(6);
+        store.save_token_metadata(&m)?;
+        assert_eq!(store.token_metadata(&m.asset_id)?, Some(m.clone()));
+        assert_eq!(store.asset_scale(&m.asset_id)?, 6);
+        m.chain_id = 1;
+        assert!(store.save_token_metadata(&m).is_err());
+        Ok(())
     }
     #[test]
     fn offline_cache_preserves_manual_display_and_protected_scale() -> Result<()> {

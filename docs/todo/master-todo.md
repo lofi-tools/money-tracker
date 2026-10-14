@@ -38,7 +38,7 @@ Implemented for review on 13 October: [metadata/cache and presentation contract]
 
 14 October review refinement: [direct quantities and alternative representations](../spec/token-metadata.md#direct-quantities-and-alternative-representations-14-october-2026) replaces navbar representation counts with provider-qualified native balances and an expandable proxy list. Implementation/tests are included with the pending review; approved for commit on 14 October 2026.
 
-Implemented and approved on 14 October: [provider display groups](../spec/provider-layouts.md), account-confirmed flexible rates and start/expected maturity labels. No financial ownership changes.
+Implemented and approved on 14 October: [provider display groups](../spec/provider-layouts.md), account-confirmed flexible rates, start/expected maturity labels, provider/Solana icons, optical symbol sizing, signed liability display and a composite **Others** icon. Polygon’s reviewed held USDC metadata and missing quote are acquired with protected-table preservation checks. No financial ownership changes.
 
 Later follow-up owned here (after the reviewed Nexo catalogue):
 

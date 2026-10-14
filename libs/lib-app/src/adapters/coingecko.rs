@@ -263,7 +263,7 @@ fn coin_id(ticker: &str) -> anyhow::Result<Option<&'static str>> {
         "DOT" => Some("polkadot"),
         "POL" | "eip155:137/native" => Some("polygon-ecosystem-token"),
         "USDT" => Some("tether"),
-        "USDC" => Some("usd-coin"),
+        "USDC" | "eip155:137/erc20:0x3c499c542cef5e3811e1192ce70d8cc03d5c3359" => Some("usd-coin"),
         "ETHW" => Some("ethereum-pow-iou"),
         _ => bail!("no reviewed CoinGecko mapping for asset {ticker}"),
     })
@@ -436,6 +436,11 @@ mod exact_tests {
             coin_id("eip155:137/native").unwrap(),
             Some("polygon-ecosystem-token")
         );
+        assert_eq!(
+            coin_id("eip155:137/erc20:0x3c499c542cef5e3811e1192ce70d8cc03d5c3359").unwrap(),
+            Some("usd-coin")
+        );
+        assert!(coin_id("eip155:1/erc20:0x3c499c542cef5e3811e1192ce70d8cc03d5c3359").is_err());
         assert!(coin_id("eip155:1/erc20:unknown").is_err());
     }
     #[test]

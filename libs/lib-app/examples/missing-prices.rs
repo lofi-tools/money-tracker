@@ -9,19 +9,23 @@ use std::collections::BTreeSet;
 async fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
     ensure!(
-        args.len() == 2,
-        "usage: missing-prices EXISTING_DB REPORTING_CURRENCY"
+        (2..=3).contains(&args.len()),
+        "usage: missing-prices EXISTING_DB REPORTING_CURRENCY [CHAIN_ID]"
     );
     ensure!(
         std::path::Path::new(&args[0]).is_file(),
         "database must already exist"
     );
+    let network = args.get(2).map(|s| s.parse::<u64>()).transpose()?;
     let store = Store::open(&args[0])?;
     let quote = AssetId::str(&args[1]);
     let mut missing = BTreeSet::new();
     for portfolio in store.portfolios()? {
         for account in store.accounts(&portfolio.id)? {
             for (_, asset, _, role) in store.account_position_metadata(&account.id)? {
+                if network.is_some_and(|chain| !asset.0.starts_with(&format!("eip155:{chain}/"))) {
+                    continue;
+                }
                 if !matches!(
                     role,
                     lib_core::PositionRole::Asset | lib_core::PositionRole::Liability

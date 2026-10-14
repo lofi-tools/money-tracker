@@ -860,3 +860,27 @@ mod private_tests {
         .await
     }
 }
+
+pub struct WalletGrouping;
+impl crate::provider_grouping::ProviderGrouping for WalletGrouping {
+    fn chain_group(&self, reference: &str) -> Option<crate::provider_grouping::Group> {
+        let chain = reference.strip_prefix("eip155:")?.split(':').next()?;
+        let label = match chain {
+            "1" => "Ethereum",
+            "137" => "Polygon",
+            "56" => "BNB Chain",
+            "42161" => "Arbitrum",
+            "324" => "zkSync",
+            _ => {
+                return Some(crate::provider_grouping::Group {
+                    key: chain.into(),
+                    label: format!("Chain {chain}"),
+                });
+            }
+        };
+        Some(crate::provider_grouping::Group {
+            key: chain.into(),
+            label: label.into(),
+        })
+    }
+}

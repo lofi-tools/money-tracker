@@ -276,6 +276,8 @@ export type AllocationTarget =
   | { kind: "subscription"; id: string }
   | { kind: "holding"; id: string };
 export interface InferredAllocation {
+  maturity?: string | null;
+  expected_maturity?: string | null;
   id: string;
   account: string;
   kind: string;

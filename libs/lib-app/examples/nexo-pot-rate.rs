@@ -57,7 +57,7 @@ fn main() -> Result<()> {
         })
         .ok_or_else(|| anyhow::anyhow!("account missing"))?;
     let product = ProductId::from(format!("nexo-fixed:{}:{}", account.0, a[2]));
-    app.store().save_product_template(&ProductTemplate {term_months: None,id:product.clone(),provider_id:owner.provider_id.clone(),source_reference:product.0.clone(),label:format!("Nexo {months}-month fixed · {}",a[2]),evidence:"User-reported individual pot rates, not a generic fixed-rate default. Scheduled maturity and the reason for differing rates remain unknown.".into()})?;
+    app.store().save_product_template(&ProductTemplate {term_months: Some(months),id:product.clone(),provider_id:owner.provider_id.clone(),source_reference:product.0.clone(),label:format!("Nexo {months}-month fixed · {}",a[2]),evidence:"User-reported individual pot rates, not a generic fixed-rate default. Scheduled maturity and the reason for differing rates remain unknown.".into()})?;
     if let Some(flex) = a.get(7) {
         let flex_value: Decimal = flex.parse()?;
         ensure!(

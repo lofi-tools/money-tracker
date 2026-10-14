@@ -38,8 +38,11 @@ Implemented for review on 13 October: [metadata/cache and presentation contract]
 
 14 October review refinement: [direct quantities and alternative representations](../spec/token-metadata.md#direct-quantities-and-alternative-representations-14-october-2026) replaces navbar representation counts with provider-qualified native balances and an expandable proxy list. Implementation/tests are included with the pending review; approved for commit on 14 October 2026.
 
+Implemented and approved on 14 October: [provider display groups](../spec/provider-layouts.md), account-confirmed flexible rates and start/expected maturity labels. No financial ownership changes.
+
 Later follow-up owned here (after the reviewed Nexo catalogue):
 
+- [ ] Capture account-specific Nexo term details (actual due dates, renewal, payout and rates). Investigate a user-triggered Chromium exporter with local JSON; retain ambiguous matches and preserve source evidence. See [proposed capture constraints](../spec/nexo-current-allocations.md#proposed-account-capture-not-implemented).
 - [ ] Automate Nexo rate/condition collection with a scraper or official structured source, refreshed every few weeks. Define the cadence during implementation; retain dated snapshots, change detection, source provenance, failure/staleness handling and human review before publishing rule changes. Feed the same catalogue as task 2 rather than maintaining a second rate source. This is a roadmap task, not an app background-refresh promise.
 
 The existing broader model, provider diagnostics and opportunity work below remains in place; these are the immediate source-to-app slices, not a replacement financial engine.

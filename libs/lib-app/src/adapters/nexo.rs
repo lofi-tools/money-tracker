@@ -190,7 +190,7 @@ impl NexoSvc {
                         store.save_product_template(&ProductTemplate {term_months: None,id:product.clone(),provider_id:provider.clone(),source_reference:product.0.clone(),label:format!("Nexo fixed terms · {}",part.quantity.asset_id.0),evidence:"Inferred locked allocation; contractual duration and APY not established".into()}).context(StoreSnafu)?;
                     }
                     if matches!(part.kind.as_str(), "fixed" | "unresolved_fixed") {
-                        let sub = Subscription {
+                        let mut sub = Subscription {
                             id: part.id.clone(),
                             account_id: part.account,
                             product_id: product,
@@ -208,7 +208,13 @@ impl NexoSvc {
                             auto_renew: None,
                             positions: vec![],
                         };
-                        if store.subscription(&sub.id).context(StoreSnafu)?.as_ref() != Some(&sub) {
+                        let existing = store.subscription(&sub.id).context(StoreSnafu)?;
+                        if let Some(old) = &existing {
+                            sub.maturity = old.maturity;
+                            sub.auto_renew = old.auto_renew;
+                            sub.closed_at = old.closed_at;
+                        }
+                        if existing.as_ref() != Some(&sub) {
                             store.save_subscription(&sub).context(StoreSnafu)?;
                         }
                     }
@@ -1128,5 +1134,15 @@ mod tests {
         assert!(import_nexo_rows(&store, &[row]).is_err());
         assert!(NexoTx::try_from_csv_row("precision,Top up Crypto,ETH,0.00000000000000000000000000001,ETH,0.00000000000000000000000000001,$1,-,-,deposit,2025-01-01 00:00:00").is_err());
         Ok(())
+    }
+}
+
+pub struct NexoGrouping;
+impl crate::provider_grouping::ProviderGrouping for NexoGrouping {
+    fn partition_group(&self, kind: &str) -> Option<crate::provider_grouping::Group> {
+        matches!(kind, "fixed" | "unresolved_fixed").then(|| crate::provider_grouping::Group {
+            key: "fixed".into(),
+            label: "Fixed terms".into(),
+        })
     }
 }

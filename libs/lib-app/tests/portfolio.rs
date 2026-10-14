@@ -110,7 +110,8 @@ fn price(s: &Store, asset: &str, v: &str) -> Result<()> {
     })
 }
 fn product(s: &Store, id: &str, provider: &str) -> Result<()> {
-    s.save_product_template(&ProductTemplate {term_months: None,
+    s.save_product_template(&ProductTemplate {
+        term_months: None,
         id: id.into(),
         provider_id: provider.into(),
         source_reference: id.into(),
@@ -1362,6 +1363,93 @@ fn nexo_inferred_partition_preserves_ownership_and_missing_rates() -> Result<()>
             .account_audit_balances_at(&AccountId::from("legacy:nexo"), t(20))?,
         before
     );
+    let fixed_product = ProductId::from("nexo-fixed:legacy:nexo:ETH");
+    let mut duration = app.store().product_template(&fixed_product)?.unwrap();
+    duration.term_months = Some(1);
+    app.store().save_product_template(&duration)?;
+    product(app.store(), "nexo-flex:legacy:nexo:ETH", "nexo")?;
+    app.store().save_subscription(&Subscription {
+        id: "qualified-flex".into(),
+        account_id: "legacy:nexo".into(),
+        product_id: ProductId::from("nexo-flex:legacy:nexo:ETH"),
+        base_asset: AssetId::str("ETH"),
+        source_reference: "user-flex".into(),
+        label: "Flexible savings".into(),
+        opened_at: None,
+        closed_at: None,
+        lock_status: LockStatus::Flexible,
+        maturity: None,
+        auto_renew: None,
+        positions: vec![],
+    })?;
+    rate(
+        app.store(),
+        "flex-rate",
+        RateScope::Product(ProductId::from("nexo-flex:legacy:nexo:ETH")),
+        Some("0.0525"),
+    )?;
+    let complete = app.portfolio_projection(req())?;
+    assert_eq!(
+        amount(&complete.overview.gross_annual_earnings),
+        decimal("77.5")
+    );
+    assert!(matches!(
+        complete.overview.gross_annual_earnings,
+        FigureDto::Known { .. }
+    ));
+    let term = complete.holdings[0]
+        .inferred_allocations
+        .iter()
+        .find(|p| p.kind == "fixed")
+        .unwrap();
+    assert_eq!(
+        term.expected_maturity.unwrap().to_rfc3339(),
+        "2026-02-02T00:00:00+00:00"
+    );
+    assert!(term.maturity.is_none());
+    let mut confirmed = app.store().subscription(&term.id)?.unwrap();
+    confirmed.maturity = Some("2026-02-03T00:00:00Z".parse()?);
+    confirmed.auto_renew = Some(false);
+    app.store().save_subscription(&confirmed)?;
+    service.import_into(app.store())?;
+    assert_eq!(
+        app.store().subscription(&term.id)?.unwrap().maturity,
+        confirmed.maturity
+    );
+    let confirmed_projection = app.portfolio_projection(req())?;
+    assert_eq!(
+        confirmed_projection.holdings[0]
+            .inferred_allocations
+            .iter()
+            .find(|p| p.kind == "fixed")
+            .unwrap()
+            .maturity,
+        confirmed.maturity
+    );
+
+    let tree = complete.allocation_tree(Selection::Asset(AssetId::str("ETH")))?;
+    assert!(
+        !tree
+            .nodes
+            .iter()
+            .any(|n| n.target == AllocationTarget::Holding(complete.holdings[0].id.clone()))
+    );
+    assert!(tree.nodes.iter().any(|n| n.name == "Fixed terms"));
+    assert!(tree.nodes.iter().any(|n| n.name == "Flexible savings"));
+    for node in tree
+        .nodes
+        .iter()
+        .filter(|n| n.name == "Fixed terms" || n.name == "Flexible savings")
+    {
+        assert_eq!(
+            complete
+                .details(node.target.clone())?
+                .node
+                .summary
+                .current_value,
+            node.summary.current_value
+        );
+    }
     Ok(())
 }
 
@@ -1500,5 +1588,63 @@ fn direct_quantities_are_provider_qualified_and_wrappers_remain_separate() -> Re
         app.portfolio_projection(req())?.overview.current_value,
         before
     );
+    Ok(())
+}
+
+#[test]
+fn wallet_software_display_provider_groups_accounts_by_chain_without_merging_sources() -> Result<()>
+{
+    let app = Application::from_store(Store::in_memory()?);
+    for (id, chain, q) in [("first", 1, "1"), ("second", 1, "2"), ("polygon", 137, "3")] {
+        app.store().save_account(&Account {
+            id: id.into(),
+            portfolio_id: DEFAULT_PORTFOLIO.into(),
+            provider_id: "evm".into(),
+            label: id.into(),
+            source_reference: Some(format!(
+                "eip155:{chain}:0x0000000000000000000000000000000000000001"
+            )),
+        })?;
+        pos(
+            app.store(),
+            id,
+            "native",
+            &format!("eip155:{chain}/native"),
+            18,
+            PositionRole::Asset,
+            q,
+        )?;
+        app.apply_manual_edit(
+            &DEFAULT_PORTFOLIO.into(),
+            &lib_app::manual::ManualEdit::WalletSoftware {
+                account: id.into(),
+                software: Some("MetaMask".into()),
+            },
+        )?;
+    }
+    price(app.store(), "eip155:1/native", "100")?;
+    price(app.store(), "eip155:137/native", "1")?;
+    let p = app.portfolio_projection(req())?;
+    assert!(p.holdings.iter().all(|h| h.provider_id.0 == "evm"));
+    assert_eq!(p.providers.len(), 1);
+    assert_eq!(p.providers[0].name, "MetaMask");
+    assert_eq!(
+        amount(&p.providers[0].summary.current_value),
+        decimal("303")
+    );
+    assert_eq!(amount(&p.overview.current_value), decimal("303"));
+    let tree = p.allocation_tree(p.providers[0].selection.clone())?;
+    let ethereum = tree.nodes.iter().find(|n| n.name == "Ethereum").unwrap();
+    assert_eq!(ethereum.children.len(), 2);
+    assert_eq!(amount(&ethereum.summary.current_value), decimal("300"));
+    assert_eq!(
+        p.details(ethereum.target.clone())?
+            .node
+            .summary
+            .current_value,
+        ethereum.summary.current_value
+    );
+    assert!(tree.nodes.iter().any(|n| n.name == "Polygon"));
+    assert_eq!(app.store().accounts(&DEFAULT_PORTFOLIO.into())?.len(), 3);
     Ok(())
 }

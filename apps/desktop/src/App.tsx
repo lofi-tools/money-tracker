@@ -463,6 +463,22 @@ function Body(props: {
       result.push({
         id: n.id,
         name: n.name,
+        secondary:
+          n.inferred_allocation &&
+          n.inferred_allocation.kind !== "unclassified_residual" ? (
+            <span>
+              Start:{" "}
+              {n.inferred_allocation.opened_at?.slice(0, 10) ?? "Unknown"}
+              {" · "}
+              {n.inferred_allocation.maturity
+                ? "Maturity: "
+                : "Expected maturity: "}
+              {(
+                n.inferred_allocation.maturity ??
+                n.inferred_allocation.expected_maturity
+              )?.slice(0, 10) ?? "Unknown"}
+            </span>
+          ) : undefined,
         depth,
         hasChildren: n.children.length > 0,
         expanded: expanded().has(id),
@@ -1346,10 +1362,29 @@ function Body(props: {
                     </Show>
                     <p>
                       {part().kind === "unclassified_residual"
-                        ? "Savings / collateral allocation unknown"
+                        ? "Flexible savings (confirmed by user)"
                         : "Fixed-term allocation"}
-                      . Scheduled maturity and auto-renew: unknown.
+                      . Auto-renew: unknown.
                     </p>
+                    <Show when={part().kind !== "unclassified_residual"}>
+                      <p>
+                        {part().maturity ? "Maturity: " : "Expected maturity: "}
+                        {(part().maturity ?? part().expected_maturity)?.slice(
+                          0,
+                          10,
+                        ) ?? "Unknown"}
+                        {part().expected_maturity && !part().maturity
+                          ? " · estimated from the annotated term length; actual due date unconfirmed"
+                          : ""}
+                      </p>
+                      <Show when={part().kind === "unresolved_fixed"}>
+                        <p>
+                          Equal-principal locks and unlocks cannot identify
+                          which individual terms remain open. Start and maturity
+                          remain unknown for each member.
+                        </p>
+                      </Show>
+                    </Show>
                     <Show when={part().expected_apy}>
                       <p>
                         <Apy

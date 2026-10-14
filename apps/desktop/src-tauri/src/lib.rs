@@ -650,8 +650,15 @@ fn is_descendant(candidate: &AccountId, ancestor: &AccountId, accounts: &[UiAcco
 }
 /// Rename/move controls and the cycle-free valid-parent candidates for an account.
 fn account_controls(p: &PortfolioProjection, target: &AllocationTarget) -> Option<NodeAccount> {
-    let AllocationTarget::Account(id) = target else {
-        return None;
+    let id = match target {
+        AllocationTarget::Account(id) => id,
+        AllocationTarget::Holding(holding) => {
+            &p.holdings
+                .iter()
+                .find(|h| &h.id == holding && h.provider_id.0 == "evm")?
+                .account_id
+        }
+        _ => return None,
     };
     let entry = p.metadata.accounts.iter().find(|a| &a.account.id == id)?;
     let index = local_index(p);

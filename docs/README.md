@@ -15,6 +15,7 @@ Documentation is organized by purpose. Specifications describe implemented contr
 - [Token metadata, offline icons and underlying-asset navigation](spec/token-metadata.md)
 - [Persistent UI metadata and manual actions](spec/ui-metadata.md)
 - [Portfolio read models and exact current earnings](spec/portfolio-queries.md)
+- [Provider display groups, wallet software and chain sections](spec/provider-layouts.md)
 - [Database startup and local settings](spec/database-startup.md)
 - [CLI configuration](spec/cli.md)
 - [Nexo bundled catalogue, eligibility and account-local jurisdiction](spec/nexo-rate-catalogue.md)

@@ -19,6 +19,10 @@ pub struct TermAllocation {
     pub kind: String,
     pub quantity: QuantityDto,
     pub opened_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub maturity: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub expected_maturity: Option<DateTime<Utc>>,
     pub as_of: DateTime<Utc>,
     pub source_hash: String,
     pub count: usize,
@@ -158,6 +162,8 @@ pub fn open_allocations(
                 scale: 8,
             },
             opened_at: opening.map(|(_, t)| t),
+            maturity: None,
+            expected_maturity: None,
             as_of,
             source_hash: hash.into(),
             count: cohort.remaining,
@@ -205,6 +211,8 @@ pub fn partition(quantity: &QuantityDto, parts: &[TermAllocation]) -> Result<Vec
         p.kind = "unclassified_residual".into();
         p.quantity.units = remaining;
         p.opened_at = None;
+        p.maturity = None;
+        p.expected_maturity = None;
         p.count = 1;
         p.observed_apy = None;
         p.observed_from = None;

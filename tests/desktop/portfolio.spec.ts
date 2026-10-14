@@ -219,7 +219,7 @@ test("real Rust DTO: Overview, scoped allocation, liability and exact unknown ho
   await expect(
     page.getByRole("button", { name: "My wallet", exact: true }),
   ).toBeFocused();
-  await page.getByRole("button", { name: /^Others \/ dust/ }).click();
+  await page.getByRole("button", { name: /^Others/ }).click();
   await page.getByRole("button", { name: "My wallet", exact: true }).click();
   await expect(
     page
@@ -411,7 +411,7 @@ test("manual rate, price, dust and spam edits commit typed requests", async ({
   await expect(effective).toHaveValue(new Date().toISOString().slice(0, 10));
   // Prices are edited in the reporting currency alongside their pin; the
   // reporting asset itself has no quote and therefore no price override.
-  await page.getByRole("button", { name: /^Others \/ dust/ }).click();
+  await page.getByRole("button", { name: /^Others/ }).click();
   const priceEdit = page
     .getByRole("button", { name: "Edit Current price" })
     .first();

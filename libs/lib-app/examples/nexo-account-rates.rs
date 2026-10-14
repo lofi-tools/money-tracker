@@ -43,7 +43,7 @@ fn main() -> Result<()> {
         ),
     ] {
         let product = ProductId::from(format!("nexo-{kind}:{}:{}", account.id.0, args[1]));
-        app.store().save_product_template(&ProductTemplate {term_months: None,id:product.clone(),provider_id:account.provider_id.clone(),source_reference:product.0.clone(),label,evidence:format!("User supplied {percent}% APY for {kind}; fixed product term {months} months; payout currency as explicitly annotated. Flexible eligibility remains unallocated.")})?;
+        app.store().save_product_template(&ProductTemplate {term_months: if kind=="fixed" {Some(months)} else {None},id:product.clone(),provider_id:account.provider_id.clone(),source_reference:product.0.clone(),label,evidence:format!("User supplied {percent}% APY for {kind}; fixed product term {months} months; payout currency as explicitly annotated. Non-fixed funds are flexible savings as confirmed by the user.")})?;
         let percent: rust_decimal::Decimal = percent.parse()?;
         ensure!(
             percent >= rust_decimal::Decimal::ZERO && percent <= rust_decimal::Decimal::from(100),
@@ -53,9 +53,24 @@ fn main() -> Result<()> {
             .normalize()
             .to_string()
             .parse()?;
+
         if kind == "flex" {
-            continue;
-        } // Reference fact, never an invented eligible holding.
+            app.store()
+                .save_subscription(&lib_core::ui_metadata::Subscription {
+                    id: format!("qualified-flex:{}", product.0),
+                    account_id: account.id.clone(),
+                    product_id: product.clone(),
+                    base_asset: lib_core::AssetId::str(&args[1]),
+                    source_reference: product.0.clone(),
+                    label: "User-confirmed flexible savings".into(),
+                    opened_at: None,
+                    closed_at: None,
+                    lock_status: lib_core::ui_metadata::LockStatus::Flexible,
+                    maturity: None,
+                    auto_renew: None,
+                    positions: vec![],
+                })?;
+        }
         app.apply_manual_edit(
             &account.portfolio_id,
             &ManualEdit::Rate {
@@ -72,8 +87,6 @@ fn main() -> Result<()> {
             },
         )?;
     }
-    println!(
-        "Explicit flexible/fixed product rates saved. Flexible rate does not classify unallocated collateral."
-    );
+    println!("Account-qualified flexible/fixed rates and fixed duration saved.");
     Ok(())
 }

@@ -1,4 +1,5 @@
 // Exact, reviewed display-only icon mappings. Never select a contract icon by ticker.
+const sol = new URL("./assets/coins/sol.svg", import.meta.url).href;
 const eth = new URL("./assets/coins/eth.svg", import.meta.url).href;
 const nexo = new URL("./assets/coins/nexo.svg", import.meta.url).href;
 const near = new URL("./assets/coins/near.svg", import.meta.url).href;
@@ -12,6 +13,7 @@ const eur = new URL("./assets/coins/eur.svg", import.meta.url).href;
 const gbp = new URL("./assets/coins/gbp.svg", import.meta.url).href;
 const btc = new URL("./assets/coins/btc.svg", import.meta.url).href;
 const icons: Record<string, string> = {
+  SOL: sol,
   ETH: eth,
   NEXO: nexo,
   NEAR: near,
@@ -83,3 +85,14 @@ export function readableReference(reference: string): string {
         `Chain ${chain} wallet 0x${address.slice(0, 4)}…${address.slice(-4)}`,
     );
 }
+
+const providerIcons: Record<string, string> = {
+  nexo,
+  binance: new URL("./assets/providers/binance.svg", import.meta.url).href,
+  kraken: new URL("./assets/providers/kraken.svg", import.meta.url).href,
+  "wallet-software:metamask": new URL(
+    "./assets/providers/metamask.svg",
+    import.meta.url,
+  ).href,
+};
+export const providerIcon = (id: string) => providerIcons[id.toLowerCase()];

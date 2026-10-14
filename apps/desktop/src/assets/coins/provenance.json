@@ -4,5 +4,8 @@
   "style": "svg/color",
   "license": "CC0-1.0",
   "fetched": "2026-10-13",
-  "notes": "SVGs inspected for shapes only; no scripts, events, references, styles or external resources."
+  "notes": "SVGs inspected for shapes only; no scripts, events, references, styles or external resources.",
+  "additional_fetches": {
+    "sol.svg": "2026-10-14"
+  }
 }

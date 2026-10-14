@@ -127,6 +127,14 @@ test("main asset SVG icons and cached token labels remain usable offline", async
     ticker: null,
     metadata_unresolved: true,
   });
+  const solSelection = { kind: "asset", id: "SOL" };
+  data.startup.data.assets.push({
+    ...asset,
+    selection: solSelection,
+    name: "SOL",
+    ticker: "SOL",
+    direct_quantities: [{ asset_id: "SOL", units: "35259", scale: 3 }],
+  });
   const external: string[] = [];
   page.on("request", (req) => {
     if (
@@ -153,6 +161,14 @@ test("main asset SVG icons and cached token labels remain usable offline", async
   await expect(
     mainAsset.locator("..").locator(".nav-entry-icon img"),
   ).toHaveAttribute("src", /^(data:image\/svg\+xml,|.*\/usd\.svg)/);
+  const solNav = nav.getByRole("button", { name: /^SOL/ }).first();
+  await expect(
+    solNav.locator("..").locator(".nav-entry-icon img"),
+  ).toHaveAttribute("src", /^(data:image\/svg\+xml,|.*\/sol\.svg)/);
+  await expect(nav.locator(".others-dust-entry img")).toHaveAttribute(
+    "src",
+    /others|data:image/,
+  );
   await nav.getByRole("button", { name: /^Cached token CACHE/ }).click();
   await page.getByText("Token information · cached metadata").click();
   await expect(page.locator(".token-metadata")).toContainText(

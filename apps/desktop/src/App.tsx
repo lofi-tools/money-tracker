@@ -1,3 +1,4 @@
+import othersIcon from "./assets/others.svg";
 import { CurrencySymbol, hasCurrencySymbol } from "./currency-symbols";
 import { OutlineIcon } from "./outline-icons";
 import {
@@ -39,6 +40,7 @@ import type {
 } from "@money-tracker/design-system";
 import {
   assetIcon,
+  providerIcon,
   shortAssetLabel,
   readableReference,
 } from "./asset-presentation";
@@ -753,7 +755,9 @@ function Body(props: {
                             entry.selection.kind === "asset" ||
                             entry.selection.kind === "exposure"
                               ? assetIcon(entry.selection.id)
-                              : undefined;
+                              : entry.selection.kind === "provider"
+                                ? providerIcon(entry.selection.id)
+                                : undefined;
                           const cached = entry.token_metadata?.icon_data?.match(
                             /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/,
                           )
@@ -914,6 +918,7 @@ function Body(props: {
                     <NavigationEntry
                       warningPlacement="title"
                       name={data()!.dust.name}
+                      icon={<img src={othersIcon} alt="" />}
                       selected={!options() && selection().kind === "dust"}
                       onSelect={() => select({ kind: "dust" })}
                       value={

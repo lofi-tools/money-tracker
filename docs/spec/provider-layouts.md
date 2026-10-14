@@ -8,6 +8,10 @@ Annotated EVM accounts receive a software-scoped display provider (`wallet-softw
 
 The navigation meta-asset is labelled **Others**. Unknown/unpriced tokens keep their individual audit identities inside it.
 
+Provider navigation uses bundled Nexo, Binance, Kraken and MetaMask marks. Solana uses the existing pinned CC0 coin-icon source for its colour navigation mark and a monochrome quantity symbol. Provenance and licensing are recorded in `apps/desktop/src/assets/providers/README.md` and the coin assets `provenance.json`. Fiat quantity symbols remain font glyphs; the existing inline sizing contract applies to the SOL SVG.
+
 Regression checks cover Nexo value/earnings conservation, unknown-rate qualification, inferred versus saved dates and backfill, software grouping with several accounts/chains, and canonical section lookup. Source-cutoff and price warnings remain visible.
 
 Review checks: core/application/native Rust suites passed (private/live cases excluded), including all 20 portfolio integration tests. Desktop TypeScript and production build passed, as did six desktop browser tests and four review browser tests. The selected CLI balance report remains unchanged after account annotations.
+
+**Others** uses an original bundled SVG depicting several currencies emerging from an isometric box.

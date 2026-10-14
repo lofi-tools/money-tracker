@@ -260,13 +260,13 @@ fn dust_views_include_all_values_manual_policy_and_unknown_prices() -> Result<()
         .unwrap();
     assert_eq!(amount(&eth.summary.current_value), decimal("1000.5"));
     assert_eq!(amount(&p.dust.summary.current_value), decimal("0.5"));
-    assert_eq!(p.holdings.iter().filter(|h| h.is_dust).count(), 1);
+    assert_eq!(p.holdings.iter().filter(|h| h.is_dust).count(), 2);
     let mystery = p
         .holdings
         .iter()
         .find(|h| h.quantity.asset_id == AssetId::str("MYSTERY"))
         .unwrap();
-    assert!(!mystery.is_dust);
+    assert!(mystery.is_dust); // Unpriced holdings belong in Others / dust.
     assert!(matches!(mystery.value, FigureDto::Unknown { .. }));
     let target = LocalTarget::Dust {
         provider: "kraken".into(),
@@ -282,7 +282,7 @@ fn dust_views_include_all_values_manual_policy_and_unknown_prices() -> Result<()
         !app.portfolio_projection(req())?
             .holdings
             .iter()
-            .any(|h| h.is_dust)
+            .any(|h| h.is_dust && h.quantity.asset_id == AssetId::str("ETH"))
     );
     let filtered = app.navigation(req(), true, "ETH")?;
     assert_eq!(filtered.len(), 1);
@@ -297,7 +297,7 @@ fn dust_views_include_all_values_manual_policy_and_unknown_prices() -> Result<()
         !app.portfolio_projection(exact)?
             .holdings
             .iter()
-            .any(|h| h.is_dust)
+            .any(|h| h.is_dust && h.quantity.asset_id == AssetId::str("ETH"))
     );
     Ok(())
 }
@@ -657,6 +657,7 @@ fn isolation_spam_local_names_dates_and_no_closed_zero_subscription_loss() -> Re
         &LocalTarget::Account { id: "a".into() },
         0,
         Some(LocalValue::Account(AccountCustomization {
+            wallet_software: None,
             local_label: Some("My savings".into()),
             ..Default::default()
         })),
@@ -1102,5 +1103,402 @@ fn asset_navigation_does_not_turn_negative_savings_into_debt() -> Result<()> {
         p.overview.current_value,
         FigureDto::Unknown { .. }
     ));
+    Ok(())
+}
+
+#[test]
+fn token_metadata_labels_preserve_exact_identity_local_choices_and_figures() -> Result<()> {
+    let app = Application::from_store(Store::in_memory()?);
+    let s = app.store();
+    account(s, "wallet", "evm")?;
+    let a = "eip155:1/erc20:0x1111111111111111111111111111111111111111";
+    let b = "eip155:1/erc20:0x2222222222222222222222222222222222222222";
+    for asset in [a, b] {
+        pos(s, "wallet", asset, asset, 8, PositionRole::Asset, "2")?;
+    }
+    let before = app.portfolio_projection(req())?;
+    let revisions = s.revisions(&DEFAULT_PORTFOLIO.into())?;
+    for asset in [a, b] {
+        s.save_token_metadata(&lib_core::token_metadata::TokenMetadata {
+            asset_id: AssetId::str(asset),
+            chain_id: 1,
+            contract: asset.split(':').next_back().unwrap().into(),
+            name: Some("Fetched name".into()),
+            ticker: Some("SAME".into()),
+            icon_url: None,
+            icon_data: None,
+            decimals: Some(18),
+            rpc_decimals: Some(18),
+            coingecko_id: None,
+            fetched_at: Some(t(20)),
+            sources: Default::default(),
+            warnings: vec!["Protected scale conflict".into()],
+        })?;
+    }
+    let p = app.portfolio_projection(req())?;
+    assert_eq!(p.assets.len(), 2);
+    assert!(
+        p.assets
+            .iter()
+            .all(|e| e.name == "Fetched name" && e.ticker.as_deref() == Some("SAME"))
+    );
+    assert_eq!(p.overview, before.overview);
+    assert_eq!(p.holdings.len(), before.holdings.len());
+    for (after, before) in p.holdings.iter().zip(&before.holdings) {
+        assert_eq!(after.quantity, before.quantity);
+        assert_eq!(after.value, before.value);
+        assert_eq!(after.issues, before.issues);
+        assert_eq!(after.annual_earnings, before.annual_earnings);
+        assert_eq!(after.label, "Fetched name");
+    }
+    assert_eq!(s.revisions(&DEFAULT_PORTFOLIO.into())?, revisions);
+    s.save_asset_display(&AssetDisplay {
+        id: AssetId::str(a),
+        name: Some("My name".into()),
+        ticker: Some("LOCAL".into()),
+        chain: Some("1".into()),
+        contract: Some(a.split(':').next_back().unwrap().into()),
+        unresolved_label: None,
+        evidence: "manual".into(),
+    })?;
+    let p = app.portfolio_projection(req())?;
+    let entry = p
+        .assets
+        .iter()
+        .find(|e| e.selection == Selection::Asset(AssetId::str(a)))
+        .unwrap();
+    assert_eq!(entry.name, "My name");
+    assert_eq!(entry.ticker.as_deref(), Some("LOCAL"));
+    assert_eq!(
+        entry.token_metadata.as_ref().unwrap().name.as_deref(),
+        Some("Fetched name")
+    );
+    Ok(())
+}
+
+#[test]
+fn underlying_navigation_keeps_prices_quantities_debt_and_unknown_dust() -> Result<()> {
+    let app = Application::from_store(Store::in_memory()?);
+    let s = app.store();
+    account(s, "wallet", "evm")?;
+    let native = "eip155:42161/native";
+    let wrapped = "eip155:1/erc20:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+    let unknown = "eip155:1/erc20:0x1111111111111111111111111111111111111111";
+    for (asset, role, quantity, scale) in [
+        ("USD", PositionRole::Asset, "100", 2),
+        ("USDT", PositionRole::Asset, "10", 8),
+        ("USDX", PositionRole::Asset, "20", 8),
+        ("xUSD", PositionRole::Liability, "5", 8),
+        (native, PositionRole::Asset, "1", 18),
+        (wrapped, PositionRole::Asset, "2", 18),
+        (unknown, PositionRole::Asset, "3", 18),
+    ] {
+        pos(s, "wallet", asset, asset, scale, role, quantity)?;
+    }
+    price(s, "USDT", "0.98")?;
+    price(s, "USDX", "1")?;
+    price(s, "xUSD", "1")?;
+    price(s, native, "2000")?;
+    price(s, wrapped, "2010")?;
+    price(s, unknown, "100")?;
+    let before = s.account_audit_balances_at(&"wallet".into(), t(20))?;
+    let p = app.portfolio_projection(req())?;
+    let nav = p.asset_navigation();
+    assert_eq!(nav.len(), 2);
+    let usd = nav
+        .iter()
+        .find(|e| e.selection == Selection::Exposure(AssetId::str("USD")))
+        .unwrap();
+    assert_eq!(
+        amount(usd.estimated_current_value.as_ref().unwrap()),
+        decimal("124.8")
+    );
+    assert_eq!(usd.quantities.len(), 4); // Debt and each token stay separate.
+    let eth = nav
+        .iter()
+        .find(|e| e.selection == Selection::Exposure(AssetId::str("ETH")))
+        .unwrap();
+    assert_eq!(
+        amount(eth.estimated_current_value.as_ref().unwrap()),
+        decimal("6020")
+    );
+    assert_eq!(eth.quantities.len(), 2); // No assumed wrapper parity.
+    assert_eq!(
+        p.allocation_tree(eth.selection.clone())?
+            .nodes
+            .iter()
+            .filter(|n| n.children.is_empty())
+            .count(),
+        2
+    );
+    let h = p
+        .holdings
+        .iter()
+        .find(|h| h.quantity.asset_id.0 == unknown)
+        .unwrap();
+    assert!(h.is_dust); // Name missing, even though priced and above the dust threshold.
+    assert!(!h.label.contains("eip155:"));
+    assert_eq!(amount(&p.dust.summary.current_value), decimal("300"));
+    assert_eq!(
+        before,
+        s.account_audit_balances_at(&"wallet".into(), t(20))?
+    );
+    // Fetched resolution removes forced metadata dust, without changing local dust actions.
+    s.save_asset_display(&AssetDisplay {
+        id: AssetId::str(unknown),
+        name: Some("Resolved token".into()),
+        ticker: None,
+        chain: Some("1".into()),
+        contract: Some(unknown.split(':').next_back().unwrap().into()),
+        unresolved_label: None,
+        evidence: "reviewed".into(),
+    })?;
+    let p = app.portfolio_projection(req())?;
+    assert!(
+        !p.holdings
+            .iter()
+            .find(|h| h.quantity.asset_id.0 == unknown)
+            .unwrap()
+            .is_dust
+    );
+    assert_eq!(p.asset_navigation().len(), 3);
+    Ok(())
+}
+
+#[test]
+fn nexo_inferred_partition_preserves_ownership_and_missing_rates() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+    let csv = dir.path().join("nexo.csv");
+    std::fs::write(
+        &csv,
+        concat!(
+            "Transaction,Type,Input Currency,Input Amount,Output Currency,Output Amount,USD Equivalent,Fee,Fee Currency,Details,Date / Time (UTC)\n",
+            "deposit,Top up Crypto,ETH,100,ETH,100,$1000,-,-,deposit,2026-01-01 00:00:00\n",
+            "lock,Locking Term Deposit,ETH,-40,ETH,40,$400,-,-,lock,2026-01-02 00:00:00\n",
+        ),
+    )?;
+    let app = Application::from_store(Store::in_memory()?);
+    let service = lib_app::adapters::nexo::NexoSvc::from_path(&csv);
+    service.import_into(app.store())?;
+    app.store().save_price_evidence(&PriceEvidence {
+        id: "quote".into(),
+        asset: AssetId::str("ETH"),
+        quote: AssetId::str("USD"),
+        as_of: t(1),
+        price: "10".parse()?,
+        evidence: source(1),
+    })?;
+    let before = app
+        .store()
+        .account_audit_balances_at(&AccountId::from("legacy:nexo"), t(20))?;
+    let p = app.portfolio_projection(req())?;
+    assert_eq!(p.holdings.len(), 1);
+    assert_eq!(amount(&p.overview.current_value), decimal("1000"));
+    let children: Vec<_> = p
+        .allocation
+        .nodes
+        .iter()
+        .filter(|n| n.inferred_allocation.is_some())
+        .collect();
+    assert_eq!(children.len(), 2);
+    let sum = children
+        .iter()
+        .map(|n| amount(&n.summary.current_value))
+        .fold(ExactRatio::zero(), |a, b| a.add(&b));
+    assert_eq!(sum, decimal("1000"));
+    assert!(
+        children
+            .iter()
+            .all(|n| matches!(n.summary.current_apy, FigureDto::Unknown { .. }))
+    );
+    assert!(children.iter().all(|n| n.holding_ids.is_empty()));
+    assert_eq!(
+        p.details(children[0].target.clone())?.node.id,
+        children[0].id
+    );
+    rate(
+        app.store(),
+        "fixed-rate",
+        RateScope::Product(ProductId::from("nexo-fixed:legacy:nexo:ETH")),
+        Some("0.0625"),
+    )?;
+    let rated = app.portfolio_projection(req())?;
+    assert_eq!(amount(&rated.overview.current_value), decimal("1000"));
+    assert_eq!(amount(&rated.overview.gross_annual_earnings), decimal("25"));
+    assert!(matches!(
+        rated.overview.gross_annual_earnings,
+        FigureDto::Partial { .. }
+    ));
+    let fixed = rated
+        .allocation
+        .nodes
+        .iter()
+        .find(|n| {
+            n.inferred_allocation
+                .as_ref()
+                .is_some_and(|p| p.kind == "fixed")
+        })
+        .unwrap();
+    assert_eq!(amount(&fixed.summary.gross_annual_earnings), decimal("25"));
+    assert!(
+        matches!(&fixed.summary.current_apy, FigureDto::Known {value,..} if value == &decimal("0.0625"))
+    );
+    let fixed_id = fixed.inferred_allocation.as_ref().unwrap().id.clone();
+    rate(
+        app.store(),
+        "pot-rate",
+        RateScope::Subscription(fixed_id),
+        Some("0.115"),
+    )?;
+    let specific = app.portfolio_projection(req())?;
+    assert_eq!(
+        amount(&specific.overview.gross_annual_earnings),
+        decimal("46")
+    );
+    assert_eq!(amount(&specific.overview.current_value), decimal("1000"));
+    service.import_into(app.store())?;
+    assert_eq!(
+        app.store()
+            .account_audit_balances_at(&AccountId::from("legacy:nexo"), t(20))?,
+        before
+    );
+    Ok(())
+}
+
+#[test]
+fn liquid_native_wallet_yield_is_zero_but_token_product_yield_stays_unknown() -> Result<()> {
+    let app = Application::from_store(Store::in_memory()?);
+    let s = app.store();
+    account(s, "wallet", "evm")?;
+    pos(
+        s,
+        "wallet",
+        "native",
+        "eip155:1/native",
+        18,
+        PositionRole::Asset,
+        "1",
+    )?;
+    s.save_price_evidence(&PriceEvidence {
+        id: "quote-native".into(),
+        asset: AssetId::str("eip155:1/native"),
+        quote: AssetId::str("USD"),
+        as_of: t(1),
+        price: "2000".parse()?,
+        evidence: source(1),
+    })?;
+    let p = app.portfolio_projection(req())?;
+    assert_eq!(amount(&p.overview.net_annual_earnings), ExactRatio::zero());
+    assert!(
+        matches!(&p.holdings[0].summary.current_apy,FigureDto::Known {value,..} if value.is_zero())
+    );
+    pos(
+        s,
+        "wallet",
+        "receipt",
+        "eip155:1/erc20:0x1111111111111111111111111111111111111111",
+        18,
+        PositionRole::Asset,
+        "1",
+    )?;
+    let p = app.portfolio_projection(req())?;
+    assert!(
+        p.holdings
+            .iter()
+            .filter(|h| h.quantity.asset_id.0.contains("erc20"))
+            .all(|h| matches!(h.summary.current_apy, FigureDto::Unknown { .. }))
+    );
+    Ok(())
+}
+
+#[test]
+fn direct_quantities_are_provider_qualified_and_wrappers_remain_separate() -> Result<()> {
+    let app = Application::from_store(Store::in_memory()?);
+    let s = app.store();
+    account(s, "bank", "bank")?;
+    account(s, "nexo", "nexo")?;
+    account(s, "wallet", "evm")?;
+    let native = "eip155:1/native";
+    let l2 = "eip155:42161/native";
+    let wrapped = "eip155:42161/erc20:0x82af49447d8a07e3bd95bd0d56f35241523fbab1";
+    for (account, asset, qty, scale, role) in [
+        ("bank", "USD", "100", 2, PositionRole::Asset),
+        ("nexo", "USD", "20", 2, PositionRole::Asset),
+        ("nexo", "xUSD", "3", 8, PositionRole::Liability),
+        ("nexo", "ETH", "2.12345678", 8, PositionRole::Asset),
+        ("wallet", native, "1", 18, PositionRole::Asset),
+        ("wallet", l2, "0.5", 18, PositionRole::Asset),
+        ("wallet", wrapped, "2", 18, PositionRole::Asset),
+    ] {
+        pos(s, account, asset, asset, scale, role, qty)?;
+    }
+    for (asset, value) in [
+        ("ETH", "2000"),
+        (native, "2001"),
+        (l2, "1999"),
+        (wrapped, "1800"),
+        ("xUSD", "1"),
+    ] {
+        price(s, asset, value)?;
+    }
+    pos(s, "nexo", "fiatx-usd", "USDX", 8, PositionRole::Asset, "2")?;
+    pos(
+        s,
+        "nexo",
+        "fiatx-eur",
+        "EURX",
+        8,
+        PositionRole::Asset,
+        "123.45",
+    )?;
+    pos(
+        s,
+        "nexo",
+        "fiatx-gbp",
+        "GBPX",
+        8,
+        PositionRole::Asset,
+        "23.7",
+    )?;
+    price(s, "USDX", "0.9")?;
+    price(s, "EURX", "1.1")?;
+    price(s, "GBPX", "1.3")?;
+    let p = app.portfolio_projection(req())?;
+    let before = p.overview.current_value.clone();
+    let nav = p.asset_navigation();
+    let usd = nav.iter().find(|n| n.name == "USD").unwrap();
+    let direct = &usd.direct_quantities.as_ref().unwrap()[0];
+    assert_eq!(direct.units, Units::from_decimal("102", direct.scale)?);
+    assert_eq!(usd.alternatives.len(), 2);
+    assert!(
+        usd.alternatives
+            .iter()
+            .any(|a| a.name == "Tokenized USD · Nexo"
+                && a.quantity.units.decimal_string(a.quantity.scale) == "20.00")
+    );
+    assert_eq!(
+        amount(usd.estimated_current_value.as_ref().unwrap()),
+        decimal("118.8")
+    );
+    for (currency, qty) in [("EUR", "123.45"), ("GBP", "23.7")] {
+        let fiat = nav.iter().find(|n| n.name == currency).unwrap();
+        let q = &fiat.direct_quantities.as_ref().unwrap()[0];
+        assert_eq!(q.units, Units::from_decimal(qty, q.scale)?);
+        assert!(fiat.alternatives.is_empty());
+    }
+    assert!(!lib_app::asset_groups::is_direct("other", "EURX"));
+    let eth = nav.iter().find(|n| n.name == "ETH").unwrap();
+    let direct = &eth.direct_quantities.as_ref().unwrap()[0];
+    assert_eq!(direct.asset_id, AssetId::str("ETH"));
+    assert_eq!(direct.scale, 18);
+    assert_eq!(direct.units, Units::from_decimal("3.62345678", 18)?);
+    assert_eq!(eth.alternatives.len(), 1);
+    assert_eq!(eth.alternatives[0].ticker, "WETH");
+    assert_eq!(amount(&eth.alternatives[0].value), decimal("3600"));
+    assert_eq!(eth.alternatives[0].quantity.asset_id, AssetId::str(wrapped));
+    assert_eq!(
+        app.portfolio_projection(req())?.overview.current_value,
+        before
+    );
     Ok(())
 }

@@ -35,6 +35,8 @@ pub struct Summary {
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CurrentHolding {
+    #[serde(default)]
+    pub inferred_allocations: Vec<crate::adapters::nexo::allocations::TermAllocation>,
     pub id: String,
     pub account_id: AccountId,
     pub provider_id: ProviderId,
@@ -63,18 +65,37 @@ pub struct CurrentHolding {
 pub enum Selection {
     Overview,
     Asset(AssetId),
+    Exposure(AssetId),
     Provider(ProviderId),
     Dust,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AlternativeRepresentation {
+    pub name: String,
+    pub ticker: String,
+    pub provider: ProviderId,
+    pub role: PositionRole,
+    pub quantity: QuantityDto,
+    pub value: FigureDto<CalculatedMoney>,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NavigationEntry {
+    /// Summed direct native quantity in display-only underlying units.
+    #[serde(default)]
+    pub direct_quantities: Option<Vec<QuantityDto>>,
+    #[serde(default)]
+    pub alternatives: Vec<AlternativeRepresentation>,
     /// Display-only signed valuation; never relaxes strict summary/reconciliation.
     #[serde(default)]
     pub estimated_current_value: Option<FigureDto<CalculatedMoney>>,
     pub selection: Selection,
     pub name: String,
     pub ticker: Option<String>,
-    /// Only same-asset quantities, partitioned by economic role.
+    #[serde(default)]
+    pub token_metadata: Option<lib_core::token_metadata::TokenMetadata>,
+    #[serde(default)]
+    pub metadata_unresolved: bool,
+    /// Original exact-asset quantities, partitioned by role; never converted to underlying units.
     pub quantities: Vec<(PositionRole, QuantityDto)>,
     pub summary: Summary,
     pub issues: Vec<IssueDto>,
@@ -93,6 +114,8 @@ pub enum AllocationTarget {
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AllocationNode {
+    #[serde(default)]
+    pub inferred_allocation: Option<crate::adapters::nexo::allocations::TermAllocation>,
     pub id: String,
     pub target: AllocationTarget,
     pub parent: Option<String>,
@@ -643,6 +666,7 @@ impl Application {
                 }
             }
         }
+        self.attach_nexo_allocations(&request, &mut holdings)?;
         let contributions = self.earnings_contributions(&request, &holdings)?;
         for h in &mut holdings {
             let hs = vec![&*h];
@@ -695,17 +719,21 @@ impl Application {
                 &request.reporting_asset,
                 indices.iter().map(|i| holdings[*i].value.clone()).collect(),
             );
-            let dust = match state.value {
-                Some(LocalValue::Dust(DustMode::Dust)) => true,
-                Some(LocalValue::Dust(DustMode::Significant)) => false,
-                _ => {
-                    complete(&f)
-                        && amount(&f).is_some_and(|v| {
-                            !v.is_negative()
-                                && v < ExactRatio::from_decimal(&request.dust_threshold)
-                        })
-                }
-            };
+            let unresolved =
+                crate::token_metadata::display_identity(store, &AssetId::str(&asset))?.2;
+            let dust = unresolved
+                || amount(&f).is_none()
+                || match state.value {
+                    Some(LocalValue::Dust(DustMode::Dust)) => true,
+                    Some(LocalValue::Dust(DustMode::Significant)) => false,
+                    _ => {
+                        complete(&f)
+                            && amount(&f).is_some_and(|v| {
+                                !v.is_negative()
+                                    && v < ExactRatio::from_decimal(&request.dust_threshold)
+                            })
+                    }
+                };
             for i in indices {
                 holdings[i].is_dust = dust;
             }
@@ -723,30 +751,32 @@ impl Application {
         }
         let mut assets = vec![];
         for id in asset_ids {
-            let display = store.asset_display(&AssetId::str(&id))?;
-            assets.push(nav(
+            let asset_id = AssetId::str(&id);
+            let metadata = store.token_metadata(&asset_id)?;
+            let (name, ticker, unresolved) =
+                crate::token_metadata::display_identity(store, &asset_id)?;
+            let mut entry = nav(
                 &request,
                 &holdings,
                 &contributions,
-                Selection::Asset(AssetId::str(&id)),
-                display
-                    .as_ref()
-                    .and_then(|d| {
-                        d.name
-                            .clone()
-                            .or(d.ticker.clone())
-                            .or(d.unresolved_label.clone())
-                    })
-                    .unwrap_or(id),
-                display.and_then(|d| d.ticker),
-            ));
+                Selection::Asset(asset_id),
+                name,
+                ticker,
+            );
+            entry.metadata_unresolved = unresolved
+                && entry
+                    .quantities
+                    .iter()
+                    .all(|(role, _)| *role != PositionRole::Liability);
+            entry.token_metadata = metadata;
+            assets.push(entry);
         }
         let mut providers = vec![];
         for id in provider_ids {
-            let name = store
-                .provider_display(&id.as_str().into())?
-                .and_then(|d| d.name)
-                .unwrap_or(id.clone());
+            let name = provider_display_name(
+                &ProviderId(id.clone()),
+                store.provider_display(&ProviderId(id.clone()))?.as_ref(),
+            );
             providers.push(nav(
                 &request,
                 &holdings,
@@ -763,7 +793,7 @@ impl Application {
             &holdings,
             &contributions,
             Selection::Dust,
-            "Dust".into(),
+            "Others / dust".into(),
             None,
         );
         let allocation = build_tree(
@@ -776,11 +806,80 @@ impl Application {
         let issues = dedup(holdings.iter().flat_map(|h| h.issues.clone()).collect());
         Ok(PortfolioProjection{contract_version:CONTRACT_VERSION,request,revisions:metadata.revisions.clone(),overview,assets,providers,dust,holdings,contributions,allocation,metadata,issues,calculation_basis:"current_rate_one_year; constant_principal_and_quotes; gross_yield_minus_evidenced_borrowing_costs; additional_fees_and_switching_not_estimated; historical_reward_adjustment_unavailable".into()})
     }
+    fn attach_nexo_allocations(
+        &self,
+        request: &PortfolioRequest,
+        holdings: &mut [CurrentHolding],
+    ) -> Result<()> {
+        use crate::adapters::nexo::{NEXO_LEDGER_SOURCE, allocations};
+        let account = AccountId::from("legacy:nexo");
+        let mut snapshots = vec![];
+        for (hash, payload) in self
+            .store()
+            .legacy_source_snapshots(&account, NEXO_LEDGER_SOURCE)?
+        {
+            let rows = nexo_csv::NexoCsv::from_reader(payload.as_bytes())?;
+            if let Some(as_of) = rows
+                .iter()
+                .map(|r| r.date_time_utc)
+                .max()
+                .filter(|t| *t <= request.context.cutoff)
+            {
+                snapshots.push((as_of, hash, rows));
+            }
+        }
+        let Some((_, hash, rows)) = snapshots
+            .into_iter()
+            .max_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)))
+        else {
+            return Ok(());
+        };
+        let source_cutoff = rows
+            .iter()
+            .map(|r| r.date_time_utc)
+            .max()
+            .unwrap_or(request.context.cutoff)
+            .min(request.context.cutoff);
+        let result = allocations::open_allocations(&rows, &account, &hash, source_cutoff);
+        for h in holdings
+            .iter_mut()
+            .filter(|h| h.account_id == account && h.role == PositionRole::Asset)
+        {
+            let parts = result
+                .as_ref()
+                .map_err(|_| ())
+                .and_then(|parts| allocations::partition(&h.quantity, parts).map_err(|_| ()));
+            match parts {
+                Ok(mut parts) => {
+                    for part in &mut parts {
+                        if part.kind=="unclassified_residual" {continue;}
+                        let product=lib_core::ProductId::from(format!("nexo-fixed:{}:{}",part.account.0,part.quantity.asset_id.0));
+                        let group_product=lib_core::ProductId::from(format!("nexo-fixed-group:{}:{}",part.id,part.count));
+                        let mut selected=if part.kind=="fixed" {self.store().selected_rate(&request.context.portfolio_id,&RateScope::Subscription(part.id.clone()),request.context.cutoff)?} else {None};
+                        let mut expected_product=product.clone();
+                        let mut expected_scope=if selected.is_some() {RateScope::Subscription(part.id.clone())} else {RateScope::Product(product.clone())};
+                        if selected.is_none() && self.store().product_template(&group_product)?.is_some() {
+                            selected=self.store().selected_rate(&request.context.portfolio_id,&RateScope::Product(group_product.clone()),request.context.cutoff)?;
+                            if selected.is_some(){expected_scope=RateScope::Product(group_product.clone());expected_product=group_product;}
+                        }
+                        if selected.is_none(){selected=self.store().selected_rate(&request.context.portfolio_id,&RateScope::Product(product),request.context.cutoff)?;}
+                        if let Some(rate)=&selected {part.expected_evidence=self.rate_provenance(&request.context.portfolio_id,&expected_scope,rate)?;}
+                        part.expected_apy=selected.and_then(|r|r.rate.as_ref().and_then(rate_factor));
+                        if part.expected_apy.is_some(){part.expected_rate_note=self.store().product_template(&expected_product)?.map(|p|p.label);}
+                    }
+                    h.inferred_allocations=parts;
+                },
+                Err(_)=>h.issues.push(issue("nexo_allocation_unresolved",EntityScope::Account {account_id:account.clone()},"Term movements cannot be partitioned against the current aggregate; source history retained",vec![]))
+            }
+        }
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn make_holding(
         &self,
         request: &PortfolioRequest,
-        metadata: &UiMetadataDto,
+        _metadata: &UiMetadataDto,
         account: &AccountId,
         provider: &ProviderId,
         role: PositionRole,
@@ -997,19 +1096,10 @@ impl Application {
                 _ => s.label.clone(),
             }
         } else {
-            metadata
-                .assets
-                .iter()
-                .find(|d| d.id == quantity.asset_id)
-                .and_then(|d| {
-                    d.name
-                        .clone()
-                        .or(d.ticker.clone())
-                        .or(d.unresolved_label.clone())
-                })
-                .unwrap_or(quantity.asset_id.0.clone())
+            crate::token_metadata::display_identity(store, &quantity.asset_id)?.0
         };
         Ok(CurrentHolding {
+            inferred_allocations: vec![],
             id,
             account_id: account.clone(),
             provider_id: provider.clone(),
@@ -1098,6 +1188,16 @@ impl Application {
         r: &SelectedRate,
     ) -> Result<Vec<EvidenceDto>> {
         if let Some(id) = &r.evidence_id {
+            if id == "native-wallet-zero" {
+                return Ok(vec![EvidenceDto::Provider {
+                    source: "plain-native-wallet".into(),
+                    reference:
+                        "Liquid native coin held in a wallet has no staking/lending product yield"
+                            .into(),
+                    observed_at: r.updated_at,
+                    effective_from: Some(r.effective_at),
+                }]);
+            }
             return Ok(self
                 .store()
                 .rate_evidence(p, scope)?
@@ -1151,7 +1251,33 @@ impl Application {
         }
         let mut candidates = vec![];
         for scope in dedup(scopes) {
-            if let Some(r) = self.store().selected_rate(p, &scope, cutoff)? {
+            let selected = self.store().selected_rate(p, &scope, cutoff)?.or_else(|| {
+                hs.iter()
+                    .find(|h| {
+                        h.role == PositionRole::Asset
+                            && h.subscription.is_none()
+                            && h.provider_id.0.eq_ignore_ascii_case("evm")
+                            && h.quantity.asset_id.0.ends_with("/native")
+                            && scope
+                                == RateScope::AccountAsset {
+                                    account: h.account_id.clone(),
+                                    asset: h.quantity.asset_id.clone(),
+                                }
+                    })
+                    .map(|_| SelectedRate {
+                        rate: Some(AnnualRate {
+                            fraction: "0".parse().expect("zero"),
+                            basis: AnnualRateBasis::Apy,
+                            compounds_per_year: None,
+                            reward_asset: None,
+                        }),
+                        effective_at: cutoff,
+                        updated_at: cutoff,
+                        pinned: false,
+                        evidence_id: Some("native-wallet-zero".into()),
+                    })
+            });
+            if let Some(r) = selected {
                 let ids: Vec<_> = hs
                     .iter()
                     .filter(|h| scope_matches(&scope, h))
@@ -1277,6 +1403,40 @@ impl Application {
                 issues,
             });
         }
+        for h in hs.iter().filter(|h| {
+            h.role == PositionRole::Asset
+                && !h.inferred_allocations.is_empty()
+                && !covered.contains(&h.id)
+        }) {
+            let mut figures = vec![];
+            for part in &h.inferred_allocations {
+                let value = match (&part.expected_apy, amount(&h.value)) {
+                    (Some(rate), Some(principal)) if complete(&h.value) => {
+                        let share = ExactRatio::quantity(&part.quantity.units, part.quantity.scale)
+                            .div(&ExactRatio::quantity(&h.quantity.units, h.quantity.scale));
+                        share
+                            .map(|s| {
+                                known(
+                                    money(&request.reporting_asset, principal.mul(&s).mul(rate)),
+                                    [evidence(&h.value), part.expected_evidence.clone()].concat(),
+                                )
+                            })
+                            .unwrap_or_else(|| unknown(vec![]))
+                    }
+                    _ => unknown(vec![issue(
+                        "rate_unknown",
+                        hscope(h),
+                        "Unclassified or unsupported term yield remains unknown",
+                        vec![WithheldFigure::CurrentEarnings, WithheldFigure::OverallApy],
+                    )]),
+                };
+                figures.push(value);
+            }
+            let earnings = sum(&request.reporting_asset, figures);
+            // Partition earnings are one contribution for the original holding;
+            // child values never enter ownership or portfolio sums again.
+            out.push(EarningsContribution {holding_ids:vec![h.id.clone()],scope:RateScope::AccountAsset {account:h.account_id.clone(),asset:h.quantity.asset_id.clone()},selected_rate:SelectedRate {rate:None,effective_at:cutoff,updated_at:cutoff,pinned:false,evidence_id:Some("nexo-qualified-partition".into())},gross_earnings:earnings.clone(),borrowing_costs:FigureDto::NotApplicable,evidence:vec![EvidenceDto::Provider {source:"nexo-expected-partition".into(),reference:"User-supplied applicable fixed product rates on exact inferred principal; residual yield remains unknown".into(),observed_at:cutoff,effective_from:Some(cutoff)}],issues:figure_issues(&earnings)});
+        }
         Ok(out)
     }
     pub fn overview(&self, request: PortfolioRequest) -> Result<Summary> {
@@ -1290,18 +1450,22 @@ impl Application {
     ) -> Result<Vec<NavigationEntry>> {
         let projection = self.portfolio_projection(request)?;
         let mut nav = if by_asset {
-            projection.assets
+            projection.asset_navigation()
         } else {
             projection.providers
         };
         let search = search.to_lowercase();
         nav.retain(|n| {
-            n.name.to_lowercase().contains(&search)
-                || n.ticker
-                    .as_ref()
-                    .is_some_and(|t| t.to_lowercase().contains(&search))
+            !n.metadata_unresolved
+                && (n.name.to_lowercase().contains(&search)
+                    || n.ticker
+                        .as_ref()
+                        .is_some_and(|t| t.to_lowercase().contains(&search)))
         });
-        if by_asset && "dust".contains(&search) && projection.holdings.iter().any(|h| h.is_dust) {
+        if by_asset
+            && projection.dust.name.to_lowercase().contains(&search)
+            && projection.holdings.iter().any(|h| h.is_dust)
+        {
             nav.push(projection.dust)
         }
         sort_nav(&mut nav);
@@ -1369,6 +1533,8 @@ fn selected(s: &Selection, h: &CurrentHolding) -> bool {
     match s {
         Selection::Overview => true,
         Selection::Asset(id) => h.quantity.asset_id == *id,
+        Selection::Exposure(id) => crate::asset_groups::representation(&h.quantity.asset_id.0)
+            .is_some_and(|r| r.underlying == id.0),
         Selection::Provider(id) => h.provider_id == *id,
         Selection::Dust => h.is_dust,
     }
@@ -1383,68 +1549,82 @@ fn nav(
 ) -> NavigationEntry {
     let group: Vec<_> = hs.iter().filter(|h| selected(&selection, h)).collect();
     let mut quantities = vec![];
-    if let Selection::Asset(asset) = &selection {
-        for role in [PositionRole::Asset, PositionRole::Liability] {
-            let group: Vec<_> = group.iter().filter(|h| h.role == role).collect();
-            if let Some(h) = group.first() {
-                let mut units = Units::from(0);
-                for h in &group {
-                    units += &h.quantity.units
+    if matches!(&selection, Selection::Asset(_) | Selection::Exposure(_)) {
+        let assets: BTreeSet<_> = group
+            .iter()
+            .map(|h| h.quantity.asset_id.0.clone())
+            .collect();
+        for asset in assets {
+            for role in [PositionRole::Asset, PositionRole::Liability] {
+                let same: Vec<_> = group
+                    .iter()
+                    .filter(|h| h.role == role && h.quantity.asset_id.0 == asset)
+                    .collect();
+                if let Some(h) = same.first() {
+                    let units = same.iter().fold(Units::from(0), |mut sum, h| {
+                        sum += &h.quantity.units;
+                        sum
+                    });
+                    quantities.push((
+                        role,
+                        QuantityDto {
+                            asset_id: AssetId::str(&asset),
+                            units,
+                            scale: h.quantity.scale,
+                        },
+                    ));
                 }
-                quantities.push((
-                    role,
-                    QuantityDto {
-                        asset_id: asset.clone(),
-                        units,
-                        scale: h.quantity.scale,
-                    },
-                ));
             }
         }
     }
-    let estimated_current_value = matches!(&selection, Selection::Asset(_)).then(|| {
-        sum(
-            &r.reporting_asset,
-            group
-                .iter()
-                .map(|h| {
-                    // A negative savings balance is a mapping/history problem,
-                    // not evidence of borrowing. Only liability roles create debt.
-                    if h.issues.iter().any(|i| i.code == "unexpected_balance_sign") {
-                        return unknown(h.issues.clone());
-                    }
-                    let price = if h.quantity.asset_id == r.reporting_asset {
-                        Some(ExactRatio::integer(1))
-                    } else {
-                        h.price.as_ref().map(|p| ExactRatio::from_decimal(&p.price))
-                    };
-                    let Some(price) = price else {
-                        return unknown(h.issues.clone());
-                    };
-                    let units = if h.role == PositionRole::Liability {
-                        lib_core::Units::from(0) - h.quantity.units.abs()
-                    } else {
-                        h.quantity.units.clone()
-                    };
-                    let value = money(
-                        &r.reporting_asset,
-                        ExactRatio::quantity(&units, h.quantity.scale).mul(&price),
-                    );
-                    if complete(&h.value) {
-                        known(value, evidence(&h.value))
-                    } else {
-                        FigureDto::Partial {
-                            value,
-                            evidence: evidence(&h.value),
-                            issues: h.issues.clone(),
+    let estimated_current_value =
+        matches!(&selection, Selection::Asset(_) | Selection::Exposure(_)).then(|| {
+            sum(
+                &r.reporting_asset,
+                group
+                    .iter()
+                    .map(|h| {
+                        // A negative savings balance is a mapping/history problem,
+                        // not evidence of borrowing. Only liability roles create debt.
+                        if h.issues.iter().any(|i| i.code == "unexpected_balance_sign") {
+                            return unknown(h.issues.clone());
                         }
-                    }
-                })
-                .collect(),
-        )
-    });
+                        let price = if h.quantity.asset_id == r.reporting_asset {
+                            Some(ExactRatio::integer(1))
+                        } else {
+                            h.price.as_ref().map(|p| ExactRatio::from_decimal(&p.price))
+                        };
+                        let Some(price) = price else {
+                            return unknown(h.issues.clone());
+                        };
+                        let units = if h.role == PositionRole::Liability {
+                            lib_core::Units::from(0) - h.quantity.units.abs()
+                        } else {
+                            h.quantity.units.clone()
+                        };
+                        let value = money(
+                            &r.reporting_asset,
+                            ExactRatio::quantity(&units, h.quantity.scale).mul(&price),
+                        );
+                        if complete(&h.value) {
+                            known(value, evidence(&h.value))
+                        } else {
+                            FigureDto::Partial {
+                                value,
+                                evidence: evidence(&h.value),
+                                issues: h.issues.clone(),
+                            }
+                        }
+                    })
+                    .collect(),
+            )
+        });
     NavigationEntry {
+        direct_quantities: None,
+        alternatives: vec![],
         estimated_current_value,
+        token_metadata: None,
+        metadata_unresolved: false,
         selection,
         name,
         ticker,
@@ -1472,6 +1652,22 @@ fn sort_nav(ns: &mut [NavigationEntry]) {
 fn node_id(t: &AllocationTarget) -> String {
     serde_json::to_string(t).expect("serializable target")
 }
+/// Stored provider display choices win; known brands have readable defaults.
+fn provider_display_name(
+    id: &ProviderId,
+    display: Option<&lib_core::ui_metadata::ProviderDisplay>,
+) -> String {
+    display.and_then(|d| d.name.clone()).unwrap_or_else(|| {
+        match id.0.to_ascii_lowercase().as_str() {
+            "nexo" => "Nexo".into(),
+            "binance" => "Binance".into(),
+            "kraken" => "Kraken".into(),
+            "evm" => "EVM wallets".into(),
+            _ => id.0.clone(),
+        }
+    })
+}
+
 fn build_tree(
     request: &PortfolioRequest,
     metadata: &UiMetadataDto,
@@ -1484,6 +1680,7 @@ fn build_tree(
     let mut add = |target: AllocationTarget, parent: Option<AllocationTarget>, name: String| {
         let id = node_id(&target);
         nodes.entry(id.clone()).or_insert_with(|| AllocationNode {
+            inferred_allocation: None,
             id,
             target,
             parent: parent.as_ref().map(node_id),
@@ -1496,12 +1693,10 @@ fn build_tree(
     };
     for h in &group {
         let pt = AllocationTarget::Provider(h.provider_id.clone());
-        let pname = metadata
-            .providers
-            .iter()
-            .find(|p| p.id == h.provider_id)
-            .and_then(|p| p.name.clone())
-            .unwrap_or(h.provider_id.0.clone());
+        let pname = provider_display_name(
+            &h.provider_id,
+            metadata.providers.iter().find(|p| p.id == h.provider_id),
+        );
         add(pt.clone(), None, pname);
         let mut account = Some(h.account_id.clone());
         while let Some(id) = account {
@@ -1517,7 +1712,11 @@ fn build_tree(
                     (LocalTarget::Account { id: target }, Some(LocalValue::Account(c)))
                         if *target == id =>
                     {
-                        c.local_label.clone()
+                        c.local_label.clone().or_else(|| {
+                            c.wallet_software
+                                .as_ref()
+                                .map(|software| format!("{software} · {}", a.account.label))
+                        })
                     }
                     _ => None,
                 });
@@ -1603,6 +1802,97 @@ fn build_tree(
         .map(|n| n.id.clone())
         .collect();
     roots.sort_by(sort);
+    // Informational partitions sit below their aggregate holding. Their values
+    // are never rolled up again into holdings or portfolio earnings.
+    for h in &group {
+        let parent = node_id(&AllocationTarget::Holding(h.id.clone()));
+        for part in &h.inferred_allocations {
+            let target = AllocationTarget::Holding(part.id.clone());
+            let id = node_id(&target);
+            let mut child_summary = empty_summary(&request.reporting_asset);
+            let quantity = ExactRatio::quantity(&part.quantity.units, part.quantity.scale);
+            let price = if part.quantity.asset_id == request.reporting_asset {
+                Some(ExactRatio::integer(1))
+            } else {
+                h.price.as_ref().map(|p| ExactRatio::from_decimal(&p.price))
+            };
+            let scope = EntityScope::Account {
+                account_id: h.account_id.clone(),
+            };
+            let warning = issue(
+                "nexo_term_inferred",
+                scope.clone(),
+                "Allocation inferred at the export cutoff; contractual APY, scheduled maturity and renewal are not established",
+                vec![],
+            );
+            let value = if complete(&h.value) {
+                price
+                    .map(|p| {
+                        known(
+                            money(&request.reporting_asset, quantity.mul(&p)),
+                            evidence(&h.value),
+                        )
+                    })
+                    .unwrap_or_else(|| unknown(h.issues.clone()))
+            } else {
+                unknown(h.issues.clone())
+            };
+            child_summary.gross_assets = value.clone();
+            child_summary.current_value = value;
+            let missing = issue(
+                "rate_unknown",
+                scope,
+                "No supported contractual rate for this inferred allocation",
+                vec![WithheldFigure::CurrentEarnings, WithheldFigure::OverallApy],
+            );
+            child_summary.gross_annual_earnings = unknown(vec![missing.clone()]);
+            child_summary.net_annual_earnings = unknown(vec![missing.clone()]);
+            child_summary.current_apy = unknown(vec![missing]);
+            child_summary.estimated_current_apy = child_summary.current_apy.clone();
+            if let Some(rate) = &part.expected_apy {
+                child_summary.current_apy = known(rate.clone(), part.expected_evidence.clone());
+                child_summary.estimated_current_apy = child_summary.current_apy.clone();
+                if let Some(principal) = amount(&child_summary.current_value) {
+                    child_summary.gross_annual_earnings = known(
+                        money(&request.reporting_asset, principal.mul(rate)),
+                        [
+                            evidence(&child_summary.current_value),
+                            part.expected_evidence.clone(),
+                        ]
+                        .concat(),
+                    );
+                    child_summary.net_annual_earnings = child_summary.gross_annual_earnings.clone();
+                }
+            }
+            let name = match part.kind.as_str() {
+                "fixed" => format!(
+                    "Fixed term · {}",
+                    part.opened_at.unwrap().format("%Y-%m-%d")
+                ),
+                "unresolved_fixed" => format!("{} fixed terms · identity unresolved", part.count),
+                _ => "Outside fixed terms · allocation unknown".into(),
+            };
+            nodes
+                .get_mut(&parent)
+                .expect("holding parent")
+                .children
+                .push(id.clone());
+            nodes.insert(
+                id.clone(),
+                AllocationNode {
+                    id,
+                    target,
+                    parent: Some(parent.clone()),
+                    children: vec![],
+                    name,
+                    holding_ids: vec![],
+                    summary: child_summary,
+                    issues: vec![warning],
+                    inferred_allocation: Some(part.clone()),
+                },
+            );
+        }
+    }
     Ok(AllocationTree {
         selection,
         roots,
@@ -1610,6 +1900,154 @@ fn build_tree(
     })
 }
 impl PortfolioProjection {
+    /// Group explicitly reviewed representations for navigation; amounts/prices remain exact-asset scoped.
+    pub fn asset_navigation(&self) -> Vec<NavigationEntry> {
+        let mut groups: BTreeMap<String, Vec<&NavigationEntry>> = BTreeMap::new();
+        let mut out = vec![];
+        for entry in &self.assets {
+            let Selection::Asset(id) = &entry.selection else {
+                continue;
+            };
+            if let Some(r) = crate::asset_groups::representation(&id.0) {
+                groups.entry(r.underlying.into()).or_default().push(entry);
+            } else if !entry.metadata_unresolved
+                && self
+                    .holdings
+                    .iter()
+                    .any(|h| h.quantity.asset_id == *id && !h.is_dust)
+            {
+                out.push(entry.clone());
+            }
+        }
+        for (id, entries) in groups {
+            let selection = Selection::Exposure(AssetId::str(&id));
+            if !self
+                .holdings
+                .iter()
+                .any(|h| selected(&selection, h) && !h.is_dust)
+            {
+                continue;
+            }
+            if entries.len() == 1 && entries[0].selection == Selection::Asset(AssetId::str(&id)) {
+                out.push(entries[0].clone());
+            } else {
+                out.push(nav(
+                    &self.request,
+                    &self.holdings,
+                    &self.contributions,
+                    selection,
+                    crate::asset_groups::group_label(&id).into(),
+                    Some(id),
+                ));
+            }
+        }
+        for entry in &mut out {
+            let underlying = match &entry.selection {
+                Selection::Exposure(id) => id.0.clone(),
+                Selection::Asset(id) => match crate::asset_groups::representation(&id.0) {
+                    Some(r) => r.underlying.to_string(),
+                    None => continue,
+                },
+                _ => continue,
+            };
+            let group: Vec<_> = self
+                .holdings
+                .iter()
+                .filter(|h| selected(&entry.selection, h))
+                .collect();
+            let direct: Vec<_> = group
+                .iter()
+                .copied()
+                .filter(|h| {
+                    h.role == PositionRole::Asset
+                        && crate::asset_groups::is_direct(&h.provider_id.0, &h.quantity.asset_id.0)
+                })
+                .collect();
+            let scale = direct.iter().map(|h| h.quantity.scale).max().unwrap_or(0);
+            let units = direct.iter().fold(Units::from(0), |mut sum, h| {
+                sum +=
+                    Units::from_decimal(&h.quantity.units.decimal_string(h.quantity.scale), scale)
+                        .expect("exact widening of a validated quantity");
+                sum
+            });
+            entry.direct_quantities = Some(if direct.is_empty() {
+                vec![]
+            } else {
+                vec![QuantityDto {
+                    asset_id: AssetId::str(&underlying),
+                    units,
+                    scale,
+                }]
+            });
+            let mut alternatives: BTreeMap<(String, String, bool), Vec<CurrentHolding>> =
+                BTreeMap::new();
+            for h in group {
+                if h.role != PositionRole::Asset
+                    || !crate::asset_groups::is_direct(&h.provider_id.0, &h.quantity.asset_id.0)
+                {
+                    alternatives
+                        .entry((
+                            h.provider_id.0.clone(),
+                            h.quantity.asset_id.0.clone(),
+                            h.role == PositionRole::Liability,
+                        ))
+                        .or_default()
+                        .push(h.clone());
+                }
+            }
+            for ((provider, asset, debt), holdings) in alternatives {
+                let h = &holdings[0];
+                let r = crate::asset_groups::representation(&asset).expect("reviewed group member");
+                let provider_id = ProviderId::from(provider.as_str());
+                let representation_name =
+                    if provider_id.0.eq_ignore_ascii_case("nexo") && asset == "USD" {
+                        "Tokenized USD"
+                    } else {
+                        r.name
+                    };
+                let name = format!(
+                    "{} · {}",
+                    representation_name,
+                    provider_display_name(
+                        &provider_id,
+                        self.metadata.providers.iter().find(|d| d.id == provider_id)
+                    )
+                );
+                let variant = nav(
+                    &self.request,
+                    &holdings,
+                    &self.contributions,
+                    Selection::Asset(AssetId::str(&asset)),
+                    name.clone(),
+                    Some(r.ticker.into()),
+                );
+                let units = holdings.iter().fold(Units::from(0), |mut sum, h| {
+                    sum += &h.quantity.units;
+                    sum
+                });
+                entry.alternatives.push(AlternativeRepresentation {
+                    name,
+                    ticker: r.ticker.into(),
+                    provider: provider_id,
+                    role: if debt {
+                        PositionRole::Liability
+                    } else {
+                        PositionRole::Asset
+                    },
+                    quantity: QuantityDto {
+                        asset_id: AssetId::str(&asset),
+                        units,
+                        scale: h.quantity.scale,
+                    },
+                    value: variant
+                        .estimated_current_value
+                        .unwrap_or(variant.summary.current_value),
+                });
+            }
+        }
+        sort_nav(&mut out);
+        out
+    }
     pub fn allocation_tree(&self, selection: Selection) -> Result<AllocationTree> {
         build_tree(
             &self.request,

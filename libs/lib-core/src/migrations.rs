@@ -54,6 +54,10 @@ const MIGRATIONS: &[Migration] = &[
         name: "010_account_jurisdictions",
         apply: account_jurisdictions,
     },
+    Migration {
+        name: "011_token_metadata",
+        apply: token_metadata,
+    },
 ];
 
 /// Run every migration in order before the Store becomes available. Each step
@@ -410,5 +414,10 @@ mod tests {
 
 fn account_jurisdictions(c: &Connection) -> anyhow::Result<()> {
     c.execute_batch("CREATE TABLE IF NOT EXISTS account_jurisdictions (account_id VARCHAR PRIMARY KEY, country_code VARCHAR NOT NULL, declared_at TIMESTAMP NOT NULL);")?;
+    Ok(())
+}
+
+fn token_metadata(c: &Connection) -> anyhow::Result<()> {
+    c.execute_batch("CREATE TABLE IF NOT EXISTS token_metadata (id VARCHAR PRIMARY KEY, payload VARCHAR NOT NULL);")?;
     Ok(())
 }

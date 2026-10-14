@@ -20,3 +20,5 @@ pub use history::*;
 pub use storage::*;
 pub use traits::*;
 pub use types::*;
+
+pub mod token_metadata;

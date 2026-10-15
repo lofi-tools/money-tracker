@@ -1,6 +1,6 @@
 # Proposed Nexo browser capture
 
-Status: **approved design, implementation pending**, approved 15 October 2026. Owned by the existing account-specific Nexo capture task in [master todo](../todo/master-todo.md). This extends [current inferred allocations](nexo-current-allocations.md), retaining the [transaction matcher's ambiguity rules](../findings/nexo-transaction-inference.md). No extension, importer, account capture or database change is delivered by this document.
+Status: **approved design**, approved 15 October 2026. A [development implementation](nexo-browser-capture.md) was approved on 15 October 2026, with its remaining limits recorded separately. Owned by the existing account-specific Nexo capture task in [master todo](../todo/master-todo.md). This extends [current inferred allocations](nexo-current-allocations.md), retaining the [transaction matcher's ambiguity rules](../findings/nexo-transaction-inference.md). No extension, importer, account capture or database change is delivered by this document.
 
 ## Findings and unresolved evidence
 

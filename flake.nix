@@ -38,7 +38,12 @@
           };
         in
         {
-          packages = scripts;
+          packages = scripts // {
+            nexo-capture-extension = pkgs.callPackage ./nix/nexo-capture-extension.nix { };
+          };
+          checks.nexo-brave-wrapper = pkgs.callPackage ./nix/check-brave-wrapper.nix {
+            extension = config.packages.nexo-capture-extension;
+          };
           myDevShell.env = env;
           myDevShell.buildInputs = buildDeps ++ devDeps ++ (attrValues scripts);
           # # DuckDB `bundled` compiles C++: opt into the coherent nixpkgs

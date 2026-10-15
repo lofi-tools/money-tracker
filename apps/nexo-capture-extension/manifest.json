@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Money Tracker \u00b7 Nexo capture (Brave)",
+  "version": "0.1.0",
+  "description": "Read Nexo savings and send an exact, provenance-labelled snapshot to your local tracker.",
+  "permissions": [
+    "scripting",
+    "storage",
+    "nativeMessaging"
+  ],
+  "optional_host_permissions": [
+    "https://platform.nexo.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Set up Nexo capture",
+    "default_popup": "options.html"
+  },
+  "options_page": "options.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'none'"
+  },
+  "key": "MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAwPcNUlSQYqbO3EAqBmVHaJofiKbm3qdlNWF/OvB2uN3uDODHuMftiCfhmHKAPWaOs4sIN6g/NhmppWQJ8UK9Fy48XBv4UcuwW019lnKl6gAa6apJsJ0KOwyWVA+MP1N4n9dIcugXmOt5RFdNF4BW+lgRNel/JVgG4qHcuoTsqe3uVpmSqzH22vq0iyrQBpBGNRa5GsB9JmdFlkGS15sYCpyEdECZZzViqwuIwQd94ZRP9iaKOgiRqI3AfWLze0lI0eHFH01fG6pJ4ogEmBANL0KiGuilUrwq/08qFD18D/vkyo37d3mvMnT9Ibz+seoiJXkJ658lCVmp/669cMXjxKGeW8YJM5Haj7V19Wng9o570mU/mDnC6xU5+dVYWNlXIgLHjsjkmxbFCLJWMTHcWs3NJpBZrRLJ/FEWiQYZehss4SMlu8hR93rfLD4C7brxsYezfszT2c2VXL6mu4Q/jBtdfmJFy43kH7VAv3E0Lol3R/RYXkhL0Ok20SuC0BTBAgMBAAE="
+}

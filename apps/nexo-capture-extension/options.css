@@ -1,0 +1,32 @@
+body {
+  font: 14px system-ui;
+  color: #e6f0e9;
+  background: #17241e;
+  margin: 0;
+  min-width: 340px;
+}
+main {
+  max-width: 560px;
+  padding: 24px;
+}
+label,
+input {
+  display: block;
+}
+input {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 8px 0;
+  padding: 8px;
+}
+button {
+  margin: 8px 8px 8px 0;
+  padding: 10px;
+  border: 0;
+  border-radius: 6px;
+  background: #b5d4c0;
+  color: #15221b;
+}
+p {
+  line-height: 1.5;
+}

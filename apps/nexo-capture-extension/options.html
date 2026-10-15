@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><title>Nexo capture setup</title
+  ><link rel="stylesheet" href="options.css" />
+  <body>
+    <main>
+      <h1>Nexo capture · Brave</h1>
+      <p>
+        Pair with your installed Money Tracker native host, then enable the
+        floating export button on Nexo.
+      </p>
+      <label
+        >Local connection ID
+        <input
+          id="connection"
+          autocomplete="off"
+          spellcheck="false"
+          maxlength="64" /></label
+      ><button id="enable">Enable on Nexo</button
+      ><button id="retry">Retry pending ingestion</button
+      ><button id="disable">Disable site access</button>
+      <p id="status" role="status"></p>
+      <p>
+        This extension reads account views after you click Export Nexo data. It
+        never changes savings settings. No data is sent to external services.
+      </p>
+    </main>
+    <script type="module" src="src/options.js"></script>
+  </body>
+</html>

@@ -402,7 +402,7 @@ fn validate_parent(c: &Connection, id: &AccountId, parent: Option<&AccountId>) -
     }
     Ok(())
 }
-fn validate_rate(rate: &Option<AnnualRate>) -> Result<()> {
+pub(crate) fn validate_rate(rate: &Option<AnnualRate>) -> Result<()> {
     if let Some(rate) = rate {
         ensure!(
             !rate.fraction.is_negative(),
@@ -415,7 +415,7 @@ fn validate_rate(rate: &Option<AnnualRate>) -> Result<()> {
     }
     Ok(())
 }
-fn validate_evidence(e: &SourceEvidence) -> Result<()> {
+pub(crate) fn validate_evidence(e: &SourceEvidence) -> Result<()> {
     ensure!(
         !e.source.trim().is_empty() && !e.reference.trim().is_empty(),
         "evidence source/reference required"
@@ -426,7 +426,11 @@ fn validate_evidence(e: &SourceEvidence) -> Result<()> {
     );
     Ok(())
 }
-fn validate_scope(c: &Connection, portfolio: &PortfolioId, scope: &RateScope) -> Result<()> {
+pub(crate) fn validate_scope(
+    c: &Connection,
+    portfolio: &PortfolioId,
+    scope: &RateScope,
+) -> Result<()> {
     match scope {
         RateScope::Product(id) => {
             let product: ProductTemplate =

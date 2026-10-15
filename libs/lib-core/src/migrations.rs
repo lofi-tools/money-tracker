@@ -58,6 +58,10 @@ const MIGRATIONS: &[Migration] = &[
         name: "011_token_metadata",
         apply: token_metadata,
     },
+    Migration {
+        name: "012_nexo_browser_captures",
+        apply: nexo_browser_captures,
+    },
 ];
 
 /// Run every migration in order before the Store becomes available. Each step
@@ -419,5 +423,10 @@ fn account_jurisdictions(c: &Connection) -> anyhow::Result<()> {
 
 fn token_metadata(c: &Connection) -> anyhow::Result<()> {
     c.execute_batch("CREATE TABLE IF NOT EXISTS token_metadata (id VARCHAR PRIMARY KEY, payload VARCHAR NOT NULL);")?;
+    Ok(())
+}
+
+fn nexo_browser_captures(c: &Connection) -> anyhow::Result<()> {
+    c.execute_batch("CREATE TABLE IF NOT EXISTS nexo_browser_captures (account_id VARCHAR NOT NULL, content_hash VARCHAR NOT NULL, capture_id VARCHAR NOT NULL, observed_at TIMESTAMP NOT NULL, payload VARCHAR NOT NULL, result VARCHAR NOT NULL, PRIMARY KEY(account_id, content_hash), UNIQUE(account_id, capture_id));")?;
     Ok(())
 }

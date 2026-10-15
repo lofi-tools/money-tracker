@@ -65,3 +65,5 @@ cargo test -p lib-core cached_provider_databases_upgrade_without_changing_financ
 Old binaries that expect numeric effect columns must not write upgraded databases. Use the new core writers/readers together; no automatic downgrade is implemented.
 
 The explicit [precision widening operation](data-model.md#explicit-precision-widening-14-october-2026) is separate from migrations/import registration. It transactionally widens existing asset integer quantities and invalidates affected ledger revisions, without changing source identities or creating financial movements. It rejects incompatible immutable UI quantity evidence.
+
+Migration `012_nexo_browser_captures` appends immutable account-scoped browser snapshots and matching receipts for the [Nexo capture implementation](nexo-browser-capture.md). It reruns idempotently and changes no financial movements or scales.

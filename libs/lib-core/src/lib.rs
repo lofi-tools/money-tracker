@@ -24,3 +24,5 @@ pub use types::*;
 pub mod token_metadata;
 
 mod precision;
+
+pub mod browser_capture;

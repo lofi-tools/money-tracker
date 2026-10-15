@@ -8,7 +8,7 @@
     with builtins; {
       systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" "x86_64-darwin" ];
       imports = lib.flatten [
-        (attrValues inputs.my-nix.flakeModuleGroups.essentials)
+        (attrValues (inputs.my-nix.flakeModuleGroups.essentials or inputs.my-nix.flakeModules.essentials))
         inputs.my-nix.flakeModules.rust
       ];
       perSystem = { pkgs, config, lib, ... }:

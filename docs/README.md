@@ -21,6 +21,7 @@ Documentation is organized by purpose. Specifications describe implemented contr
 - [Nexo bundled catalogue, eligibility and account-local jurisdiction](spec/nexo-rate-catalogue.md)
 - [Proposed Nexo rate catalogue: official observations and qualification rules](spec/nexo-rate-catalogue-proposal.md)
 - [Nexo current inferred allocations, account rates and related wallet behavior](spec/nexo-current-allocations.md)
+- [Proposed Nexo Chromium capture and local JSON matching](spec/nexo-browser-capture-proposal.md)
 - [Nexo sources, ledger mapping, balance sums and diagnostics](spec/nexo.md)
 - [Binance sources, ledger mapping, reconciliation and diagnostics](spec/binance.md)
 - [Kraken account-scoped ledger, exact fees, cached replay and reconciliation](spec/kraken.md)

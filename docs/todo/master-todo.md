@@ -42,7 +42,7 @@ Implemented and approved on 14 October: [provider display groups](../spec/provid
 
 Later follow-up owned here (after the reviewed Nexo catalogue):
 
-- [ ] Capture account-specific Nexo term details (actual due dates, renewal, payout and rates). Investigate a user-triggered Chromium exporter with local JSON; retain ambiguous matches and preserve source evidence. See [proposed capture constraints](../spec/nexo-current-allocations.md#proposed-account-capture-not-implemented).
+- [ ] Capture account-specific Nexo term details (actual due dates, renewal, payout and rates). Investigate a floating-button Chromium extension that automatically browses the signed-in Nexo account and sends captured JSON to the local tracker for DB ingestion; retain ambiguous matches and preserve source evidence. See the [Chromium capture proposal](../spec/nexo-browser-capture-proposal.md), investigated on 14 October and approved on 15 October; extension, native bridge and importer implementation is pending.
 - [ ] Automate Nexo rate/condition collection with a scraper or official structured source, refreshed every few weeks. Define the cadence during implementation; retain dated snapshots, change detection, source provenance, failure/staleness handling and human review before publishing rule changes. Feed the same catalogue as task 2 rather than maintaining a second rate source. This is a roadmap task, not an app background-refresh promise.
 
 The existing broader model, provider diagnostics and opportunity work below remains in place; these are the immediate source-to-app slices, not a replacement financial engine.

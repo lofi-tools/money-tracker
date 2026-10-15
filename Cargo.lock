@@ -2775,6 +2775,7 @@ dependencies = [
  "dirs 5.0.1",
  "duckdb",
  "evm-client",
+ "hmac-sha256",
  "kraken-client",
  "lib-core",
  "nexo-csv",

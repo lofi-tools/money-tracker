@@ -28,3 +28,6 @@ pub mod token_metadata;
 pub mod asset_groups;
 
 pub mod provider_grouping;
+
+pub mod capture_bridge;
+pub mod nexo_capture;

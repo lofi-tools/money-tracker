@@ -27,3 +27,5 @@ duckdb.workspace = true
 tempfile = "3"
 
 base64 = "0.22"
+
+hmac-sha256.workspace = true

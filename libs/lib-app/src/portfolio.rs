@@ -890,6 +890,7 @@ impl Application {
                 Ok(mut parts) => {
                     for part in &mut parts {
                         let flexible = part.kind=="unclassified_residual";
+                        if !flexible {part.captured=self.captured_nexo_term(&part.account,&part.id,request.context.cutoff)?;}
                         let product=lib_core::ProductId::from(format!("nexo-{}:{}:{}",if flexible {"flex"}else{"fixed"},part.account.0,part.quantity.asset_id.0));
                         let group_product=lib_core::ProductId::from(format!("nexo-fixed-group:{}:{}",part.id,part.count));
                         let mut selected=if part.kind=="fixed" {self.store().selected_rate(&request.context.portfolio_id,&RateScope::Subscription(part.id.clone()),request.context.cutoff)?} else {None};
@@ -900,10 +901,11 @@ impl Application {
                             if selected.is_some(){expected_scope=RateScope::Product(group_product.clone());expected_product=group_product;}
                         }
                         if selected.is_none() && self.store().product_template(&product)?.is_some() && (!flexible || self.store().subscriptions(&request.context.portfolio_id)?.iter().any(|s|s.product_id==product && s.account_id==part.account)){selected=self.store().selected_rate(&request.context.portfolio_id,&RateScope::Product(product),request.context.cutoff)?;}
+                        if selected.as_ref().and_then(|r|r.evidence_id.as_ref()).is_some_and(|id|id.starts_with("nexo-browser:")) {part.expected_rate_note=Some("Captured current Nexo rate".into());}
                         if let Some(rate)=&selected {part.expected_evidence=self.rate_provenance(&request.context.portfolio_id,&expected_scope,rate)?;}
                         part.expected_apy=selected.and_then(|r|r.rate.as_ref().and_then(rate_factor));
                         if let Some(product) = self.store().product_template(&expected_product)? {
-                            if part.expected_apy.is_some(){part.expected_rate_note=Some(product.label);}
+                            if part.expected_apy.is_some() && part.expected_rate_note.is_none(){part.expected_rate_note=Some(product.label);}
                             if !flexible {
                                 part.maturity = self.store().subscription(&part.id)?.and_then(|s|s.maturity);
                                 part.expected_maturity = part.opened_at.zip(product.term_months)

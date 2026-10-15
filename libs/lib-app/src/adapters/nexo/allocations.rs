@@ -22,6 +22,8 @@ pub struct TermAllocation {
     #[serde(default)]
     pub maturity: Option<DateTime<Utc>>,
     #[serde(default)]
+    pub captured: Option<crate::nexo_capture::Term>,
+    #[serde(default)]
     pub expected_maturity: Option<DateTime<Utc>>,
     pub as_of: DateTime<Utc>,
     pub source_hash: String,
@@ -163,6 +165,7 @@ pub fn open_allocations(
             },
             opened_at: opening.map(|(_, t)| t),
             maturity: None,
+            captured: None,
             expected_maturity: None,
             as_of,
             source_hash: hash.into(),
@@ -212,6 +215,7 @@ pub fn partition(quantity: &QuantityDto, parts: &[TermAllocation]) -> Result<Vec
         p.quantity.units = remaining;
         p.opened_at = None;
         p.maturity = None;
+        p.captured = None;
         p.expected_maturity = None;
         p.count = 1;
         p.observed_apy = None;

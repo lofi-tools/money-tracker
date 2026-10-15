@@ -102,6 +102,15 @@ impl DatabaseWorker {
             }
         }
     }
+    pub async fn nexo_capture_views(&self) -> Result<Vec<crate::nexo_capture::CaptureView>> {
+        let portfolio = self.portfolio_id.clone();
+        self.request(move |app, _| app.nexo_capture_views(&portfolio))
+            .await
+    }
+    pub async fn ingest_browser_inbox(&self) -> Result<Vec<crate::nexo_capture::Receipt>> {
+        self.request(|app, resolved| crate::capture_bridge::drain(app, resolved))
+            .await
+    }
     pub fn portfolio_id(&self) -> &PortfolioId {
         &self.portfolio_id
     }

@@ -1,0 +1,80 @@
+{
+  "schema": "money-tracker.nexo-terms",
+  "version": 1,
+  "capture_id": "synthetic-bridge-001",
+  "capture_started_at": "2026-01-10T00:00:00Z",
+  "capture_finished_at": "2026-01-10T00:01:00Z",
+  "extractor_version": "synthetic-v1",
+  "account_hint": {
+    "local_label": "My Nexo",
+    "jurisdiction": "GB",
+    "source": "user_entered"
+  },
+  "coverage": {
+    "status": "partial",
+    "reported_active_count": null,
+    "views_captured": 1
+  },
+  "account_settings": {
+    "payout_asset": null,
+    "renew_with_interest": null
+  },
+  "terms": [
+    {
+      "observation_id": "synthetic-observation-001",
+      "provider_term_id": null,
+      "observed_at": "2026-01-10T00:00:30Z",
+      "status": "active",
+      "principal": {
+        "asset": "ETH",
+        "amount": "40.00000000",
+        "precision": "full",
+        "exactness": "exact"
+      },
+      "rate": {
+        "percent": "6.25",
+        "basis": "apy",
+        "raw_label": "6.25% APY",
+        "scope": "term"
+      },
+      "payout": {
+        "asset": "NEXO",
+        "scope": "term",
+        "historical_continuity": "unknown"
+      },
+      "start": {
+        "value": "2026-01-02T00:00:00Z",
+        "precision": "instant",
+        "timezone": "UTC"
+      },
+      "maturity": {
+        "value": "2026-11-03",
+        "precision": "date",
+        "timezone": null
+      },
+      "duration_months": 1,
+      "auto_renew": true,
+      "renew_with_interest": null,
+      "accrued_rewards": [],
+      "evidence": {
+        "view": "term_detail",
+        "fields": {
+          "principal": "40.00000000 ETH",
+          "start": "2026-01-02T00:00:00Z",
+          "maturity": "3 Nov 2026",
+          "auto_renew": "checked"
+        }
+      },
+      "warnings": [
+        "Synthetic exact-principal fixture; live reader does not assert exactness"
+      ]
+    }
+  ],
+  "warnings": [
+    "Only one detail view captured; account coverage is partial"
+  ],
+  "origin": "https://platform.nexo.com",
+  "page_path": "/fixed-terms/eth",
+  "locale": "en",
+  "browser_timezone": "UTC"
+}

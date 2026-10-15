@@ -56,3 +56,22 @@ export function onRefresh(
     stop?.();
   };
 }
+
+export function onBrowserCapture(
+  callback: (result: Startup) => void,
+): () => void {
+  let stop: (() => void) | undefined;
+  let cancelled = false;
+  if (!reviewMode && isTauri())
+    void import("@tauri-apps/api/event").then(async ({ listen }) => {
+      const unlisten = await listen<Startup>("browser-capture", (event) =>
+        callback(event.payload),
+      );
+      if (cancelled) unlisten();
+      else stop = unlisten;
+    });
+  return () => {
+    cancelled = true;
+    stop?.();
+  };
+}

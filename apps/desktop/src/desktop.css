@@ -668,3 +668,21 @@ body {
   gap: 4px;
   justify-content: flex-end;
 }
+
+.nexo-captures {
+  border: 1px solid var(--colors-border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 24px;
+  overflow-wrap: anywhere;
+}
+.nexo-captures summary {
+  cursor: pointer;
+  padding: 12px 0;
+}
+.nexo-captures li {
+  margin: 12px 0;
+}
+.nexo-captures .nav-native-quantity {
+  display: inline-flex;
+}

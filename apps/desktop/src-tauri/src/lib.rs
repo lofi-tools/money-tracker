@@ -135,6 +135,7 @@ pub struct Snapshot {
     pub edits: EditContext,
     /// Configured refresh sources with their schedule, freshness and failures.
     pub refresh: Vec<RefreshStatus>,
+    pub nexo_captures: Vec<lib_app::nexo_capture::CaptureView>,
 }
 /// One completed refresh: the new snapshot plus what each source did.
 #[derive(Clone, Serialize)]
@@ -236,6 +237,13 @@ impl Session {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("database not open"))
     }
+    pub async fn ingest_browser_inbox(&mut self) -> Result<Vec<lib_app::nexo_capture::Receipt>> {
+        let receipts = self.worker()?.ingest_browser_inbox().await?;
+        if !receipts.is_empty() {
+            self.projection = None;
+        }
+        Ok(receipts)
+    }
     pub async fn settings(&self) -> Result<Settings> {
         self.worker()?.settings().await
     }
@@ -321,6 +329,7 @@ impl Session {
             dust_count: p.holdings.iter().filter(|h| h.is_dust).count(),
             edits: edit_context(&p, &actions),
             refresh: self.worker()?.refresh_status().await?,
+            nexo_captures: self.worker()?.nexo_capture_views().await?,
         };
         self.projection = Some(p);
         Ok(out)

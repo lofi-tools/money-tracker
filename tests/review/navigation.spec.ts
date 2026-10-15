@@ -370,3 +370,53 @@ test("partial values wrap inside their column without crowding the title", async
     687,
   );
 });
+
+test("Nexo browser facts show unresolved reasons without adding ownership", async ({
+  page,
+}) => {
+  const data = structuredClone(fixture);
+  const capture = JSON.parse(
+    readFileSync("libs/lib-app/tests/fixtures/nexo_capture.json", "utf8"),
+  );
+  capture.terms[0].principal.exactness = "unknown";
+  capture.terms[0].start = null;
+  capture.terms[0].rate.basis = "unknown";
+  data.startup.data.nexo_captures = [
+    {
+      account: "legacy:nexo",
+      capture,
+      receipt: {
+        matched: 0,
+        unresolved: 1,
+        conflicts: 0,
+        matches: [
+          {
+            observation_id: capture.terms[0].observation_id,
+            subscription_id: null,
+            reason:
+              "Start date not displayed; principal precision is unverified",
+          },
+        ],
+      },
+    },
+  ];
+  await page.route("**/__portfolio_review", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(data),
+    }),
+  );
+  await page.goto("/");
+  const section = page.getByRole("region", { name: "Nexo browser captures" });
+  await section.locator("summary").click();
+  await expect(section).toContainText("0 matched · 1 unresolved");
+  await expect(section).toContainText("annual basis unknown");
+  await expect(section).toContainText("Start date not displayed");
+  await expect(section).toContainText("2026-11-03");
+  await expect(page.locator(".overview-card")).toContainText("$901");
+  await expect(section).toContainText("start: Unknown");
+  await expect(section).toContainText("renew with interest: Unknown");
+  await page.screenshot({
+    path: "/private/tmp/nexo-tracker-capture-review.png",
+  });
+});

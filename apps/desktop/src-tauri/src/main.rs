@@ -14,6 +14,27 @@ use std::{
 use tauri::{Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tokio::sync::Mutex;
+/// Local browser evidence is serialized through the same DB owner as other writes.
+async fn capture_inbox(app: tauri::AppHandle) {
+    let mut tick = tokio::time::interval(std::time::Duration::from_secs(2));
+    loop {
+        tick.tick().await;
+        let host = app.state::<Host>();
+        if host.exiting.load(Ordering::SeqCst) {
+            break;
+        }
+        let mut guard = host.session.lock().await;
+        if let Some(session) = guard.as_mut() {
+            if let Ok(receipts) = session.ingest_browser_inbox().await {
+                if !receipts.is_empty() {
+                    if let Ok(data) = session.startup().await {
+                        let _ = app.emit("browser-capture", data);
+                    }
+                }
+            }
+        }
+    }
+}
 /// Scheduled refresh while the app runs; an idle tick does no provider work.
 const SCHEDULER_TICK: std::time::Duration = std::time::Duration::from_secs(60);
 const REFRESH_EVENT: &str = "refresh";
@@ -437,6 +458,7 @@ fn main() {
         .expect("building desktop host");
     // Scheduled daily refresh while the app runs; nothing survives window close.
     tauri::async_runtime::spawn(scheduler(app.handle().clone()));
+    tauri::async_runtime::spawn(capture_inbox(app.handle().clone()));
     let report = smoke.map(|smoke| smoke.report());
     app.run(move |app, event| match event {
         // The launch acceptance waits for the real window before measuring.

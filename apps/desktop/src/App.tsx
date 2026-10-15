@@ -44,7 +44,7 @@ import {
   shortAssetLabel,
   readableReference,
 } from "./asset-presentation";
-import { api, onRefresh, reviewMode } from "./api";
+import { api, onRefresh, onBrowserCapture, reviewMode } from "./api";
 import { defaultSettings } from "./contracts";
 import type {
   Startup,
@@ -292,6 +292,14 @@ function Body(props: {
     }
   }
   onMount(() => void start(api.startup));
+  onCleanup(
+    onBrowserCapture((result) => {
+      accept(result);
+      setNotice(
+        "Nexo browser capture ingested; unresolved evidence remains available below.",
+      );
+    }),
+  );
   // Scheduled refresh runs announce their result; the stored snapshot is adopted.
   onCleanup(
     onRefresh((update: RefreshUpdate) => {
@@ -481,11 +489,13 @@ function Body(props: {
               Start:{" "}
               {n.inferred_allocation.opened_at?.slice(0, 10) ?? "Unknown"}
               {" · "}
-              {n.inferred_allocation.maturity
+              {n.inferred_allocation.captured?.maturity ||
+              n.inferred_allocation.maturity
                 ? "Maturity: "
                 : "Expected maturity: "}
               {(
                 n.inferred_allocation.maturity ??
+                n.inferred_allocation.captured?.maturity?.value ??
                 n.inferred_allocation.expected_maturity
               )?.slice(0, 10) ?? "Unknown"}
             </span>
@@ -509,7 +519,18 @@ function Body(props: {
             <Show when={n.inferred_allocation}>
               {(part) => (
                 <span class="muted">
-                  {part().observed_apy ? (
+                  {part().expected_rate_note?.startsWith("Captured") &&
+                  part().expected_apy ? (
+                    <>
+                      <Apy
+                        figure={{
+                          status: "known",
+                          value: part().expected_apy!,
+                        }}
+                      />{" "}
+                      captured
+                    </>
+                  ) : part().observed_apy ? (
                     `${formatObservedApy(part().observed_apy!)} observed APY estimate`
                   ) : part().expected_apy ? (
                     <>
@@ -1317,6 +1338,93 @@ function Body(props: {
                       </Show>
                     </Show>
                   </Show>
+                  <Show
+                    when={
+                      (selection().kind === "overview" ||
+                        (selection().kind === "provider" &&
+                          (selection() as { id: string }).id === "nexo")) &&
+                      data()!.nexo_captures?.length
+                    }
+                  >
+                    <section
+                      class="nexo-captures"
+                      aria-label="Nexo browser captures"
+                    >
+                      <h3>Nexo browser captures</h3>
+                      <For each={data()!.nexo_captures}>
+                        {(view) => (
+                          <details>
+                            <summary>
+                              {view.capture.capture_finished_at
+                                .slice(0, 16)
+                                .replace("T", " ")}{" "}
+                              · {view.capture.coverage.status} ·{" "}
+                              {view.receipt.matched} matched ·{" "}
+                              {view.receipt.unresolved} unresolved
+                            </summary>
+                            <p>
+                              Captured facts are separate from financial
+                              ownership. Unknown rate basis or ambiguous
+                              transaction links remain unresolved.
+                            </p>
+                            <ul>
+                              <For each={view.capture.terms}>
+                                {(term) => (
+                                  <li>
+                                    <strong>
+                                      {term.principal?.asset ?? "Unknown asset"}
+                                    </strong>{" "}
+                                    <Show when={term.principal}>
+                                      {(principal) => {
+                                        const [whole, fraction = ""] =
+                                          principal().amount.split(".");
+                                        return (
+                                          <NavQuantity
+                                            units={whole + fraction}
+                                            scale={fraction.length}
+                                            asset={principal().asset}
+                                          />
+                                        );
+                                      }}
+                                    </Show>
+                                    {" · "}
+                                    {term.rate
+                                      ? `${term.rate.percent}% ${term.rate.basis === "unknown" ? "(annual basis unknown)" : term.rate.basis.toUpperCase()}`
+                                      : "Rate unknown"}
+                                    {" · payout: "}
+                                    {term.payout?.asset ?? "Unknown"}
+                                    {" · start: "}
+                                    {term.start?.value ?? "Unknown"}
+                                    {" · due: "}
+                                    {term.maturity?.value ?? "Unknown"}
+                                    {" · renew: "}
+                                    {term.auto_renew === null
+                                      ? "Unknown"
+                                      : term.auto_renew
+                                        ? "On"
+                                        : "Off"}
+                                    {" · renew with interest: "}
+                                    {term.renew_with_interest === null
+                                      ? "Unknown"
+                                      : term.renew_with_interest
+                                        ? "On"
+                                        : "Off"}
+                                    <p>
+                                      {view.receipt.matches.find(
+                                        (m) =>
+                                          m.observation_id ===
+                                          term.observation_id,
+                                      )?.reason ?? "Unresolved"}
+                                    </p>
+                                  </li>
+                                )}
+                              </For>
+                            </ul>
+                          </details>
+                        )}
+                      </For>
+                    </section>
+                  </Show>
                   <Show when={data()!.holding_count === 0}>
                     <StateMessage
                       kind="empty"
@@ -1380,16 +1488,27 @@ function Body(props: {
                       {part().kind === "unclassified_residual"
                         ? "Flexible savings (confirmed by user)"
                         : "Fixed-term allocation"}
-                      . Auto-renew: unknown.
+                      . Auto-renew:{" "}
+                      {part().captured?.auto_renew == null
+                        ? "unknown"
+                        : part().captured?.auto_renew
+                          ? "on"
+                          : "off"}
+                      .
                     </p>
                     <Show when={part().kind !== "unclassified_residual"}>
                       <p>
-                        {part().maturity ? "Maturity: " : "Expected maturity: "}
-                        {(part().maturity ?? part().expected_maturity)?.slice(
-                          0,
-                          10,
-                        ) ?? "Unknown"}
-                        {part().expected_maturity && !part().maturity
+                        {part().captured?.maturity || part().maturity
+                          ? "Maturity: "
+                          : "Expected maturity: "}
+                        {(
+                          part().maturity ??
+                          part().captured?.maturity?.value ??
+                          part().expected_maturity
+                        )?.slice(0, 10) ?? "Unknown"}
+                        {part().expected_maturity &&
+                        !part().maturity &&
+                        !part().captured?.maturity
                           ? " · estimated from the annotated term length; actual due date unconfirmed"
                           : ""}
                       </p>

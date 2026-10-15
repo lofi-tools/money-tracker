@@ -268,6 +268,7 @@ export interface Snapshot {
   edits: EditContext;
   /** Configured refresh sources with stored schedule, freshness and failures. */
   refresh: RefreshStatus[];
+  nexo_captures?: NexoCaptureView[];
 }
 export type AllocationTarget =
   | { kind: "provider"; id: string }
@@ -276,6 +277,7 @@ export type AllocationTarget =
   | { kind: "subscription"; id: string }
   | { kind: "holding"; id: string };
 export interface InferredAllocation {
+  captured?: CapturedNexoTerm | null;
   maturity?: string | null;
   expected_maturity?: string | null;
   id: string;
@@ -387,3 +389,49 @@ export const defaultSettings: Settings = {
   refresh_interval_seconds: 86400,
   refresh_on_open: false,
 };
+
+export interface CapturedNexoTerm {
+  observation_id: string;
+  provider_term_id: string | null;
+  observed_at: string;
+  principal: {
+    asset: string;
+    amount: string;
+    precision: string;
+    exactness: string;
+  } | null;
+  rate: {
+    percent: string;
+    basis: string;
+    raw_label: string;
+    scope: string;
+  } | null;
+  payout: { asset: string | null; scope: string } | null;
+  start: { value: string; precision: string; timezone: string | null } | null;
+  maturity: {
+    value: string;
+    precision: string;
+    timezone: string | null;
+  } | null;
+  auto_renew: boolean | null;
+  renew_with_interest: boolean | null;
+}
+export interface NexoCaptureView {
+  account: string;
+  capture: {
+    capture_id: string;
+    capture_finished_at: string;
+    coverage: { status: string };
+    terms: CapturedNexoTerm[];
+  };
+  receipt: {
+    matched: number;
+    unresolved: number;
+    conflicts: number;
+    matches: {
+      observation_id: string;
+      subscription_id: string | null;
+      reason: string;
+    }[];
+  };
+}

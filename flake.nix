@@ -10,6 +10,7 @@
       imports = lib.flatten [
         (attrValues (inputs.my-nix.flakeModuleGroups.essentials or inputs.my-nix.flakeModules.essentials))
         inputs.my-nix.flakeModules.rust
+        inputs.my-nix.flakeModules.web
       ];
       perSystem = { pkgs, config, lib, ... }:
         let
@@ -46,6 +47,20 @@
           };
           myDevShell.env = env;
           myDevShell.buildInputs = buildDeps ++ devDeps ++ (attrValues scripts);
+          # The generic JS/TS operations (install, codegen, typecheck, build,
+          # dev, ports) come from my-nix's web module. This shell had no Node
+          # or pnpm of its own (both were commented out of devDeps), so the
+          # module is now the single source of the JS toolchain. Ports are
+          # pinned to what the apps already serve on, and the bundled Playwright
+          # Chromium is kept because these suites set no channel.
+          web = {
+            skipPlaywrightBrowserDownload = false;
+            apps = {
+              desktop = { dir = "apps/desktop"; port = 1420; };
+              design-system-showcase = { dir = "demos/design-system-showcase"; port = 4321; };
+              web-design-system = { dir = "libs/web-design-system"; };
+            };
+          };
           # # DuckDB `bundled` compiles C++: opt into the coherent nixpkgs
           # # toolchain explicitly (compiler + libcxx + SDK from one nixpkgs).
           # myDevShell.toolchain = "nixpkgs";
